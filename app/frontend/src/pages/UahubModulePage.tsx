@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { ArrowLeft, Lock, Search, SlidersHorizontal } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { ArrowLeft, Home, Lock, Search, SlidersHorizontal } from "lucide-react";
 import UahubLayout from "@/components/UahubLayout";
 import { BusinessCard, ListingCard, SectionHeader } from "@/components/PlatformCards";
 import { useAuth } from "@/contexts/AuthContext";
@@ -25,6 +25,7 @@ function parseRoute(pathname: string): ModuleId {
 
 export default function UahubModulePage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const moduleId = parseRoute(location.pathname);
   const { theme } = useTheme();
   const { locale, t } = useI18n();
@@ -100,6 +101,13 @@ export default function UahubModulePage() {
 
   const communityLocked = moduleId === "community" && !user;
   const activeCount = moduleId === "business" ? filteredBusinesses.length : filteredListings.length;
+  const handleBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate("/");
+  };
 
   return (
     <UahubLayout>
@@ -118,10 +126,31 @@ export default function UahubModulePage() {
       </section>
 
       <div className="mx-auto max-w-7xl px-4 py-8 lg:px-6">
-        <Link to="/" className={`mb-6 inline-flex items-center gap-2 text-sm font-medium ${isDark ? "text-[#4a9eff]" : "text-[#0057B8]"}`}>
-          <ArrowLeft className="h-4 w-4" />
-          {locale === "ua" ? "На головну" : locale === "es" ? "Inicio" : "Back home"}
-        </Link>
+        <div className="mb-6 flex items-center gap-2 overflow-x-auto">
+          <button
+            type="button"
+            onClick={handleBack}
+            className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              isDark
+                ? "border-[#22416b] bg-[#11203a] text-slate-200 hover:border-[#FFD700]/40"
+                : "border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-300"
+            }`}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            {locale === "ua" ? "Назад" : locale === "es" ? "Atrás" : "Back"}
+          </button>
+          <Link
+            to="/"
+            className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors ${
+              isDark
+                ? "border-[#22416b] bg-[#11203a] text-slate-200 hover:border-[#FFD700]/40"
+                : "border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-300"
+            }`}
+          >
+            <Home className="h-3.5 w-3.5" />
+            {locale === "ua" ? "На головну" : locale === "es" ? "Inicio" : "Home"}
+          </Link>
+        </div>
 
         {communityLocked ? (
           <div className={`rounded-[32px] border p-10 text-center ${isDark ? "border-[#1a3050] bg-[#111d32]" : "border-slate-200 bg-white"}`}>

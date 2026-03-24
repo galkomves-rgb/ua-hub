@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { Search, SlidersHorizontal, X, ChevronDown, ArrowLeft } from "lucide-react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Search, SlidersHorizontal, X, ChevronDown, ArrowLeft, Home } from "lucide-react";
 import Layout from "@/components/Layout";
 import { ListingCard, BusinessCard, SectionHeader } from "@/components/Cards";
 import AdBanner from "@/components/AdBanner";
@@ -15,6 +15,7 @@ function normalizeCityFilter(value: string): string {
 
 export default function ModulePage() {
   const location = useLocation();
+  const navigate = useNavigate();
   const moduleId = location.pathname.split("/")[1] || "";
   const { theme } = useTheme();
   const { t } = useI18n();
@@ -140,6 +141,13 @@ export default function ModulePage() {
   };
 
   const hasActiveFilters = selectedCategory !== "all" || selectedCity !== "all" || selectedType !== "all" || searchQuery.trim() !== "";
+  const handleBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate("/");
+  };
 
   return (
     <Layout>
@@ -173,12 +181,31 @@ export default function ModulePage() {
       <div className={`w-full h-0.5 ${isDark ? `bg-gradient-to-r from-transparent via-blue-500/30 to-transparent` : "bg-gradient-to-r from-transparent via-gray-200 to-transparent"}`} />
 
       <div className="max-w-6xl mx-auto px-4 py-6">
-        {/* Back link */}
-        <Link to="/" className={`inline-flex items-center gap-1.5 text-xs font-medium mb-4 transition-colors ${
-          isDark ? "text-[#4a9eff] hover:text-[#FFD700]" : "text-[#0057B8] hover:text-[#003d80]"
-        }`}>
-          <ArrowLeft className="w-3.5 h-3.5" /> {t("nav.home")}
-        </Link>
+        <div className="mb-4 flex items-center gap-2 overflow-x-auto">
+          <button
+            type="button"
+            onClick={handleBack}
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+              isDark
+                ? "text-gray-200 bg-[#1a2a40] border border-[#253d5c] hover:border-[#FFD700]/30"
+                : "text-gray-700 bg-gray-50 border border-gray-200 hover:border-blue-300"
+            }`}
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            {t("detail.back")}
+          </button>
+          <Link
+            to="/"
+            className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+              isDark
+                ? "text-gray-200 bg-[#1a2a40] border border-[#253d5c] hover:border-[#FFD700]/30"
+                : "text-gray-700 bg-gray-50 border border-gray-200 hover:border-blue-300"
+            }`}
+          >
+            <Home className="w-3.5 h-3.5" />
+            {t("nav.home")}
+          </Link>
+        </div>
 
         <div className="flex flex-col lg:flex-row gap-6">
           {/* ─── Sidebar: Categories ─── */}

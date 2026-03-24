@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   Menu, X, User, LogOut, Plus, ChevronDown, MessageSquare, Search,
-  Briefcase, Home, Wrench, ShoppingBag, Calendar, Users, Building2, Store, ArrowLeft,
+  Briefcase, Home, Wrench, ShoppingBag, Calendar, Users, Building2, Store,
 } from "lucide-react";
 import { createClient } from "@metagptx/web-sdk";
 import { useTheme } from "@/lib/ThemeContext";
@@ -44,7 +44,6 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const searchRef = useRef<HTMLDivElement | null>(null);
-  const isHomeRoute = location.pathname === "/";
 
   type SearchSuggestion = {
     id: string;
@@ -104,14 +103,6 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
     const q = searchQuery.trim();
     setShowSearchSuggestions(false);
     navigate(q ? `/search?q=${encodeURIComponent(q)}` : "/search");
-  };
-
-  const handleBack = () => {
-    if (typeof window !== "undefined" && window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate("/");
   };
 
   const searchSuggestions = useMemo(() => {
@@ -644,38 +635,6 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
           </div>
         )}
       </nav>
-
-      {!isHomeRoute && (
-        <div className={`border-b ${isDark ? "border-[#1a3050] bg-[#0d1a2e]/70" : "border-gray-100 bg-white/80"}`}>
-          <div className="max-w-6xl mx-auto px-4 py-2">
-            <div className="flex items-center gap-2 overflow-x-auto">
-              <button
-                type="button"
-                onClick={handleBack}
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  isDark
-                    ? "text-gray-200 bg-[#1a2a40] border border-[#253d5c] hover:border-[#FFD700]/30"
-                    : "text-gray-700 bg-gray-50 border border-gray-200 hover:border-blue-300"
-                }`}
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                {t("detail.back")}
-              </button>
-              <Link
-                to="/"
-                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
-                  isDark
-                    ? "text-gray-200 bg-[#1a2a40] border border-[#253d5c] hover:border-[#FFD700]/30"
-                    : "text-gray-700 bg-gray-50 border border-gray-200 hover:border-blue-300"
-                }`}
-              >
-                <Home className="w-3.5 h-3.5" />
-                {t("nav.home")}
-              </Link>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ─── Main Content ─── */}
       <main className="flex-1">{children}</main>

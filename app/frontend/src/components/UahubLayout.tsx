@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ArrowLeft, ChevronDown, Home, LogOut, Menu, MessageSquare, Search, User, X } from "lucide-react";
+import { ChevronDown, LogOut, Menu, MessageSquare, Search, User, X } from "lucide-react";
 import { createClient } from "@metagptx/web-sdk";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
@@ -23,7 +23,6 @@ export default function UahubLayout({ children, hideModuleNav }: LayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const isDark = theme === "dark";
-  const isHomeRoute = location.pathname === "/";
   const [query, setQuery] = useState("");
   const [showModules, setShowModules] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
@@ -84,14 +83,6 @@ export default function UahubLayout({ children, hideModuleNav }: LayoutProps) {
     setShowSearchSuggestions(false);
     navigate(nextQuery ? `/search?q=${encodeURIComponent(nextQuery)}` : "/search");
     setShowMobileMenu(false);
-  };
-
-  const handleBack = () => {
-    if (typeof window !== "undefined" && window.history.length > 1) {
-      navigate(-1);
-      return;
-    }
-    navigate("/");
   };
 
   const availableCities = useMemo(() => {
@@ -670,36 +661,6 @@ export default function UahubLayout({ children, hideModuleNav }: LayoutProps) {
           </div>
         ) : null}
       </header>
-
-      {!isHomeRoute ? (
-        <div className={`border-b ${isDark ? "border-[#193255] bg-[#081425]/80" : "border-slate-200 bg-white/90"}`}>
-          <div className="mx-auto flex max-w-7xl items-center gap-2 overflow-x-auto px-4 py-2 lg:px-6">
-            <button
-              type="button"
-              onClick={handleBack}
-              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                isDark
-                  ? "border-[#22416b] bg-[#11203a] text-slate-200 hover:border-[#FFD700]/40"
-                  : "border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-300"
-              }`}
-            >
-              <ArrowLeft className="h-3.5 w-3.5" />
-              {locale === "ua" ? "Назад" : locale === "es" ? "Atrás" : "Back"}
-            </button>
-            <Link
-              to="/"
-              className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                isDark
-                  ? "border-[#22416b] bg-[#11203a] text-slate-200 hover:border-[#FFD700]/40"
-                  : "border-slate-200 bg-slate-50 text-slate-700 hover:border-blue-300"
-              }`}
-            >
-              <Home className="h-3.5 w-3.5" />
-              {locale === "ua" ? "На головну" : locale === "es" ? "Inicio" : "Home"}
-            </Link>
-          </div>
-        </div>
-      ) : null}
 
       <main>{children}</main>
     </div>
