@@ -1,0 +1,9 @@
+venv/
+*.log
+node_modules/
+build/
+__pycache__
+dist
+vite.config.ts.timestamp-*
+.git.worktree.bak
+app/backend/routers/listings_clean.py.bak

@@ -1,0 +1,47 @@
+{
+    "title": "messages",
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "integer",
+            "description": "Primary key, auto-increment"
+        },
+        "user_id": {
+            "type": "string",
+            "description": "Sender user ID"
+        },
+        "recipient_id": {
+            "type": "string",
+            "description": "Recipient user ID"
+        },
+        "listing_id": {
+            "type": "string",
+            "description": "Related listing ID (optional)"
+        },
+        "listing_title": {
+            "type": "string",
+            "description": "Listing title for display"
+        },
+        "content": {
+            "type": "string",
+            "description": "Message content text"
+        },
+        "is_read": {
+            "type": "boolean",
+            "description": "Whether message has been read"
+        },
+        "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Message creation timestamp"
+        }
+    },
+    "required": [
+        "id",
+        "user_id",
+        "recipient_id",
+        "content",
+        "is_read",
+        "created_at"
+    ]
+}

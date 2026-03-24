@@ -1,0 +1,29 @@
+{
+    "title": "search_histories",
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "integer",
+            "description": "Primary key, auto-increment"
+        },
+        "user_id": {
+            "type": "string",
+            "description": "User ID"
+        },
+        "query": {
+            "type": "string",
+            "description": "Search query text"
+        },
+        "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when search was made"
+        }
+    },
+    "required": [
+        "id",
+        "user_id",
+        "query",
+        "created_at"
+    ]
+}

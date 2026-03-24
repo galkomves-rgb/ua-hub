@@ -1,0 +1,67 @@
+{
+    "title": "advertisements",
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "integer",
+            "description": "Primary key, auto-increment"
+        },
+        "title": {
+            "type": "string",
+            "description": "Ad title"
+        },
+        "description": {
+            "type": "string",
+            "description": "Ad description"
+        },
+        "image_url": {
+            "type": "string",
+            "description": "Ad banner image URL"
+        },
+        "link_url": {
+            "type": "string",
+            "description": "Click-through URL"
+        },
+        "position": {
+            "type": "string",
+            "description": "Ad position: banner, sidebar, inline"
+        },
+        "target_module": {
+            "type": "string",
+            "description": "Target module for display"
+        },
+        "is_active": {
+            "type": "boolean",
+            "description": "Whether ad is active"
+        },
+        "priority": {
+            "type": "integer",
+            "description": "Display priority (higher = shown first)"
+        },
+        "starts_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Ad start date"
+        },
+        "ends_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Ad end date"
+        },
+        "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Creation timestamp"
+        }
+    },
+    "required": [
+        "id",
+        "title",
+        "image_url",
+        "link_url",
+        "position",
+        "is_active",
+        "priority",
+        "created_at"
+    ]
+}

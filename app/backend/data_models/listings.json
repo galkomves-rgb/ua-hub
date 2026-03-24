@@ -1,0 +1,97 @@
+{
+    "title": "listings",
+    "type": "object",
+    "properties": {
+        "id": {
+            "type": "integer",
+            "description": "Primary key, auto-increment"
+        },
+        "user_id": {
+            "type": "string",
+            "description": "Author user ID"
+        },
+        "module": {
+            "type": "string",
+            "description": "Module type: jobs, housing, services, etc."
+        },
+        "category": {
+            "type": "string",
+            "description": "Category within module"
+        },
+        "title": {
+            "type": "string",
+            "description": "Listing title"
+        },
+        "short_desc": {
+            "type": "string",
+            "description": "Short description"
+        },
+        "price": {
+            "type": "string",
+            "description": "Price value"
+        },
+        "currency": {
+            "type": "string",
+            "description": "Currency symbol"
+        },
+        "city": {
+            "type": "string",
+            "description": "City name"
+        },
+        "author_type": {
+            "type": "string",
+            "description": "private or business"
+        },
+        "author_name": {
+            "type": "string",
+            "description": "Author display name"
+        },
+        "badges": {
+            "type": "string",
+            "description": "Comma-separated badge list"
+        },
+        "image_url": {
+            "type": "string",
+            "description": "Listing image URL"
+        },
+        "event_date": {
+            "type": "string",
+            "description": "Event date if applicable"
+        },
+        "meta_json": {
+            "type": "string",
+            "description": "JSON string of additional metadata"
+        },
+        "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Listing expiration date"
+        },
+        "is_active": {
+            "type": "boolean",
+            "description": "Whether listing is active"
+        },
+        "views_count": {
+            "type": "integer",
+            "description": "Number of views"
+        },
+        "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Creation timestamp"
+        }
+    },
+    "required": [
+        "id",
+        "user_id",
+        "module",
+        "category",
+        "title",
+        "short_desc",
+        "city",
+        "author_type",
+        "author_name",
+        "is_active",
+        "created_at"
+    ]
+}
