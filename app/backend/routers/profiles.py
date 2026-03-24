@@ -41,6 +41,9 @@ async def create_user_profile(
         bio=profile_data.bio,
         preferred_language=profile_data.preferred_language,
         avatar_url=profile_data.avatar_url,
+        is_public_profile=profile_data.is_public_profile,
+        show_as_public_author=profile_data.show_as_public_author,
+        allow_marketing_emails=profile_data.allow_marketing_emails,
     )
     return profile
 
@@ -75,6 +78,9 @@ async def update_user_profile(
         bio=profile_data.bio,
         preferred_language=profile_data.preferred_language,
         avatar_url=profile_data.avatar_url,
+        is_public_profile=profile_data.is_public_profile,
+        show_as_public_author=profile_data.show_as_public_author,
+        allow_marketing_emails=profile_data.allow_marketing_emails,
     )
 
     if not profile:
@@ -126,9 +132,10 @@ async def create_business_profile(
         cover_url=profile_data.cover_url,
         contacts_json=profile_data.contacts_json,
         tags_json=profile_data.tags_json,
-        is_verified=profile_data.is_verified,
-        is_premium=profile_data.is_premium,
         rating=profile_data.rating,
+        website=profile_data.website,
+        social_links_json=profile_data.social_links_json,
+        service_areas_json=profile_data.service_areas_json,
     )
     return profile
 
@@ -211,9 +218,10 @@ async def update_business_profile(
         cover_url=profile_data.cover_url,
         contacts_json=profile_data.contacts_json,
         tags_json=profile_data.tags_json,
-        is_verified=profile_data.is_verified,
-        is_premium=profile_data.is_premium,
         rating=profile_data.rating,
+        website=profile_data.website,
+        social_links_json=profile_data.social_links_json,
+        service_areas_json=profile_data.service_areas_json,
     )
 
     return updated_profile

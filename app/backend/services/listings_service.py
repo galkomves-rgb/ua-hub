@@ -5,6 +5,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from models.listings import Listings
 
 
+LISTING_STATUS_DRAFT = "draft"
+LISTING_STATUS_MODERATION_PENDING = "moderation_pending"
+LISTING_STATUS_PUBLISHED = "published"
+LISTING_STATUS_REJECTED = "rejected"
+LISTING_STATUS_EXPIRED = "expired"
+LISTING_STATUS_ARCHIVED = "archived"
+
+
 class ListingsService:
     """Service for managing listings operations."""
 
@@ -26,10 +34,6 @@ class ListingsService:
         subcategory: str = None,
         region: str = None,
         images_json: str = "[]",
-        status: str = "active",
-        is_featured: bool = False,
-        is_promoted: bool = False,
-        is_verified: bool = False,
         meta_json: str = "{}",
     ) -> Listings:
         """Create a new listing."""
@@ -48,10 +52,10 @@ class ListingsService:
             owner_type=owner_type,
             owner_id=owner_id,
             images_json=images_json,
-            status=status,
-            is_featured=is_featured,
-            is_promoted=is_promoted,
-            is_verified=is_verified,
+            status=LISTING_STATUS_DRAFT,
+            is_featured=False,
+            is_promoted=False,
+            is_verified=False,
             meta_json=meta_json,
             views_count=0,
             created_at=now,
@@ -75,7 +79,7 @@ class ListingsService:
         category: str = None,
         city: str = None,
         owner_type: str = None,
-        status: str = "active",
+        status: str = LISTING_STATUS_PUBLISHED,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Listings]:
@@ -92,7 +96,10 @@ class ListingsService:
         if owner_type:
             filters.append(Listings.owner_type == owner_type)
         if status:
-            filters.append(Listings.status == status)
+            if status == LISTING_STATUS_PUBLISHED:
+                filters.append(Listings.status.in_([LISTING_STATUS_PUBLISHED, "active"]))
+            else:
+                filters.append(Listings.status == status)
 
         if filters:
             query = query.where(and_(*filters))
@@ -133,7 +140,7 @@ class ListingsService:
                     Listings.title.ilike(f"%{query_text}%"),
                     Listings.description.ilike(f"%{query_text}%"),
                 ),
-                Listings.status == "active",
+                Listings.status.in_([LISTING_STATUS_PUBLISHED, "active"]),
             )
         )
 
@@ -153,11 +160,11 @@ class ListingsService:
         description: str = None,
         price: str = None,
         city: str = None,
-        status: str = None,
-        is_featured: bool = None,
-        is_promoted: bool = None,
-        is_verified: bool = None,
+        category: str = None,
+        subcategory: str = None,
+        region: str = None,
         images_json: str = None,
+        meta_json: str = None,
     ) -> Listings | None:
         """Update listing fields."""
         listing = await self.get_listing(listing_id)
@@ -172,16 +179,16 @@ class ListingsService:
             listing.price = price
         if city is not None:
             listing.city = city
-        if status is not None:
-            listing.status = status
-        if is_featured is not None:
-            listing.is_featured = is_featured
-        if is_promoted is not None:
-            listing.is_promoted = is_promoted
-        if is_verified is not None:
-            listing.is_verified = is_verified
+        if category is not None:
+            listing.category = category
+        if subcategory is not None:
+            listing.subcategory = subcategory
+        if region is not None:
+            listing.region = region
         if images_json is not None:
             listing.images_json = images_json
+        if meta_json is not None:
+            listing.meta_json = meta_json
 
         listing.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
@@ -216,7 +223,7 @@ class ListingsService:
         query = select(Listings).where(
             and_(
                 Listings.is_featured == True,
-                Listings.status == "active",
+                Listings.status.in_([LISTING_STATUS_PUBLISHED, "active"]),
             )
         )
 
@@ -235,10 +242,46 @@ class ListingsService:
             and_(
                 Listings.owner_id == business_slug,
                 Listings.owner_type == "business_profile",
-                Listings.status == "active",
+                Listings.status.in_([LISTING_STATUS_PUBLISHED, "active"]),
             )
         )
 
         query = query.order_by(desc(Listings.created_at)).limit(limit).offset(offset)
         result = await self.db.execute(query)
         return result.scalars().all()
+
+    async def submit_listing(self, listing_id: int) -> Listings | None:
+        """Submit a draft or rejected listing for moderation."""
+        listing = await self.get_listing(listing_id)
+        if not listing or listing.status not in {LISTING_STATUS_DRAFT, LISTING_STATUS_REJECTED}:
+            return None
+
+        listing.status = LISTING_STATUS_MODERATION_PENDING
+        listing.updated_at = datetime.now(timezone.utc)
+        await self.db.commit()
+        await self.db.refresh(listing)
+        return listing
+
+    async def archive_listing(self, listing_id: int) -> Listings | None:
+        """Archive a listing owned by the current user."""
+        listing = await self.get_listing(listing_id)
+        if not listing or listing.status == LISTING_STATUS_ARCHIVED:
+            return None
+
+        listing.status = LISTING_STATUS_ARCHIVED
+        listing.updated_at = datetime.now(timezone.utc)
+        await self.db.commit()
+        await self.db.refresh(listing)
+        return listing
+
+    async def renew_listing(self, listing_id: int) -> Listings | None:
+        """Renew an expired or archived listing back to draft."""
+        listing = await self.get_listing(listing_id)
+        if not listing or listing.status not in {LISTING_STATUS_EXPIRED, LISTING_STATUS_ARCHIVED}:
+            return None
+
+        listing.status = LISTING_STATUS_DRAFT
+        listing.updated_at = datetime.now(timezone.utc)
+        await self.db.commit()
+        await self.db.refresh(listing)
+        return listing

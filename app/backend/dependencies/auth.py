@@ -61,3 +61,8 @@ async def get_admin_user(current_user: UserResponse = Depends(get_current_user))
     if current_user.role != "admin":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return current_user
+
+
+async def get_current_user_id(current_user: UserResponse = Depends(get_current_user)) -> str:
+    """Compatibility dependency returning only the authenticated user ID."""
+    return str(current_user.id)

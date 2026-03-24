@@ -12,6 +12,9 @@ class UserProfileBase(BaseModel):
     bio: str = Field("", max_length=500)
     preferred_language: str = Field("ua", pattern="^(ua|es|en)$")
     avatar_url: str | None = Field(None, max_length=1024)
+    is_public_profile: bool = Field(False)
+    show_as_public_author: bool = Field(False)
+    allow_marketing_emails: bool = Field(False)
 
 
 class UserProfileCreate(UserProfileBase):
@@ -28,12 +31,16 @@ class UserProfileUpdate(BaseModel):
     bio: str | None = Field(None, max_length=500)
     preferred_language: str | None = Field(None, pattern="^(ua|es|en)$")
     avatar_url: str | None = Field(None, max_length=1024)
+    is_public_profile: bool | None = None
+    show_as_public_author: bool | None = None
+    allow_marketing_emails: bool | None = None
 
 
 class UserProfileResponse(UserProfileBase):
     """Schema for user profile response."""
 
     user_id: str
+    is_verified: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -56,9 +63,10 @@ class BusinessProfileBase(BaseModel):
     cover_url: str | None = Field(None, max_length=1024)
     contacts_json: str = Field("{}", max_length=1000)
     tags_json: str = Field("[]", max_length=500)
-    is_verified: bool = Field(False)
-    is_premium: bool = Field(False)
     rating: str = Field("0")
+    website: str | None = Field(None, max_length=1024)
+    social_links_json: str = Field("[]", max_length=2000)
+    service_areas_json: str = Field("[]", max_length=2000)
 
 
 class BusinessProfileCreate(BusinessProfileBase):
@@ -78,15 +86,21 @@ class BusinessProfileUpdate(BaseModel):
     cover_url: str | None = Field(None, max_length=1024)
     contacts_json: str | None = Field(None, max_length=1000)
     tags_json: str | None = Field(None, max_length=500)
-    is_verified: bool | None = None
-    is_premium: bool | None = None
     rating: str | None = None
+    website: str | None = Field(None, max_length=1024)
+    social_links_json: str | None = Field(None, max_length=2000)
+    service_areas_json: str | None = Field(None, max_length=2000)
 
 
 class BusinessProfileResponse(BusinessProfileBase):
     """Schema for business profile response."""
 
     owner_user_id: str
+    is_verified: bool = False
+    is_premium: bool = False
+    verification_status: str = "unverified"
+    subscription_plan: str | None = None
+    listing_quota: int | None = None
     created_at: datetime
     updated_at: datetime
 

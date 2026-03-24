@@ -14,8 +14,15 @@ class UserProfile(Base):
     city = Column(String, nullable=False)
     bio = Column(Text, nullable=True)
     preferred_language = Column(String, default="ua", nullable=False)
+    is_public_profile = Column(Boolean, default=False, nullable=False)
+    show_as_public_author = Column(Boolean, default=False, nullable=False)
+    allow_marketing_emails = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    @property
+    def is_verified(self) -> bool:
+        return False
 
 
 class BusinessProfile(Base):
@@ -36,5 +43,11 @@ class BusinessProfile(Base):
     is_premium = Column(Boolean, default=False)
     tags_json = Column(String, nullable=True)  # JSON array of strings
     rating = Column(String, nullable=True)  # e.g., "4.8"
+    website = Column(String, nullable=True)
+    social_links_json = Column(String, nullable=True)
+    service_areas_json = Column(String, nullable=True)
+    verification_status = Column(String, nullable=False, default="unverified")
+    subscription_plan = Column(String, nullable=True)
+    listing_quota = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

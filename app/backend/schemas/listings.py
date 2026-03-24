@@ -5,6 +5,9 @@ from pydantic import BaseModel, Field
 # ============ Listing Schemas ============
 
 
+LISTING_STATUS_PATTERN = "^(draft|moderation_pending|published|rejected|expired|archived|active)$"
+
+
 class ListingBase(BaseModel):
     """Base schema for listing."""
 
@@ -20,10 +23,6 @@ class ListingBase(BaseModel):
     owner_type: str = Field(..., pattern="^(private_user|business_profile|organization)$")
     owner_id: str = Field(..., max_length=255)
     images_json: str = Field("[]", max_length=5000)
-    status: str = Field("active", pattern="^(active|expired|draft)$")
-    is_featured: bool = Field(False)
-    is_promoted: bool = Field(False)
-    is_verified: bool = Field(False)
     meta_json: str = Field("{}", max_length=2000)
 
 
@@ -40,11 +39,36 @@ class ListingUpdate(BaseModel):
     description: str | None = Field(None, min_length=10, max_length=5000)
     price: str | None = Field(None, max_length=50)
     city: str | None = Field(None, max_length=100)
-    status: str | None = Field(None, pattern="^(active|expired|draft)$")
-    is_featured: bool | None = None
-    is_promoted: bool | None = None
-    is_verified: bool | None = None
+    category: str | None = Field(None, min_length=1, max_length=100)
+    subcategory: str | None = Field(None, max_length=100)
+    region: str | None = Field(None, max_length=100)
     images_json: str | None = Field(None, max_length=5000)
+    meta_json: str | None = Field(None, max_length=2000)
+
+
+class ListingActionResponse(BaseModel):
+    id: int
+    status: str = Field(..., pattern=LISTING_STATUS_PATTERN)
+
+    class Config:
+        from_attributes = True
+
+
+class ListingSummaryResponse(BaseModel):
+    id: int
+    title: str
+    module: str
+    category: str
+    status: str = Field(..., pattern=LISTING_STATUS_PATTERN)
+    created_at: datetime
+    expires_at: datetime | None = None
+    views_count: int
+    is_featured: bool
+    is_promoted: bool
+    is_verified: bool
+
+    class Config:
+        from_attributes = True
 
 
 class ListingResponse(ListingBase):
@@ -52,6 +76,10 @@ class ListingResponse(ListingBase):
 
     id: int
     user_id: str
+    status: str = Field(..., pattern=LISTING_STATUS_PATTERN)
+    is_featured: bool
+    is_promoted: bool
+    is_verified: bool
     views_count: int
     created_at: datetime
     updated_at: datetime

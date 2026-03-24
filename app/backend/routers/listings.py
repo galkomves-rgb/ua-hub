@@ -4,10 +4,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from dependencies.auth import get_current_user_id
 from dependencies.database import get_db_session
 from schemas.listings import (
+    ListingActionResponse,
     ListingCreate,
     ListingDetailResponse,
     ListingListResponse,
     ListingResponse,
+    ListingSummaryResponse,
     ListingUpdate,
 )
 from services.listings_service import ListingsService
@@ -37,10 +39,6 @@ async def create_listing(
         owner_type=listing_data.owner_type,
         owner_id=listing_data.owner_id,
         images_json=listing_data.images_json,
-        status=listing_data.status,
-        is_featured=listing_data.is_featured,
-        is_promoted=listing_data.is_promoted,
-        is_verified=listing_data.is_verified,
         meta_json=listing_data.meta_json,
     )
     return listing
@@ -52,7 +50,7 @@ async def list_listings(
     category: str | None = Query(None),
     city: str | None = Query(None),
     owner_type: str | None = Query(None),
-    status: str = Query("active"),
+    status: str = Query("published"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db_session),
@@ -74,7 +72,7 @@ async def list_listings(
     )
 
 
-@router.get("/search/my", response_model=list[ListingResponse])
+@router.get("/search/my", response_model=list[ListingSummaryResponse])
 async def get_my_listings(
     status: str | None = Query(None),
     limit: int = Query(50, ge=1, le=100),
@@ -132,7 +130,7 @@ async def get_module_listings(
         module=module_id,
         category=category,
         city=city,
-        status="active",
+        status="published",
         limit=limit,
         offset=offset,
     )
@@ -210,12 +208,81 @@ async def update_listing(
         description=listing_data.description,
         price=listing_data.price,
         city=listing_data.city,
-        status=listing_data.status,
-        is_featured=listing_data.is_featured,
-        is_promoted=listing_data.is_promoted,
-        is_verified=listing_data.is_verified,
+        category=listing_data.category,
+        subcategory=listing_data.subcategory,
+        region=listing_data.region,
         images_json=listing_data.images_json,
+        meta_json=listing_data.meta_json,
     )
+
+    return updated_listing
+
+
+@router.post("/{listing_id}/submit", response_model=ListingActionResponse)
+async def submit_listing(
+    listing_id: int,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Submit a draft or rejected listing for moderation."""
+    service = ListingsService(db)
+    listing = await service.get_listing(listing_id)
+
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    if listing.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to submit this listing")
+
+    updated_listing = await service.submit_listing(listing_id)
+    if not updated_listing:
+        raise HTTPException(status_code=400, detail="Listing cannot be submitted in its current state")
+
+    return updated_listing
+
+
+@router.post("/{listing_id}/archive", response_model=ListingActionResponse)
+async def archive_listing(
+    listing_id: int,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Archive a listing."""
+    service = ListingsService(db)
+    listing = await service.get_listing(listing_id)
+
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    if listing.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to archive this listing")
+
+    updated_listing = await service.archive_listing(listing_id)
+    if not updated_listing:
+        raise HTTPException(status_code=400, detail="Listing cannot be archived in its current state")
+
+    return updated_listing
+
+
+@router.post("/{listing_id}/renew", response_model=ListingActionResponse)
+async def renew_listing(
+    listing_id: int,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Renew an archived or expired listing back to draft."""
+    service = ListingsService(db)
+    listing = await service.get_listing(listing_id)
+
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    if listing.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to renew this listing")
+
+    updated_listing = await service.renew_listing(listing_id)
+    if not updated_listing:
+        raise HTTPException(status_code=400, detail="Listing cannot be renewed in its current state")
 
     return updated_listing
 

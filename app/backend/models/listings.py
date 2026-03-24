@@ -31,3 +31,7 @@ class Listings(Base):
     views_count = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), nullable=False)
     updated_at = Column(DateTime(timezone=True), nullable=False)
+
+    @property
+    def expires_at(self):
+        return self.expiry_date

@@ -20,6 +20,9 @@ class ProfileService:
         bio: str = "",
         preferred_language: str = "ua",
         avatar_url: str = None,
+        is_public_profile: bool = False,
+        show_as_public_author: bool = False,
+        allow_marketing_emails: bool = False,
     ) -> UserProfile:
         """Create a new user profile."""
         now = datetime.now(timezone.utc)
@@ -32,6 +35,9 @@ class ProfileService:
             preferred_language=preferred_language,
             created_at=now,
             updated_at=now,
+            is_public_profile=is_public_profile,
+            show_as_public_author=show_as_public_author,
+            allow_marketing_emails=allow_marketing_emails,
         )
         self.db.add(profile)
         await self.db.commit()
@@ -53,6 +59,9 @@ class ProfileService:
         bio: str = None,
         preferred_language: str = None,
         avatar_url: str = None,
+        is_public_profile: bool = None,
+        show_as_public_author: bool = None,
+        allow_marketing_emails: bool = None,
     ) -> UserProfile | None:
         """Update user profile fields."""
         profile = await self.get_user_profile(user_id)
@@ -69,6 +78,12 @@ class ProfileService:
             profile.preferred_language = preferred_language
         if avatar_url is not None:
             profile.avatar_url = avatar_url
+        if is_public_profile is not None:
+            profile.is_public_profile = is_public_profile
+        if show_as_public_author is not None:
+            profile.show_as_public_author = show_as_public_author
+        if allow_marketing_emails is not None:
+            profile.allow_marketing_emails = allow_marketing_emails
 
         profile.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
@@ -99,9 +114,13 @@ class ProfileService:
         cover_url: str = None,
         contacts_json: str = "{}",
         tags_json: str = "[]",
-        is_verified: bool = False,
-        is_premium: bool = False,
         rating: str = "0",
+        website: str = None,
+        social_links_json: str = "[]",
+        service_areas_json: str = "[]",
+        verification_status: str = "unverified",
+        subscription_plan: str = None,
+        listing_quota: int = None,
     ) -> BusinessProfile:
         """Create a new business profile."""
         now = datetime.now(timezone.utc)
@@ -115,10 +134,16 @@ class ProfileService:
             city=city,
             description=description,
             contacts_json=contacts_json,
-            is_verified=is_verified,
-            is_premium=is_premium,
+            is_verified=False,
+            is_premium=False,
             tags_json=tags_json,
             rating=rating,
+            website=website,
+            social_links_json=social_links_json,
+            service_areas_json=service_areas_json,
+            verification_status=verification_status,
+            subscription_plan=subscription_plan,
+            listing_quota=listing_quota,
             created_at=now,
             updated_at=now,
         )
@@ -152,9 +177,10 @@ class ProfileService:
         cover_url: str = None,
         contacts_json: str = None,
         tags_json: str = None,
-        is_verified: bool = None,
-        is_premium: bool = None,
         rating: str = None,
+        website: str = None,
+        social_links_json: str = None,
+        service_areas_json: str = None,
     ) -> BusinessProfile | None:
         """Update business profile fields."""
         profile = await self.get_business_profile(slug)
@@ -177,12 +203,14 @@ class ProfileService:
             profile.contacts_json = contacts_json
         if tags_json is not None:
             profile.tags_json = tags_json
-        if is_verified is not None:
-            profile.is_verified = is_verified
-        if is_premium is not None:
-            profile.is_premium = is_premium
         if rating is not None:
             profile.rating = rating
+        if website is not None:
+            profile.website = website
+        if social_links_json is not None:
+            profile.social_links_json = social_links_json
+        if service_areas_json is not None:
+            profile.service_areas_json = service_areas_json
 
         profile.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
