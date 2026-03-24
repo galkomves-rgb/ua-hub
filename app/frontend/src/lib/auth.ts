@@ -19,8 +19,16 @@ class RPApi {
 
   async getCurrentUser() {
     try {
+      const token = localStorage.getItem('auth_token');
       const response = await this.client.get(
-        `${this.getBaseURL()}/api/v1/auth/me`
+        `${this.getBaseURL()}/api/v1/auth/me`,
+        token
+          ? {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          : undefined
       );
       return response.data;
     } catch (error) {
@@ -34,18 +42,8 @@ class RPApi {
   }
 
   async login() {
-    try {
-      const response = await this.client.get(
-        `${this.getBaseURL()}/api/v1/auth/login`
-      );
-      // The backend will redirect to OIDC provider
-      // SSO will work via cookies automatically
-      window.location.href = response.data.redirect_url;
-    } catch (error) {
-      throw new Error(
-        error.response?.data?.detail || 'Failed to initiate login'
-      );
-    }
+    // Start OIDC flow with browser redirect (not XHR), so provider redirects work correctly.
+    window.location.href = `${this.getBaseURL()}/api/v1/auth/login`;
   }
 
   async logout() {
@@ -53,6 +51,7 @@ class RPApi {
       const response = await this.client.get(
         `${this.getBaseURL()}/api/v1/auth/logout`
       );
+      localStorage.removeItem('auth_token');
       // The backend will redirect to OIDC provider logout
       window.location.href = response.data.redirect_url;
     } catch (error) {

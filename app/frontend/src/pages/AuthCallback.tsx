@@ -1,9 +1,18 @@
 import { useEffect } from 'react';
-import { client } from '../lib/api';
 
 export default function AuthCallback() {
   useEffect(() => {
-    client.auth.login();
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('token');
+
+    if (token) {
+      localStorage.setItem('auth_token', token);
+      window.location.replace('/');
+      return;
+    }
+
+    const msg = params.get('msg') || 'Authentication callback is missing token';
+    window.location.replace(`/auth/error?msg=${encodeURIComponent(msg)}`);
   }, []);
 
   return (

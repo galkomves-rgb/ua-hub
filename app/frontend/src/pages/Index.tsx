@@ -1,20 +1,32 @@
 import { Link } from "react-router-dom";
-import { Plus, ArrowRight, TrendingUp, Shield, Users as UsersIcon } from "lucide-react";
+import { Plus, TrendingUp, Shield, Users as UsersIcon } from "lucide-react";
 import Layout from "@/components/Layout";
 import { ListingCard, BusinessCard, ModuleCard, SectionHeader } from "@/components/Cards";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
+import { useGlobalCity } from "@/lib/global-preferences";
 import { MODULES, MODULE_ORDER, SAMPLE_LISTINGS, SAMPLE_BUSINESSES, IMAGES } from "@/lib/platform";
 
 export default function HomePage() {
   const { theme } = useTheme();
   const { t } = useI18n();
+  const { city: globalCity } = useGlobalCity();
   const isDark = theme === "dark";
 
-  const featuredListings = SAMPLE_LISTINGS.filter((l) => l.badges.includes("featured") || l.isVerified).slice(0, 4);
-  const upcomingEvents = SAMPLE_LISTINGS.filter((l) => l.module === "events").slice(0, 3);
-  const verifiedBusinesses = SAMPLE_BUSINESSES.filter((b) => b.isVerified).slice(0, 4);
-  const latestListings = SAMPLE_LISTINGS.slice(0, 6);
+  const selectedCity = globalCity === "All Spain" ? "all" : globalCity;
+  const cityFilteredListings = selectedCity === "all"
+    ? SAMPLE_LISTINGS
+    : SAMPLE_LISTINGS.filter((listing) => listing.city === selectedCity);
+  const cityFilteredBusinesses = selectedCity === "all"
+    ? SAMPLE_BUSINESSES
+    : SAMPLE_BUSINESSES.filter((business) => business.city === selectedCity);
+
+  const featuredListings = cityFilteredListings.filter((l) => l.badges.includes("featured") || l.isVerified).slice(0, 4);
+  const upcomingEvents = cityFilteredListings.filter((l) => l.module === "events").slice(0, 3);
+  const verifiedBusinesses = cityFilteredBusinesses
+    .filter((b) => (b as { isVerified?: boolean; verified?: boolean }).isVerified || (b as { verified?: boolean }).verified)
+    .slice(0, 4);
+  const latestListings = cityFilteredListings.slice(0, 6);
 
   return (
     <Layout hideModuleNav>
@@ -49,13 +61,6 @@ export default function HomePage() {
               >
                 <Plus className="w-4 h-4" />
                 {t("hero.cta")}
-              </Link>
-              <Link
-                to="/jobs"
-                className="inline-flex items-center gap-2 h-10 px-5 text-sm font-semibold rounded-xl bg-white/20 backdrop-blur-sm text-white border border-white/30 hover:bg-white/30 transition-all"
-              >
-                {t("hero.explore")}
-                <ArrowRight className="w-4 h-4" />
               </Link>
             </div>
           </div>
@@ -104,7 +109,7 @@ export default function HomePage() {
         {/* ─── Upcoming Events ─── */}
         <section>
           <SectionHeader title={t("home.events")} linkTo="/events" linkLabel={t("common.showAll")} />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {upcomingEvents.map((listing) => (
               <ListingCard key={listing.id} listing={listing} />
             ))}
@@ -114,7 +119,7 @@ export default function HomePage() {
         {/* ─── Verified Businesses ─── */}
         <section>
           <SectionHeader title={t("home.businesses")} linkTo="/business" linkLabel={t("common.showAll")} />
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {verifiedBusinesses.map((biz) => (
               <BusinessCard key={biz.id} biz={biz} />
             ))}
@@ -124,7 +129,7 @@ export default function HomePage() {
         {/* ─── Latest Listings ─── */}
         <section>
           <SectionHeader title={t("sort.newest")} />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {latestListings.map((listing) => (
               <ListingCard key={listing.id} listing={listing} />
             ))}

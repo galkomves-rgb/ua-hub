@@ -4,6 +4,7 @@ import UahubLayout from "@/components/UahubLayout";
 import { BusinessCard, ListingCard, PlatformModuleCard, SectionHeader } from "@/components/PlatformCards";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
+import { useGlobalCity } from "@/lib/global-preferences";
 import {
   BUSINESS_PROFILES,
   IMAGES,
@@ -16,12 +17,23 @@ import {
 export default function UahubHomePage() {
   const { theme } = useTheme();
   const { locale } = useI18n();
+  const { city } = useGlobalCity();
   const isDark = theme === "dark";
+  const selectedCity = city === "All Spain" ? "all" : city;
 
-  const featuredListings = LISTINGS.filter((listing) => listing.is_featured || listing.is_promoted).slice(0, 4);
-  const latestListings = LISTINGS.slice(0, 6);
-  const verifiedBusinesses = BUSINESS_PROFILES.filter((business) => business.is_verified).slice(0, 4);
-  const eventListings = getListingsByModule("events").slice(0, 3);
+  const cityListings = selectedCity === "all"
+    ? LISTINGS
+    : LISTINGS.filter((listing) => listing.city === selectedCity);
+  const cityBusinesses = selectedCity === "all"
+    ? BUSINESS_PROFILES
+    : BUSINESS_PROFILES.filter((business) => business.city === selectedCity);
+
+  const featuredListings = cityListings.filter((listing) => listing.is_featured || listing.is_promoted).slice(0, 4);
+  const latestListings = cityListings.slice(0, 6);
+  const verifiedBusinesses = cityBusinesses.filter((business) => business.is_verified).slice(0, 4);
+  const eventListings = getListingsByModule("events")
+    .filter((listing) => selectedCity === "all" || listing.city === selectedCity)
+    .slice(0, 3);
 
   return (
     <UahubLayout hideModuleNav>
@@ -63,8 +75,6 @@ export default function UahubHomePage() {
         <section>
           <SectionHeader
             title={locale === "ua" ? "Основні модулі" : locale === "es" ? "Módulos principales" : "Core modules"}
-            linkTo="/newcomer"
-            linkLabel={locale === "ua" ? "Допомога новачкам" : locale === "es" ? "Ayuda inicial" : "Newcomer help"}
           />
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             {MODULE_ORDER.map((moduleId) => {

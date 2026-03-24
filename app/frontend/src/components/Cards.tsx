@@ -1,10 +1,11 @@
 import { Link } from "react-router-dom";
 import {
   MapPin, Clock, CheckCircle, Star, Zap, Briefcase, User,
-  Wifi, Globe, Heart, Calendar, BadgeCheck, ArrowRight,
+  Wifi, Globe, Heart, Calendar, BadgeCheck, ArrowRight, Euro, BedDouble, Ruler, Bath, Waves,
 } from "lucide-react";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
+import { deriveBusinessLabels, normalizeSectionLabels } from "@/lib/label-taxonomy";
 import type { Listing, BusinessProfile } from "@/lib/platform";
 
 // ─── Badge Component ───
@@ -38,6 +39,28 @@ function Badge({ type }: { type: string }) {
   );
 }
 
+function getMetaFieldIcon(key: string) {
+  const normalized = key.toLowerCase();
+
+  if (["salary", "price", "budget", "cost", "зарплата", "ціна", "бюджет"].some((term) => normalized.includes(term))) {
+    return Euro;
+  }
+  if (["area", "sqm", "m2", "площа", "метраж"].some((term) => normalized.includes(term))) {
+    return Ruler;
+  }
+  if (["rooms", "room", "кімнат", "кімната"].some((term) => normalized.includes(term))) {
+    return BedDouble;
+  }
+  if (["bath", "toilet", "shower", "санвуз", "душ", "туалет"].some((term) => normalized.includes(term))) {
+    return Bath;
+  }
+  if (["pool", "басейн"].some((term) => normalized.includes(term))) {
+    return Waves;
+  }
+
+  return null;
+}
+
 // ─── Listing Card ───
 export function ListingCard({ listing }: { listing: Listing }) {
   const { theme } = useTheme();
@@ -46,6 +69,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
 
   const isEvent = listing.module === "events";
   const hasImage = !!listing.image;
+  const normalizedBadges = normalizeSectionLabels(listing.module, listing.badges);
 
   return (
     <Link
@@ -65,9 +89,9 @@ export function ListingCard({ listing }: { listing: Listing }) {
 
       <div className="p-4">
         {/* Badges */}
-        {listing.badges.length > 0 && (
+        {normalizedBadges.length > 0 && (
           <div className="flex flex-wrap gap-1 mb-2">
-            {listing.badges.map((b) => <Badge key={b} type={b} />)}
+            {normalizedBadges.map((b) => <Badge key={b} type={b} />)}
           </div>
         )}
 
@@ -108,9 +132,13 @@ export function ListingCard({ listing }: { listing: Listing }) {
         {listing.meta && (
           <div className="flex flex-wrap gap-2 mb-3">
             {Object.entries(listing.meta).filter(([k]) => !["time", "place"].includes(k)).map(([key, val]) => (
-              <span key={key} className={`text-[11px] px-2 py-0.5 rounded-md ${
+              <span key={key} className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md ${
                 isDark ? "bg-[#1a2a40] text-gray-400" : "bg-gray-50 text-gray-500"
               }`}>
+                {(() => {
+                  const Icon = getMetaFieldIcon(key);
+                  return Icon ? <Icon className="w-3 h-3" /> : null;
+                })()}
                 {val}
               </span>
             ))}
@@ -137,24 +165,32 @@ export function ListingCard({ listing }: { listing: Listing }) {
 export function BusinessCard({ biz }: { biz: BusinessProfile }) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
+  const badges = deriveBusinessLabels(biz as { isVerified?: boolean; verified?: boolean; isPremium?: boolean; premium?: boolean; rating?: number });
 
   return (
     <Link
       to={`/business/${biz.id}`}
-      className={`group block rounded-xl border p-4 transition-all duration-200 hover:-translate-y-0.5 ${
+      className={`group block h-full rounded-xl border p-4 transition-all duration-200 hover:-translate-y-0.5 ${
         isDark
           ? `bg-[#111d32] hover:shadow-lg hover:shadow-[#0057B8]/5 ${biz.premium ? "border-[#FFD700]/30 hover:border-[#FFD700]/50" : "border-[#1a3050] hover:border-[#253d5c]"}`
           : `bg-white hover:shadow-lg hover:shadow-gray-100 ${biz.premium ? "border-amber-200 hover:border-amber-300" : "border-gray-200/80 hover:border-gray-300"}`
       }`}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex h-full items-start gap-3">
         {/* Logo placeholder */}
         <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold shrink-0 ${
           isDark ? "bg-[#1a2a40] text-[#4a9eff]" : "bg-blue-50 text-[#0057B8]"
         }`}>
           {biz.name.charAt(0)}
         </div>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex flex-1 flex-col">
+          {badges.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1">
+              {badges.map((badge) => (
+                <Badge key={`${biz.id}-${badge}`} type={badge} />
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-2 mb-1">
             <h3 className={`text-sm font-bold truncate group-hover:text-[#0057B8] transition-colors ${
               isDark ? "text-gray-100 group-hover:text-[#4a9eff]" : "text-gray-900"
@@ -168,7 +204,7 @@ export function BusinessCard({ biz }: { biz: BusinessProfile }) {
           <p className={`text-xs leading-relaxed line-clamp-2 mb-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
             {biz.description}
           </p>
-          <div className="flex items-center justify-between">
+          <div className="mt-auto flex items-center justify-between">
             <span className={`flex items-center gap-1 text-xs ${isDark ? "text-gray-500" : "text-gray-400"}`}>
               <MapPin className="w-3 h-3" /> {biz.city}
             </span>

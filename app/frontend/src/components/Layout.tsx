@@ -1,14 +1,15 @@
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   Menu, X, User, LogOut, Plus, ChevronDown, MessageSquare, Search,
-  Briefcase, Home, Wrench, ShoppingBag, Calendar, Users, Building2, Store,
+  Briefcase, Home, Wrench, ShoppingBag, Calendar, Users, Building2, Store, ArrowLeft,
 } from "lucide-react";
 import { createClient } from "@metagptx/web-sdk";
 import { useTheme } from "@/lib/ThemeContext";
-import ThemeToggle from "@/components/ThemeToggle";
+import { useGlobalCity } from "@/lib/global-preferences";
 import { useI18n, LOCALES } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n";
+import { SAMPLE_BUSINESSES, SAMPLE_LISTINGS } from "@/lib/platform";
 
 const client = createClient();
 
@@ -33,12 +34,25 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const { theme } = useTheme();
   const { locale, setLocale, t } = useI18n();
+  const { city, setCity } = useGlobalCity();
   const isDark = theme === "dark";
   const navigate = useNavigate();
   const location = useLocation();
+  const searchRef = useRef<HTMLDivElement | null>(null);
+  const isHomeRoute = location.pathname === "/";
+
+  type SearchSuggestion = {
+    id: string;
+    label: string;
+    kind: "module" | "listing" | "business" | "city";
+    path: string;
+    icon?: React.ElementType;
+  };
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -46,14 +60,16 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
         const user = await client.auth.me();
         if (user?.data) {
           setIsLoggedIn(true);
-          // Load unread count
           try {
             const res = await client.callApi("/api/v1/messaging/unread-count", { method: "GET" });
-            if (res?.data?.count) setUnreadCount(res.data.count);
-          } catch { /* ignore */ }
+            setUnreadCount(res?.data?.count ?? 0);
+          } catch {
+            setUnreadCount(0);
+          }
         }
       } catch {
         setIsLoggedIn(false);
+        setUnreadCount(0);
       }
     };
     checkAuth();
@@ -63,14 +79,166 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
     setShowMobileMenu(false);
   }, [location.pathname]);
 
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(event.target as Node)) {
+        setShowSearchSuggestions(false);
+      }
+    };
+
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    setShowSearchSuggestions(false);
+  }, [location.pathname]);
+
   const handleLogin = async () => { await client.auth.toLogin(); };
   const handleLogout = async () => {
     await client.auth.logout();
     setIsLoggedIn(false);
     setShowUserMenu(false);
   };
+  const handleSearchSubmit = () => {
+    const q = searchQuery.trim();
+    setShowSearchSuggestions(false);
+    navigate(q ? `/search?q=${encodeURIComponent(q)}` : "/search");
+  };
+
+  const handleBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      navigate(-1);
+      return;
+    }
+    navigate("/");
+  };
+
+  const searchSuggestions = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (query.length < 2) {
+      return {
+        modules: [] as SearchSuggestion[],
+        cities: [] as SearchSuggestion[],
+        listings: [] as SearchSuggestion[],
+        businesses: [] as SearchSuggestion[],
+      };
+    }
+
+    const rankByMatch = (label: string) => {
+      const normalized = label.toLowerCase();
+      if (normalized.startsWith(query)) return 0;
+      if (normalized.includes(` ${query}`)) return 1;
+      return 2;
+    };
+
+    const sortByRelevance = (items: SearchSuggestion[]) =>
+      [...items].sort((a, b) => {
+        const rankDiff = rankByMatch(a.label) - rankByMatch(b.label);
+        if (rankDiff !== 0) return rankDiff;
+        return a.label.localeCompare(b.label);
+      });
+
+    const modules = MODULE_NAV
+      .map((mod) => ({
+        id: `module-${mod.id}`,
+        label: t(`mod.${mod.id}`),
+        kind: "module" as const,
+        path: mod.path,
+        icon: mod.icon,
+      }))
+      .filter((item) => item.label.toLowerCase().includes(query));
+
+    const listings = SAMPLE_LISTINGS
+      .filter((listing) =>
+        [listing.title, listing.shortDesc, listing.city, listing.authorName]
+          .join(" ")
+          .toLowerCase()
+          .includes(query)
+      )
+      .slice(0, 5)
+      .map((listing) => ({
+        id: `listing-${listing.id}`,
+        label: listing.title,
+        kind: "listing" as const,
+        path: `/search?q=${encodeURIComponent(listing.title)}`,
+      }));
+
+    const businesses = SAMPLE_BUSINESSES
+      .filter((business) =>
+        [business.name, business.category, business.shortDesc, business.city]
+          .join(" ")
+          .toLowerCase()
+          .includes(query)
+      )
+      .slice(0, 4)
+      .map((business) => ({
+        id: `business-${business.id}`,
+        label: business.name,
+        kind: "business" as const,
+        path: `/search?q=${encodeURIComponent(business.name)}`,
+      }));
+
+    const dynamicCities = Array.from(
+      new Set([
+        ...SAMPLE_LISTINGS.map((listing) => listing.city),
+        ...SAMPLE_BUSINESSES.map((business) => business.city),
+      ].filter((cityOption) => cityOption?.trim())),
+    );
+
+    const cities = dynamicCities
+      .filter((cityOption) => cityOption.toLowerCase().includes(query))
+      .map((cityOption) => ({
+        id: `city-${cityOption}`,
+        label: cityOption,
+        kind: "city" as const,
+        path: `/search?q=${encodeURIComponent(cityOption)}`,
+      }));
+
+    return {
+      modules: sortByRelevance(modules).slice(0, 5),
+      cities: sortByRelevance(cities).slice(0, 5),
+      listings: sortByRelevance(listings).slice(0, 4),
+      businesses: sortByRelevance(businesses).slice(0, 4),
+    };
+  }, [searchQuery, t]);
+
+  const totalSuggestions =
+    searchSuggestions.modules.length +
+    searchSuggestions.cities.length +
+    searchSuggestions.listings.length +
+    searchSuggestions.businesses.length;
+
+  const getSuggestionTypeLabel = (kind: SearchSuggestion["kind"]) => {
+    if (kind === "module") return locale === "ua" ? "Розділ" : locale === "es" ? "Sección" : "Module";
+    if (kind === "listing") return locale === "ua" ? "Оголошення" : locale === "es" ? "Anuncio" : "Listing";
+    if (kind === "business") return locale === "ua" ? "Бізнес" : locale === "es" ? "Negocio" : "Business";
+    return locale === "ua" ? "Місто" : locale === "es" ? "Ciudad" : "City";
+  };
 
   const currentLocale = LOCALES.find((l) => l.code === locale) || LOCALES[0];
+  const allCityLabel = locale === "ua" ? "Вся Іспанія" : locale === "es" ? "Toda España" : "All Spain";
+  const availableCities = useMemo(() => {
+    const citySet = new Set<string>();
+
+    SAMPLE_LISTINGS.forEach((listing) => {
+      if (listing.city?.trim()) {
+        citySet.add(listing.city.trim());
+      }
+    });
+
+    SAMPLE_BUSINESSES.forEach((business) => {
+      if (business.city?.trim()) {
+        citySet.add(business.city.trim());
+      }
+    });
+
+    if (city !== "All Spain" && city.trim()) {
+      citySet.add(city.trim());
+    }
+
+    return Array.from(citySet).sort((a, b) => a.localeCompare(b));
+  }, [city]);
 
   return (
     <div className={`min-h-screen flex flex-col transition-colors duration-300 ${
@@ -94,41 +262,161 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
               </span>
             </Link>
 
-            {/* Desktop Nav Links */}
-            <div className="hidden md:flex items-center gap-1">
-              {MODULE_NAV.slice(0, 5).map((mod) => {
-                const Icon = mod.icon;
-                const isActive = location.pathname.startsWith(mod.path);
-                return (
-                  <Link
-                    key={mod.id}
-                    to={mod.path}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[13px] font-medium transition-all ${
-                      isActive
-                        ? isDark
-                          ? "text-[#FFD700] bg-[#FFD700]/10"
-                          : "text-[#0057B8] bg-blue-50"
-                        : isDark
-                          ? "text-gray-400 hover:text-gray-200 hover:bg-[#1a2a40]"
-                          : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                    }`}
-                  >
-                    <Icon className="w-3.5 h-3.5" />
-                    {t(`mod.${mod.id}`)}
-                  </Link>
-                );
-              })}
-              {/* More dropdown */}
-              <div className="relative group">
-                <button className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[13px] font-medium transition-all ${
-                  isDark ? "text-gray-400 hover:text-gray-200 hover:bg-[#1a2a40]" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+            {/* Desktop Search */}
+            <div ref={searchRef} className="relative hidden md:flex flex-1 max-w-xl">
+              <div className={`w-full h-9 flex items-center gap-2 rounded-lg border px-3 ${
+                isDark ? "bg-[#1a2a40] border-[#253d5c]" : "bg-gray-50 border-gray-200"
+              }`}>
+                <Search className={`w-4 h-4 ${isDark ? "text-gray-500" : "text-gray-400"}`} />
+                <input
+                  value={searchQuery}
+                  onFocus={() => setShowSearchSuggestions(true)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setShowSearchSuggestions(true);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSearchSubmit();
+                  }}
+                  placeholder={t("nav.search")}
+                  className={`w-full bg-transparent text-sm outline-none ${
+                    isDark ? "text-gray-200 placeholder:text-gray-500" : "text-gray-700 placeholder:text-gray-400"
+                  }`}
+                />
+              </div>
+
+              {showSearchSuggestions && searchQuery.trim().length >= 2 && (
+                <div className={`absolute top-full left-0 right-0 mt-2 overflow-hidden rounded-xl border shadow-xl z-50 ${
+                  isDark ? "bg-[#162236] border-[#1a3050]" : "bg-white border-gray-200"
+                }`}>
+                  {totalSuggestions > 0 ? (
+                    <>
+                      {searchSuggestions.modules.length > 0 && (
+                        <div className={`px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                          {locale === "ua" ? "Розділи" : locale === "es" ? "Secciones" : "Modules"}
+                        </div>
+                      )}
+                      {searchSuggestions.modules.map((suggestion) => {
+                        const Icon = suggestion.icon;
+                        return (
+                          <button
+                            key={suggestion.id}
+                            type="button"
+                            onClick={() => {
+                              setShowSearchSuggestions(false);
+                              setSearchQuery(suggestion.label);
+                              navigate(suggestion.path);
+                            }}
+                            className={`w-full px-3 py-2.5 text-left transition-colors ${
+                              isDark ? "hover:bg-[#1a2a40]" : "hover:bg-gray-50"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              {Icon ? (
+                                <span className={`inline-flex h-5 w-5 items-center justify-center rounded-md ${isDark ? "bg-[#1f3350] text-[#4a9eff]" : "bg-blue-50 text-[#0057B8]"}`}>
+                                  <Icon className="h-3 w-3" />
+                                </span>
+                              ) : null}
+                              <div className={`text-sm ${isDark ? "text-gray-200" : "text-gray-800"}`}>{suggestion.label}</div>
+                            </div>
+                            <div className={`mt-0.5 text-[11px] ${isDark ? "text-gray-500" : "text-gray-400"}`}>{getSuggestionTypeLabel(suggestion.kind)}</div>
+                          </button>
+                        );
+                      })}
+
+                      {searchSuggestions.cities.length > 0 && (
+                        <div className={`px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                          {locale === "ua" ? "Міста" : locale === "es" ? "Ciudades" : "Cities"}
+                        </div>
+                      )}
+                      {searchSuggestions.cities.map((suggestion) => (
+                        <button
+                          key={suggestion.id}
+                          type="button"
+                          onClick={() => {
+                            setShowSearchSuggestions(false);
+                            setSearchQuery(suggestion.label);
+                            navigate(suggestion.path);
+                          }}
+                          className={`w-full px-3 py-2.5 text-left transition-colors ${
+                            isDark ? "hover:bg-[#1a2a40]" : "hover:bg-gray-50"
+                          }`}
+                        >
+                          <div className={`text-sm ${isDark ? "text-gray-200" : "text-gray-800"}`}>{suggestion.label}</div>
+                          <div className={`text-[11px] ${isDark ? "text-gray-500" : "text-gray-400"}`}>{getSuggestionTypeLabel(suggestion.kind)}</div>
+                        </button>
+                      ))}
+
+                      {searchSuggestions.listings.length > 0 && (
+                        <div className={`px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                          {locale === "ua" ? "Оголошення" : locale === "es" ? "Anuncios" : "Listings"}
+                        </div>
+                      )}
+                      {searchSuggestions.listings.map((suggestion) => (
+                        <button
+                          key={suggestion.id}
+                          type="button"
+                          onClick={() => {
+                            setShowSearchSuggestions(false);
+                            setSearchQuery(suggestion.label);
+                            navigate(suggestion.path);
+                          }}
+                          className={`w-full px-3 py-2.5 text-left transition-colors ${
+                            isDark ? "hover:bg-[#1a2a40]" : "hover:bg-gray-50"
+                          }`}
+                        >
+                          <div className={`text-sm ${isDark ? "text-gray-200" : "text-gray-800"}`}>{suggestion.label}</div>
+                          <div className={`text-[11px] ${isDark ? "text-gray-500" : "text-gray-400"}`}>{getSuggestionTypeLabel(suggestion.kind)}</div>
+                        </button>
+                      ))}
+
+                      {searchSuggestions.businesses.length > 0 && (
+                        <div className={`px-3 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-wider ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                          {locale === "ua" ? "Бізнеси" : locale === "es" ? "Negocios" : "Businesses"}
+                        </div>
+                      )}
+                      {searchSuggestions.businesses.map((suggestion) => (
+                        <button
+                          key={suggestion.id}
+                          type="button"
+                          onClick={() => {
+                            setShowSearchSuggestions(false);
+                            setSearchQuery(suggestion.label);
+                            navigate(suggestion.path);
+                          }}
+                          className={`w-full px-3 py-2.5 text-left transition-colors ${
+                            isDark ? "hover:bg-[#1a2a40]" : "hover:bg-gray-50"
+                          }`}
+                        >
+                          <div className={`text-sm ${isDark ? "text-gray-200" : "text-gray-800"}`}>{suggestion.label}</div>
+                          <div className={`text-[11px] ${isDark ? "text-gray-500" : "text-gray-400"}`}>{getSuggestionTypeLabel(suggestion.kind)}</div>
+                        </button>
+                      ))}
+                    </>
+                  ) : (
+                    <div className={`px-3 py-2.5 text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                      {locale === "ua" ? "Нічого не знайдено" : locale === "es" ? "Sin resultados" : "No results"}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Right side (desktop order: categories -> city -> lang -> account) */}
+            <div className="flex items-center gap-2">
+              {/* Categories dropdown */}
+              <div className="relative hidden md:block group">
+                <button className={`flex items-center gap-1 h-8 px-2.5 text-xs font-medium rounded-lg border transition-colors ${
+                  isDark
+                    ? "text-gray-300 bg-[#1a2a40] border-[#253d5c] hover:border-[#FFD700]/30"
+                    : "text-gray-600 bg-gray-50 border-gray-200 hover:border-blue-300"
                 }`}>
                   {t("nav.modules")} <ChevronDown className="w-3 h-3" />
                 </button>
-                <div className={`absolute top-full left-0 mt-1 w-48 border rounded-xl shadow-xl z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all ${
+                <div className={`absolute top-full right-0 mt-1 w-48 border rounded-xl shadow-xl z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all ${
                   isDark ? "bg-[#162236] border-[#1a3050]" : "bg-white border-gray-200"
                 }`}>
-                  {MODULE_NAV.slice(5).map((mod) => {
+                  {MODULE_NAV.map((mod) => {
                     const Icon = mod.icon;
                     return (
                       <Link
@@ -145,52 +433,27 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
                   })}
                 </div>
               </div>
-            </div>
 
-            {/* Right side */}
-            <div className="flex items-center gap-2">
-              {/* Create listing CTA */}
-              <Link
-                to="/create"
-                className={`hidden sm:flex items-center gap-1.5 h-8 px-3 text-xs font-semibold rounded-lg transition-all active:scale-95 ${
+              {/* Global city selector (desktop) */}
+              <select
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                className={`hidden md:block h-8 px-2.5 text-xs font-medium rounded-lg border transition-colors ${
                   isDark
-                    ? "text-[#0d1a2e] bg-gradient-to-r from-[#FFD700] to-[#e6c200] hover:shadow-md hover:shadow-yellow-500/20"
-                    : "text-white bg-gradient-to-r from-[#0057B8] to-[#0070E0] hover:shadow-md hover:shadow-blue-200"
+                    ? "text-gray-300 bg-[#1a2a40] border-[#253d5c] hover:border-[#FFD700]/30"
+                    : "text-gray-600 bg-gray-50 border-gray-200 hover:border-blue-300"
                 }`}
               >
-                <Plus className="w-3.5 h-3.5" />
-                {t("nav.create")}
-              </Link>
-
-              {/* Search */}
-              <Link
-                to="/search"
-                className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-                  isDark ? "text-gray-400 hover:bg-[#1a2a40] hover:text-gray-200" : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-                }`}
-              >
-                <Search className="w-4 h-4" />
-              </Link>
-
-              {/* Messages */}
-              {isLoggedIn && (
-                <Link
-                  to="/messages"
-                  className={`relative w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${
-                    isDark ? "text-gray-400 hover:bg-[#1a2a40] hover:text-gray-200" : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-                  }`}
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  {unreadCount > 0 && (
-                    <span className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
-                      {unreadCount > 9 ? "9+" : unreadCount}
-                    </span>
-                  )}
-                </Link>
-              )}
+                <option value="All Spain">{allCityLabel}</option>
+                {availableCities.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
 
               {/* Language Switcher */}
-              <div className="relative">
+              <div className="relative hidden md:block">
                 <button
                   onClick={() => setShowLangMenu(!showLangMenu)}
                   className={`flex items-center gap-1 text-xs font-medium px-2 py-1.5 rounded-lg border transition-colors ${
@@ -199,7 +462,8 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
                       : "text-gray-600 bg-gray-50 border-gray-200 hover:border-blue-300"
                   }`}
                 >
-                  {currentLocale.flag} {currentLocale.label}
+                  <img src={currentLocale.flagIcon} alt={currentLocale.label} className="w-4 h-3 rounded-sm object-cover" />
+                  {currentLocale.label}
                   <ChevronDown className="w-3 h-3" />
                 </button>
                 {showLangMenu && (
@@ -218,7 +482,8 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
                               : isDark ? "text-gray-300 hover:bg-[#1a2a40]" : "text-gray-700 hover:bg-gray-50"
                           }`}
                         >
-                          {l.flag} {l.label}
+                          <img src={l.flagIcon} alt={l.label} className="w-4 h-3 rounded-sm object-cover" />
+                          {l.label}
                         </button>
                       ))}
                     </div>
@@ -226,7 +491,22 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
                 )}
               </div>
 
-              <ThemeToggle />
+              {/* Messages (desktop) */}
+              {isLoggedIn && unreadCount > 0 && (
+                <Link
+                  to="/messages"
+                  className={`relative hidden md:flex w-8 h-8 rounded-lg items-center justify-center transition-colors ${
+                    isDark ? "text-gray-300 bg-[#1a2a40] border border-[#253d5c] hover:border-[#FFD700]/30" : "text-gray-600 bg-gray-50 border border-gray-200 hover:border-blue-300"
+                  }`}
+                  aria-label="Messages"
+                  title={t("nav.messages")}
+                >
+                  <MessageSquare className="w-4 h-4" />
+                  <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                </Link>
+              )}
 
               {/* Auth */}
               <div className="relative">
@@ -364,6 +644,38 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
           </div>
         )}
       </nav>
+
+      {!isHomeRoute && (
+        <div className={`border-b ${isDark ? "border-[#1a3050] bg-[#0d1a2e]/70" : "border-gray-100 bg-white/80"}`}>
+          <div className="max-w-6xl mx-auto px-4 py-2">
+            <div className="flex items-center gap-2 overflow-x-auto">
+              <button
+                type="button"
+                onClick={handleBack}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  isDark
+                    ? "text-gray-200 bg-[#1a2a40] border border-[#253d5c] hover:border-[#FFD700]/30"
+                    : "text-gray-700 bg-gray-50 border border-gray-200 hover:border-blue-300"
+                }`}
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                {t("detail.back")}
+              </button>
+              <Link
+                to="/"
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                  isDark
+                    ? "text-gray-200 bg-[#1a2a40] border border-[#253d5c] hover:border-[#FFD700]/30"
+                    : "text-gray-700 bg-gray-50 border border-gray-200 hover:border-blue-300"
+                }`}
+              >
+                <Home className="w-3.5 h-3.5" />
+                {t("nav.home")}
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── Main Content ─── */}
       <main className="flex-1">{children}</main>

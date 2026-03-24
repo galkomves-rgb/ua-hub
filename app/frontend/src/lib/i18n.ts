@@ -523,10 +523,10 @@ export function t(key: string, locale: Locale = "ua"): string {
   return translations[locale]?.[key] || translations.ua[key] || key;
 }
 
-export const LOCALES: { code: Locale; label: string; flag: string }[] = [
-  { code: "ua", label: "UA", flag: "🇺🇦" },
-  { code: "es", label: "ES", flag: "🇪🇸" },
-  { code: "en", label: "EN", flag: "🇬🇧" },
+export const LOCALES: { code: Locale; label: string; flag: string; flagIcon: string }[] = [
+  { code: "ua", label: "UA", flag: "🇺🇦", flagIcon: "https://cdn.jsdelivr.net/npm/flag-icons/flags/4x3/ua.svg" },
+  { code: "es", label: "ES", flag: "🇪🇸", flagIcon: "https://cdn.jsdelivr.net/npm/flag-icons/flags/4x3/es.svg" },
+  { code: "en", label: "EN", flag: "🇬🇧", flagIcon: "https://cdn.jsdelivr.net/npm/flag-icons/flags/4x3/gb.svg" },
 ];
 
 // i18n context

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useLocation, Link, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, MapPin, Clock, User, Briefcase, Share2, Flag, Heart,
@@ -9,11 +9,17 @@ import Layout from "@/components/Layout";
 import { ListingCard, SectionHeader } from "@/components/Cards";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
+import { useGlobalCity } from "@/lib/global-preferences";
+import { getModuleLabelSystem } from "@/lib/label-taxonomy";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   MODULES, MODULE_ORDER, SAMPLE_LISTINGS, SAMPLE_BUSINESSES,
   PRICING_PLANS, IMAGES,
 } from "@/lib/platform";
+
+function normalizeCityFilter(value: string): string {
+  return value === "All Spain" ? "all" : value;
+}
 
 // ─── Listing Detail ───
 function ListingDetail() {
@@ -23,7 +29,9 @@ function ListingDetail() {
   const listingId = params.listingId || params.bizId || "";
   const { theme } = useTheme();
   const { t } = useI18n();
+  const { city: globalCity } = useGlobalCity();
   const isDark = theme === "dark";
+  const selectedCity = normalizeCityFilter(globalCity);
 
   const listing = SAMPLE_LISTINGS.find((l) => l.id === listingId);
   if (!listing) {
@@ -40,7 +48,10 @@ function ListingDetail() {
   }
 
   const relatedListings = SAMPLE_LISTINGS.filter(
-    (l) => l.module === listing.module && l.id !== listing.id
+    (l) =>
+      l.module === listing.module &&
+      l.id !== listing.id &&
+      (selectedCity === "all" || l.city === selectedCity)
   ).slice(0, 3);
 
   const mod = MODULES[listing.module];
@@ -228,7 +239,9 @@ function BusinessProfilePage() {
   const { bizId } = useParams();
   const { theme } = useTheme();
   const { t } = useI18n();
+  const { city: globalCity } = useGlobalCity();
   const isDark = theme === "dark";
+  const selectedCity = normalizeCityFilter(globalCity);
 
   const biz = SAMPLE_BUSINESSES.find((b) => b.id === bizId);
   if (!biz) {
@@ -242,7 +255,10 @@ function BusinessProfilePage() {
   }
 
   const bizListings = SAMPLE_LISTINGS.filter(
-    (l) => l.ownerId === biz.slug && l.ownerType === "business_profile"
+    (l) =>
+      l.ownerId === biz.slug &&
+      l.ownerType === "business_profile" &&
+      (selectedCity === "all" || l.city === selectedCity)
   );
 
   return (
@@ -355,6 +371,7 @@ function CreateListingPage() {
   const [step, setStep] = useState(0);
   const [selectedModule, setSelectedModule] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -372,6 +389,31 @@ function CreateListingPage() {
   ];
 
   const mod = selectedModule ? MODULES[selectedModule] : null;
+  const moduleLabelSystem = getModuleLabelSystem();
+  const allowedLabels = useMemo(() => moduleLabelSystem[selectedModule] ?? [], [moduleLabelSystem, selectedModule]);
+
+  useEffect(() => {
+    if (!selectedModule) {
+      setSelectedLabels([]);
+      return;
+    }
+
+    setSelectedLabels((current) => current.filter((label) => allowedLabels.includes(label as never)));
+  }, [allowedLabels, selectedModule]);
+
+  const getLabelDisplayName = (label: string) => {
+    if (label === "verified") return t("card.verified");
+    if (label === "premium") return t("card.premium");
+    if (label === "featured") return t("card.featured");
+    if (label === "urgent") return t("card.urgent");
+    if (label === "new") return t("card.new");
+    if (label === "remote") return t("card.remote");
+    if (label === "online") return t("card.online");
+    if (label === "business") return t("card.business");
+    if (label === "private") return t("card.private");
+    if (label === "free") return t("card.free");
+    return label;
+  };
 
   const handlePublish = async () => {
     if (!user || !selectedModule || !selectedCategory) {
@@ -379,7 +421,17 @@ function CreateListingPage() {
       return;
     }
 
+    const hasInvalidLabels = selectedLabels.some((label) => !allowedLabels.includes(label as never));
+    if (hasInvalidLabels) {
+      alert("Обрані лейбли не відповідають правилам цього розділу");
+      return;
+    }
+
     try {
+      const shouldBeFeatured = selectedLabels.includes("featured");
+      const shouldBePromoted = selectedLabels.includes("premium");
+      const shouldBeVerified = selectedLabels.includes("verified");
+
       const listingPayload = {
         user_id: user.id,
         module: selectedModule,
@@ -392,6 +444,9 @@ function CreateListingPage() {
         owner_type: formData.ownerType,
         owner_id: user.id,
         status: "active",
+        is_featured: shouldBeFeatured,
+        is_promoted: shouldBePromoted,
+        is_verified: shouldBeVerified,
         images_json: JSON.stringify(formData.images),
       };
 
@@ -558,6 +613,43 @@ function CreateListingPage() {
                   />
                 </div>
               </div>
+
+              {allowedLabels.length > 0 && (
+                <div>
+                  <label className={`text-xs font-medium mb-1 block ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                    Лейбли оголошення
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {allowedLabels.map((label) => {
+                      const active = selectedLabels.includes(label);
+                      return (
+                        <button
+                          key={label}
+                          type="button"
+                          onClick={() => {
+                            setSelectedLabels((current) =>
+                              current.includes(label)
+                                ? current.filter((item) => item !== label)
+                                : [...current, label],
+                            );
+                          }}
+                          className={`h-8 rounded-lg border px-3 text-xs font-medium transition-colors ${
+                            active
+                              ? isDark
+                                ? "border-[#FFD700] bg-[#FFD700]/10 text-[#FFD700]"
+                                : "border-[#0057B8] bg-blue-50 text-[#0057B8]"
+                              : isDark
+                                ? "border-[#1a3050] text-gray-300 hover:bg-[#1a2a40]"
+                                : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                          }`}
+                        >
+                          {getLabelDisplayName(label)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -631,6 +723,15 @@ function CreateListingPage() {
                 <p className={`text-xs mb-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>{formData.description || "Без опису"}</p>
                 {formData.price && <p className={`text-sm font-bold ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`}>{formData.price} €</p>}
                 <p className={`text-xs mt-1 ${isDark ? "text-gray-500" : "text-gray-400"}`}>{formData.city}</p>
+                {selectedLabels.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {selectedLabels.map((label) => (
+                      <span key={label} className={`rounded-md px-2 py-0.5 text-[11px] ${isDark ? "bg-[#1a2a40] text-gray-300" : "bg-gray-100 text-gray-600"}`}>
+                        {getLabelDisplayName(label)}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

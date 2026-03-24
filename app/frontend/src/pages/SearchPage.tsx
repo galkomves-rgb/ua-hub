@@ -5,11 +5,16 @@ import Layout from "@/components/Layout";
 import { ListingCard, BusinessCard } from "@/components/Cards";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
+import { useGlobalCity } from "@/lib/global-preferences";
 import { SAMPLE_LISTINGS, SAMPLE_BUSINESSES, MODULES, MODULE_ORDER } from "@/lib/platform";
 import type { Listing, BusinessProfile } from "@/lib/platform";
 
 const RECENT_SEARCHES_KEY = "uahab-recent-searches";
 const MAX_RECENT = 8;
+
+function normalizeCityFilter(value: string): string {
+  return value === "All Spain" ? "all" : value;
+}
 
 export default function SearchPage() {
   const { theme } = useTheme();
@@ -21,6 +26,8 @@ export default function SearchPage() {
   const [query, setQuery] = useState(initialQuery);
   const [selectedModule, setSelectedModule] = useState("all");
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const { city: globalCity } = useGlobalCity();
+  const normalizedGlobalCity = normalizeCityFilter(globalCity);
 
   useEffect(() => {
     const saved = localStorage.getItem(RECENT_SEARCHES_KEY);
@@ -60,16 +67,23 @@ export default function SearchPage() {
     if (selectedModule !== "all") {
       items = items.filter((l) => l.module === selectedModule);
     }
+    if (normalizedGlobalCity !== "all") {
+      items = items.filter((l) => l.city === normalizedGlobalCity);
+    }
     return items;
-  }, [query, selectedModule]);
+  }, [query, selectedModule, normalizedGlobalCity]);
 
   const filteredBusinesses = useMemo(() => {
     if (!query.trim()) return [];
     const q = query.toLowerCase();
-    return SAMPLE_BUSINESSES.filter(
+    let items = SAMPLE_BUSINESSES.filter(
       (b) => b.name.toLowerCase().includes(q) || b.description.toLowerCase().includes(q) || b.category.toLowerCase().includes(q)
     );
-  }, [query]);
+    if (normalizedGlobalCity !== "all") {
+      items = items.filter((b) => b.city === normalizedGlobalCity);
+    }
+    return items;
+  }, [query, normalizedGlobalCity]);
 
   const totalResults = filteredListings.length + (selectedModule === "all" ? filteredBusinesses.length : 0);
   const showResults = query.trim().length > 0;
@@ -124,7 +138,10 @@ export default function SearchPage() {
             </button>
             {MODULE_ORDER.map((modId) => {
               const count = SAMPLE_LISTINGS.filter(
-                (l) => l.module === modId && (l.title.toLowerCase().includes(query.toLowerCase()) || l.description.toLowerCase().includes(query.toLowerCase()))
+                (l) =>
+                  l.module === modId &&
+                  (l.title.toLowerCase().includes(query.toLowerCase()) || l.description.toLowerCase().includes(query.toLowerCase())) &&
+                  (normalizedGlobalCity === "all" || l.city === normalizedGlobalCity)
               ).length;
               if (count === 0) return null;
               const Icon = MODULES[modId].icon;

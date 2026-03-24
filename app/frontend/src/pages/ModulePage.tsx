@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Search, SlidersHorizontal, X, ChevronDown, ArrowLeft } from "lucide-react";
 import Layout from "@/components/Layout";
@@ -6,7 +6,12 @@ import { ListingCard, BusinessCard, SectionHeader } from "@/components/Cards";
 import AdBanner from "@/components/AdBanner";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
-import { MODULES, SAMPLE_LISTINGS, SAMPLE_BUSINESSES, CITIES, IMAGES } from "@/lib/platform";
+import { useGlobalCity } from "@/lib/global-preferences";
+import { MODULES, SAMPLE_LISTINGS, SAMPLE_BUSINESSES, IMAGES } from "@/lib/platform";
+
+function normalizeCityFilter(value: string): string {
+  return value === "All Spain" ? "all" : value;
+}
 
 export default function ModulePage() {
   const location = useLocation();
@@ -16,12 +21,18 @@ export default function ModulePage() {
   const isDark = theme === "dark";
 
   const mod = moduleId ? MODULES[moduleId] : null;
+  const { city: globalCity, setCity: setGlobalCity } = useGlobalCity();
+  const normalizedGlobalCity = normalizeCityFilter(globalCity);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
-  const [selectedCity, setSelectedCity] = useState("all");
+  const [selectedCity, setSelectedCity] = useState(normalizedGlobalCity);
   const [selectedType, setSelectedType] = useState("all");
   const [sortBy, setSortBy] = useState("newest");
   const [showFilters, setShowFilters] = useState(false);
+
+  useEffect(() => {
+    setSelectedCity(normalizeCityFilter(globalCity));
+  }, [globalCity]);
 
   const isBusiness = moduleId === "business";
 
@@ -99,13 +110,31 @@ export default function ModulePage() {
   const banner = mod.banner || IMAGES.hero;
   const categories = mod.categories;
   const activeListings = isBusiness ? filteredBusinesses : filteredListings;
-  const activeCities = isBusiness
-    ? [...new Set(SAMPLE_BUSINESSES.map((b) => b.city))]
-    : [...new Set(SAMPLE_LISTINGS.filter((l) => l.module === moduleId).map((l) => l.city))];
+  const activeCities = useMemo(() => {
+    const citySet = new Set<string>();
+
+    if (isBusiness) {
+      SAMPLE_BUSINESSES.forEach((business) => {
+        if (business.city?.trim()) {
+          citySet.add(business.city.trim());
+        }
+      });
+    } else {
+      SAMPLE_LISTINGS
+        .filter((listing) => listing.module === moduleId)
+        .forEach((listing) => {
+          if (listing.city?.trim()) {
+            citySet.add(listing.city.trim());
+          }
+        });
+    }
+
+    return Array.from(citySet).sort((a, b) => a.localeCompare(b));
+  }, [isBusiness, moduleId]);
 
   const clearFilters = () => {
     setSelectedCategory("all");
-    setSelectedCity("all");
+    setSelectedCity(normalizedGlobalCity);
     setSelectedType("all");
     setSearchQuery("");
   };
@@ -227,7 +256,10 @@ export default function ModulePage() {
               </h3>
               <div className="space-y-0.5 max-h-48 overflow-y-auto">
                 <button
-                  onClick={() => setSelectedCity("all")}
+                  onClick={() => {
+                    setSelectedCity("all");
+                    setGlobalCity("All Spain");
+                  }}
                   className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                     selectedCity === "all"
                       ? isDark ? "text-[#FFD700] bg-[#FFD700]/10" : "text-[#0057B8] bg-blue-50"
@@ -239,7 +271,10 @@ export default function ModulePage() {
                 {activeCities.map((city) => (
                   <button
                     key={city}
-                    onClick={() => setSelectedCity(city)}
+                    onClick={() => {
+                      setSelectedCity(city);
+                      setGlobalCity(city);
+                    }}
                     className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                       selectedCity === city
                         ? isDark ? "text-[#FFD700] bg-[#FFD700]/10" : "text-[#0057B8] bg-blue-50"
@@ -321,7 +356,10 @@ export default function ModulePage() {
                 {selectedCity !== "all" && (
                   <span className={`inline-flex items-center gap-1 px-2 py-1 text-xs rounded-lg ${isDark ? "bg-[#1a2a40] text-gray-300" : "bg-gray-100 text-gray-600"}`}>
                     {selectedCity}
-                    <button onClick={() => setSelectedCity("all")}><X className="w-3 h-3" /></button>
+                    <button onClick={() => {
+                      setSelectedCity("all");
+                      setGlobalCity("All Spain");
+                    }}><X className="w-3 h-3" /></button>
                   </span>
                 )}
                 <button onClick={clearFilters} className={`text-xs font-medium ${isDark ? "text-red-400" : "text-red-500"}`}>
