@@ -4,9 +4,10 @@ import {
   ArrowLeft, Send, MessageSquare, Inbox, Clock, ChevronRight, User,
 } from "lucide-react";
 import Layout from "@/components/Layout";
+import { authApi, redirectToAuthEntry } from "@/lib/auth";
+import { getAPIBaseURL } from "@/lib/config";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
-import { client } from "@/lib/api";
 
 interface ConversationSummary {
   other_user_id: string;
@@ -50,10 +51,10 @@ export default function MessagesPage() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const user = await client.auth.me();
-        if (user?.data) {
+        const user = await authApi.getCurrentUser();
+        if (user) {
           setIsLoggedIn(true);
-          setCurrentUserId(user.data.id || "");
+          setCurrentUserId(user.id || "");
           await loadInbox();
         }
       } catch {
@@ -97,10 +98,15 @@ export default function MessagesPage() {
 
   const loadInbox = async () => {
     try {
-      const res = await client.callApi("/api/v1/messaging/inbox", { method: "GET" });
-      if (res?.data) {
-        setConversations(res.data.conversations || []);
-        setTotalUnread(res.data.total_unread || 0);
+      const token = localStorage.getItem("auth_token");
+      const res = await fetch(`${getAPIBaseURL()}/api/v1/messaging/inbox`, {
+        method: "GET",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setConversations(data.conversations || []);
+        setTotalUnread(data.total_unread || 0);
       }
     } catch (err) {
       console.error("Failed to load inbox:", err);
@@ -109,20 +115,28 @@ export default function MessagesPage() {
 
   const loadConversation = async (otherUserId: string, listingId: string | null) => {
     try {
+      const token = localStorage.getItem("auth_token");
       let url = `/api/v1/messaging/conversation?other_user_id=${otherUserId}`;
       if (listingId) url += `&listing_id=${listingId}`;
-      const res = await client.callApi(url, { method: "GET" });
-      if (res?.data) {
-        setMessages(Array.isArray(res.data) ? res.data : []);
+      const res = await fetch(`${getAPIBaseURL()}${url}`, {
+        method: "GET",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setMessages(Array.isArray(data) ? data : []);
         // Mark unread messages as read
-        const unreadIds = (Array.isArray(res.data) ? res.data : [])
+        const unreadIds = (Array.isArray(data) ? data : [])
           .filter((m: Message) => m.recipient_id === currentUserId && !m.is_read)
           .map((m: Message) => m.id);
         if (unreadIds.length > 0) {
-          await client.callApi("/api/v1/messaging/mark-read", {
+          await fetch(`${getAPIBaseURL()}/api/v1/messaging/mark-read`, {
             method: "POST",
             body: JSON.stringify({ message_ids: unreadIds }),
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
           });
           await loadInbox();
         }
@@ -136,6 +150,7 @@ export default function MessagesPage() {
     if (!newMessage.trim() || !selectedConv || sending) return;
     setSending(true);
     try {
+      const token = localStorage.getItem("auth_token");
       const body: Record<string, string> = {
         recipient_id: selectedConv.other_user_id,
         content: newMessage.trim(),
@@ -143,10 +158,13 @@ export default function MessagesPage() {
       if (selectedConv.listing_id) body.listing_id = selectedConv.listing_id;
       if (selectedConv.listing_title) body.listing_title = selectedConv.listing_title;
 
-      await client.callApi("/api/v1/messaging/send", {
+      await fetch(`${getAPIBaseURL()}/api/v1/messaging/send`, {
         method: "POST",
         body: JSON.stringify(body),
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
       });
       setNewMessage("");
       await loadConversation(selectedConv.other_user_id, selectedConv.listing_id);
@@ -195,7 +213,7 @@ export default function MessagesPage() {
             {t("msg.loginRequired")}
           </p>
           <button
-            onClick={() => client.auth.toLogin()}
+            onClick={redirectToAuthEntry}
             className={`h-10 px-6 text-sm font-semibold rounded-xl transition-all active:scale-95 ${
               isDark
                 ? "bg-gradient-to-r from-[#FFD700] to-[#e6c200] text-[#0d1a2e]"

@@ -21,6 +21,7 @@ import {
 } from "./pages/DetailPage";
 import MessagesPage from "./pages/MessagesPage";
 import SearchPage from "./pages/SearchPage";
+import AuthPage from "./pages/AuthPage";
 import AuthCallback from "./pages/AuthCallback";
 import AuthError from "./pages/AuthError";
 
@@ -84,6 +85,7 @@ const App = () => (
                 {/* Messages & Search */}
                 <Route path="/messages" element={<MessagesPage />} />
                 <Route path="/search" element={<SearchPage />} />
+                <Route path="/auth" element={<AuthPage />} />
                 {/* Platform pages */}
                 <Route path="/pricing" element={<PricingPage />} />
                 <Route path="/about" element={<AboutPage />} />

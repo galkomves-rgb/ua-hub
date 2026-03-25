@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from models.auth import User
 from schemas.auth import (
+    AuthCapabilitiesResponse,
     PlatformTokenExchangeRequest,
     TokenExchangeResponse,
     UserResponse,
@@ -30,6 +31,101 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(prefix="/api/v1/auth", tags=["authentication"])
 logger = logging.getLogger(__name__)
+
+SUPPORTED_AUTH_METHODS = {"google", "apple", "email", "phone"}
+SUPPORTED_AUTH_MODES = {"login", "register"}
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def get_auth_capabilities() -> AuthCapabilitiesResponse:
+    google_enabled = _env_flag("OIDC_ENABLE_GOOGLE_AUTH") or bool(getattr(settings, "oidc_google_connection", ""))
+    apple_enabled = _env_flag("OIDC_ENABLE_APPLE_AUTH") or bool(getattr(settings, "oidc_apple_connection", ""))
+    email_enabled = _env_flag("OIDC_ENABLE_EMAIL_AUTH") or bool(getattr(settings, "oidc_email_connection", ""))
+    phone_enabled = _env_flag("OIDC_ENABLE_PHONE_AUTH") or bool(getattr(settings, "oidc_phone_connection", ""))
+    turnstile_enabled = bool(getattr(settings, "turnstile_secret_key", ""))
+    email_confirmation_required = _env_flag("OIDC_REQUIRE_VERIFIED_EMAIL", default=True)
+    return AuthCapabilitiesResponse(
+        google=google_enabled,
+        apple=apple_enabled,
+        email_login=email_enabled,
+        email_signup=email_enabled,
+        phone=phone_enabled,
+        turnstile_enabled=turnstile_enabled,
+        email_confirmation_required=email_confirmation_required,
+    )
+
+
+def build_auth_provider_params(method: Optional[str], mode: Optional[str]) -> dict[str, str]:
+    if not method and not mode:
+        return {}
+
+    capabilities = get_auth_capabilities()
+    if method == "google" and not capabilities.google:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google login is not enabled")
+    if method == "apple" and not capabilities.apple:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Apple login is not enabled")
+    if method == "email" and not capabilities.email_login:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email auth is not enabled")
+    if method == "phone" and not capabilities.phone:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Phone auth is not enabled")
+
+    params: dict[str, str] = {}
+    connection_param = getattr(settings, "oidc_connection_param", "connection")
+    connection_map = {
+        "google": getattr(settings, "oidc_google_connection", ""),
+        "apple": getattr(settings, "oidc_apple_connection", ""),
+        "email": getattr(settings, "oidc_email_connection", ""),
+        "phone": getattr(settings, "oidc_phone_connection", ""),
+    }
+    connection_value = connection_map.get(method or "", "")
+    if method and connection_value:
+        params[connection_param] = connection_value
+
+    if mode:
+        screen_hint_param = getattr(settings, "oidc_screen_hint_param", "screen_hint")
+        if mode == "register":
+            params[screen_hint_param] = getattr(settings, "oidc_signup_hint_value", "signup")
+        elif mode == "login":
+            params[screen_hint_param] = getattr(settings, "oidc_login_hint_value", "login")
+
+    return params
+
+
+@router.get("/capabilities", response_model=AuthCapabilitiesResponse)
+async def auth_capabilities():
+    return get_auth_capabilities()
+
+
+async def verify_turnstile_token(token: str, remote_ip: str | None = None) -> bool:
+    secret = getattr(settings, "turnstile_secret_key", "")
+    if not secret:
+        return True
+    if not token:
+        return False
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+                data={
+                    "secret": secret,
+                    "response": token,
+                    **({"remoteip": remote_ip} if remote_ip else {}),
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+            response.raise_for_status()
+            payload = response.json()
+            return bool(payload.get("success"))
+    except Exception as exc:
+        logger.warning("Turnstile verification failed: %s", exc)
+        return False
 
 
 def _local_patch(url: str) -> str:
@@ -74,8 +170,27 @@ def derive_name_from_email(email: str) -> str:
 
 
 @router.get("/login")
-async def login(request: Request, db: AsyncSession = Depends(get_db)):
+async def login(
+    request: Request,
+    captcha_token: Optional[str] = None,
+    method: Optional[str] = None,
+    mode: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+):
     """Start OIDC login flow with PKCE."""
+    if method and method not in SUPPORTED_AUTH_METHODS:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported auth method")
+    if mode and mode not in SUPPORTED_AUTH_MODES:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported auth mode")
+
+    turnstile_enabled = bool(getattr(settings, "turnstile_secret_key", ""))
+    if turnstile_enabled:
+        forwarded_for = request.headers.get("x-forwarded-for", "")
+        remote_ip = forwarded_for.split(",", 1)[0].strip() if forwarded_for else None
+        is_human = await verify_turnstile_token(captcha_token or "", remote_ip=remote_ip)
+        if not is_human:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Human verification failed")
+
     state = generate_state()
     nonce = generate_nonce()
     code_verifier = generate_code_verifier()
@@ -83,14 +198,21 @@ async def login(request: Request, db: AsyncSession = Depends(get_db)):
 
     # Store state, nonce, and code verifier in database
     auth_service = AuthService(db)
-    await auth_service.store_oidc_state(state, nonce, code_verifier)
+    await auth_service.store_oidc_state(state, nonce, code_verifier, auth_method=method, auth_mode=mode)
 
     # Build redirect_uri dynamically from request
     backend_url = get_dynamic_backend_url(request)
     redirect_uri = f"{backend_url}/api/v1/auth/callback"
     logger.info("[login] Starting OIDC flow with redirect_uri=%s", redirect_uri)
 
-    auth_url = build_authorization_url(state, nonce, code_challenge, redirect_uri=redirect_uri)
+    provider_params = build_auth_provider_params(method, mode)
+    auth_url = build_authorization_url(
+        state,
+        nonce,
+        code_challenge,
+        redirect_uri=redirect_uri,
+        extra_params=provider_params,
+    )
     return RedirectResponse(
         url=auth_url,
         status_code=status.HTTP_302_FOUND,
@@ -130,6 +252,8 @@ async def callback(
 
     nonce = temp_data["nonce"]
     code_verifier = temp_data.get("code_verifier")
+    auth_method = temp_data.get("auth_method")
+    auth_mode = temp_data.get("auth_mode")
 
     try:
         # Build redirect_uri dynamically from request
@@ -187,6 +311,12 @@ async def callback(
         # Validate nonce
         if id_claims.get("nonce") != nonce:
             return redirect_with_error("Invalid nonce")
+
+        email_confirmation_required = get_auth_capabilities().email_confirmation_required
+        email_verified = bool(id_claims.get("email_verified"))
+        is_email_flow = auth_method == "email" or auth_mode == "register"
+        if email_confirmation_required and is_email_flow and not email_verified:
+            return redirect_with_error("Please confirm your email address before continuing")
 
         # Get or create user
         email = id_claims.get("email", "")

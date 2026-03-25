@@ -4,14 +4,13 @@ import {
   Menu, X, User, LogOut, Plus, ChevronDown, MessageSquare, Search,
   Briefcase, Home, Wrench, ShoppingBag, Calendar, Users, Building2, Store,
 } from "lucide-react";
-import { createClient } from "@metagptx/web-sdk";
+import { authApi, redirectToAuthEntry } from "@/lib/auth";
 import { useTheme } from "@/lib/ThemeContext";
 import { useGlobalCity } from "@/lib/global-preferences";
 import { useI18n, LOCALES } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n";
+import { getAPIBaseURL } from "@/lib/config";
 import { SAMPLE_BUSINESSES, SAMPLE_LISTINGS } from "@/lib/platform";
-
-const client = createClient();
 
 const MODULE_NAV = [
   { id: "jobs", icon: Briefcase, path: "/jobs" },
@@ -56,12 +55,20 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const user = await client.auth.me();
-        if (user?.data) {
+        const token = localStorage.getItem("auth_token");
+        const user = await authApi.getCurrentUser();
+        if (user) {
           setIsLoggedIn(true);
           try {
-            const res = await client.callApi("/api/v1/messaging/unread-count", { method: "GET" });
-            setUnreadCount(res?.data?.count ?? 0);
+            const res = await fetch(`${getAPIBaseURL()}/api/v1/messaging/unread-count`, {
+              method: "GET",
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            if (!res.ok) {
+              throw new Error("Unread count request failed");
+            }
+            const data = await res.json();
+            setUnreadCount(data?.count ?? 0);
           } catch {
             setUnreadCount(0);
           }
@@ -93,9 +100,9 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
     setShowSearchSuggestions(false);
   }, [location.pathname]);
 
-  const handleLogin = async () => { await client.auth.toLogin(); };
+  const handleLogin = async () => { redirectToAuthEntry(); };
   const handleLogout = async () => {
-    await client.auth.logout();
+    await authApi.logout();
     setIsLoggedIn(false);
     setShowUserMenu(false);
   };

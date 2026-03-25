@@ -232,6 +232,7 @@ def build_authorization_url(
     nonce: str,
     code_challenge: Optional[str] = None,
     redirect_uri: Optional[str] = None,
+    extra_params: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Build OIDC authorization URL with optional PKCE support."""
     import urllib.parse
@@ -249,6 +250,9 @@ def build_authorization_url(
     if code_challenge:
         params["code_challenge"] = code_challenge
         params["code_challenge_method"] = "S256"
+
+    if extra_params:
+        params.update({key: value for key, value in extra_params.items() if value is not None and value != ""})
 
     auth_url = f"{settings.oidc_issuer_url}/authorize?" + urllib.parse.urlencode(params)
     return auth_url

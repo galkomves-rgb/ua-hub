@@ -1,4 +1,3 @@
-import { client } from "@/lib/api";
 import { getAPIBaseURL } from "@/lib/config";
 
 export interface AccountDashboardResponse {
@@ -79,42 +78,6 @@ export interface ListingManagementItem {
   is_verified: boolean;
 }
 
-type ApiResponse<T> = {
-  data?: T;
-};
-
-async function apiGet<T>(url: string): Promise<T> {
-  const response = (await client.callApi(url, { method: "GET" })) as ApiResponse<T>;
-  if (typeof response?.data === "undefined") {
-    throw new Error("Invalid API response");
-  }
-  return response.data;
-}
-
-async function apiDelete(url: string): Promise<void> {
-  await client.callApi(url, { method: "DELETE" });
-}
-
-export function fetchAccountDashboard() {
-  return apiGet<AccountDashboardResponse>("/api/v1/account/dashboard");
-}
-
-export function fetchSavedListings() {
-  return apiGet<SavedListingCard[]>("/api/v1/saved/listings");
-}
-
-export function fetchSavedBusinesses() {
-  return apiGet<SavedBusinessCard[]>("/api/v1/saved/businesses");
-}
-
-export function removeSavedListing(listingId: number) {
-  return apiDelete(`/api/v1/saved/listings/${listingId}`);
-}
-
-export function removeSavedBusiness(businessId: number) {
-  return apiDelete(`/api/v1/saved/businesses/${businessId}`);
-}
-
 async function accountFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const token = localStorage.getItem("auth_token");
   const response = await fetch(`${getAPIBaseURL()}${path}`, {
@@ -144,6 +107,26 @@ async function accountFetch<T>(path: string, init?: RequestInit): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+export function fetchAccountDashboard() {
+  return accountFetch<AccountDashboardResponse>("/api/v1/account/dashboard");
+}
+
+export function fetchSavedListings() {
+  return accountFetch<SavedListingCard[]>("/api/v1/saved/listings");
+}
+
+export function fetchSavedBusinesses() {
+  return accountFetch<SavedBusinessCard[]>("/api/v1/saved/businesses");
+}
+
+export function removeSavedListing(listingId: number) {
+  return accountFetch<void>(`/api/v1/saved/listings/${listingId}`, { method: "DELETE" });
+}
+
+export function removeSavedBusiness(businessId: number) {
+  return accountFetch<void>(`/api/v1/saved/businesses/${businessId}`, { method: "DELETE" });
 }
 
 export function fetchUserProfile() {

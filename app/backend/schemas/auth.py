@@ -25,3 +25,13 @@ class TokenExchangeResponse(BaseModel):
     """Response body for issued application token."""
 
     token: str
+
+
+class AuthCapabilitiesResponse(BaseModel):
+    google: bool
+    apple: bool
+    email_login: bool
+    email_signup: bool
+    phone: bool
+    turnstile_enabled: bool
+    email_confirmation_required: bool

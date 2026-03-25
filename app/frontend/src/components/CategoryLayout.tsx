@@ -2,12 +2,10 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { ArrowLeft, User, LogOut } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { createClient } from "@metagptx/web-sdk";
 import GlobalSearch from "@/components/GlobalSearch";
 import ThemeToggle from "@/components/ThemeToggle";
+import { authApi, redirectToAuthEntry } from "@/lib/auth";
 import { useTheme } from "@/lib/ThemeContext";
-
-const client = createClient();
 
 const HEADER_IMAGE =
   "https://mgx-backend-cdn.metadl.com/generate/images/1049271/2026-03-23/c10bc500-2a23-49c2-90d6-8787ee4b4906.png";
@@ -37,23 +35,23 @@ export default function CategoryLayout({
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const user = await client.auth.me();
-        if (user?.data) {
+        const user = await authApi.getCurrentUser();
+        if (user) {
           setIsLoggedIn(true);
         }
       } catch {
         setIsLoggedIn(false);
       }
     };
-    checkAuth();
+    void checkAuth();
   }, []);
 
-  const handleLogin = async () => {
-    await client.auth.toLogin();
+  const handleLogin = () => {
+    redirectToAuthEntry();
   };
 
   const handleLogout = async () => {
-    await client.auth.logout();
+    await authApi.logout();
     setIsLoggedIn(false);
     setShowMenu(false);
   };
@@ -154,7 +152,7 @@ export default function CategoryLayout({
                       : "text-white bg-gradient-to-r from-[#0057B8] to-[#0070E0] hover:shadow-md hover:shadow-blue-200"
                   }`}
                 >
-                  Увійти
+                  Увійти / Реєстрація
                 </button>
               )}
             </div>

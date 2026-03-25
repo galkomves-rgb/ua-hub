@@ -21,5 +21,7 @@ class OIDCState(Base):
     state = Column(String(255), unique=True, index=True, nullable=False)
     nonce = Column(String(255), nullable=False)
     code_verifier = Column(String(255), nullable=False)
+    auth_method = Column(String(50), nullable=True)
+    auth_mode = Column(String(50), nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

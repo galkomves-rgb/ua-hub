@@ -70,14 +70,28 @@ class AuthService:
 
         return token, expires_at, claims
 
-    async def store_oidc_state(self, state: str, nonce: str, code_verifier: str):
+    async def store_oidc_state(
+        self,
+        state: str,
+        nonce: str,
+        code_verifier: str,
+        auth_method: Optional[str] = None,
+        auth_mode: Optional[str] = None,
+    ):
         """Store OIDC state in database."""
         # Clean up expired states first
         await self.db.execute(delete(OIDCState).where(OIDCState.expires_at < datetime.now(timezone.utc)))
 
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)  # 10 minute expiry
 
-        oidc_state = OIDCState(state=state, nonce=nonce, code_verifier=code_verifier, expires_at=expires_at)
+        oidc_state = OIDCState(
+            state=state,
+            nonce=nonce,
+            code_verifier=code_verifier,
+            auth_method=auth_method,
+            auth_mode=auth_mode,
+            expires_at=expires_at,
+        )
 
         self.db.add(oidc_state)
         await self.db.commit()
@@ -95,7 +109,12 @@ class AuthService:
             return None
 
         # Extract data before deleting
-        state_data = {"nonce": oidc_state.nonce, "code_verifier": oidc_state.code_verifier}
+        state_data = {
+            "nonce": oidc_state.nonce,
+            "code_verifier": oidc_state.code_verifier,
+            "auth_method": oidc_state.auth_method,
+            "auth_mode": oidc_state.auth_mode,
+        }
 
         # Delete the used state (one-time use)
         await self.db.delete(oidc_state)

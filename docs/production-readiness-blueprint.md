@@ -547,6 +547,53 @@ Navigation має бути однозначною:
 - route protection;
 - admin role policy.
 
+### 10.1.1 User Registration & Onboarding
+
+#### Current state (as-is)
+
+- auth побудований на backend OIDC flow;
+- user створюється автоматично після першого успішного login;
+- окремого sign-up UI немає;
+- окремого email verification flow немає;
+- captcha / anti-bot layer у user onboarding відсутній.
+
+#### Target state (to-be)
+
+- primary onboarding model: social login через Google / Apple;
+- optional future extension: email magic link або email/password;
+- продукт не має вводити дубльовані auth системи або паралельні user stores;
+- login і registration мають лишатися частиною одного canonical auth flow.
+
+#### UX flow
+
+- entry points у продукті мають бути сформульовані як `Login / Register`;
+- flow має бути unified: якщо user новий, перший login одночасно означає registration;
+- після першого входу запускається короткий onboarding;
+- onboarding має створити базовий user profile;
+- user обирає роль: private user або business;
+- на першому кроці збираються базові profile fields, достатні для подальшого account/use-case routing.
+
+#### Security & validation
+
+- базова верифікація identity делегується зовнішньому identity provider через OIDC / Google;
+- окремий app-level email verification не є обов’язковим, доки email auth не вводиться як окремий сценарій;
+- як future hardening layer плануються captcha механіки рівня Cloudflare Turnstile або hCaptcha;
+- для auth/onboarding endpoints має бути передбачений rate limiting.
+
+#### Technical integration
+
+- backend лишається source of truth для auth;
+- frontend працює через єдиний auth layer без окремої registration архітектури;
+- social/email/optional phone methods мають відкриватися через єдиний hosted OIDC entry flow;
+- email confirmation, provider verification і credential recovery лишаються в зоні відповідальності identity provider;
+- profile creation/onboarding flow має інтегруватися в існуючий account center, а не обходити його.
+
+#### Future extensions
+
+- email verification, якщо буде додано email auth;
+- account recovery flows;
+- multi-role accounts, де user може мати private і business контекст без дублювання identity.
+
 ### 10.2 User profile
 
 Має містити:

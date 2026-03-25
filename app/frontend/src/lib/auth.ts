@@ -1,6 +1,29 @@
 import axios, { AxiosInstance } from 'axios';
 import { getAPIBaseURL } from './config';
 
+type AuthMethod = 'google' | 'apple' | 'email' | 'phone';
+type AuthMode = 'login' | 'register';
+
+export interface AuthCapabilities {
+  google: boolean;
+  apple: boolean;
+  email_login: boolean;
+  email_signup: boolean;
+  phone: boolean;
+  turnstile_enabled: boolean;
+  email_confirmation_required: boolean;
+}
+
+export interface StartOidcLoginOptions {
+  captchaToken?: string;
+  method?: AuthMethod;
+  mode?: AuthMode;
+}
+
+export function redirectToAuthEntry() {
+  window.location.href = '/auth';
+}
+
 class RPApi {
   private client: AxiosInstance;
 
@@ -42,8 +65,26 @@ class RPApi {
   }
 
   async login() {
-    // Start OIDC flow with browser redirect (not XHR), so provider redirects work correctly.
-    window.location.href = `${this.getBaseURL()}/api/v1/auth/login`;
+    redirectToAuthEntry();
+  }
+
+  async getAuthCapabilities() {
+    const response = await this.client.get<AuthCapabilities>(`${this.getBaseURL()}/api/v1/auth/capabilities`);
+    return response.data;
+  }
+
+  async startOidcLogin(options?: StartOidcLoginOptions) {
+    const url = new URL(`${this.getBaseURL()}/api/v1/auth/login`);
+    if (options?.captchaToken) {
+      url.searchParams.set('captcha_token', options.captchaToken);
+    }
+    if (options?.method) {
+      url.searchParams.set('method', options.method);
+    }
+    if (options?.mode) {
+      url.searchParams.set('mode', options.mode);
+    }
+    window.location.href = url.toString();
   }
 
   async logout() {

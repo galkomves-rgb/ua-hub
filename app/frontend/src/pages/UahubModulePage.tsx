@@ -170,7 +170,7 @@ export default function UahubModulePage() {
               onClick={login}
               className={`mt-6 rounded-2xl px-5 py-3 text-sm font-semibold ${isDark ? "bg-[#FFD700] text-[#0d1a2e]" : "bg-[#0057B8] text-white"}`}
             >
-              {locale === "ua" ? "Увійти" : locale === "es" ? "Entrar" : "Sign in"}
+              {locale === "ua" ? "Увійти / Реєстрація" : locale === "es" ? "Entrar / Registro" : "Login / Register"}
             </button>
           </div>
         ) : (
