@@ -31,6 +31,7 @@ export default function AuthPage() {
   const [submitting, setSubmitting] = useState(false);
   const [capabilities, setCapabilities] = useState<AuthCapabilities | null>(null);
   const [capabilitiesError, setCapabilitiesError] = useState<string | null>(null);
+  const [capabilitiesLoading, setCapabilitiesLoading] = useState(true);
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
   const widgetRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
@@ -49,6 +50,8 @@ export default function AuthPage() {
       } catch (error) {
         setCapabilities(null);
         setCapabilitiesError(error instanceof Error ? error.message : "Failed to load auth capabilities");
+      } finally {
+        setCapabilitiesLoading(false);
       }
     };
 
@@ -154,7 +157,26 @@ export default function AuthPage() {
     },
   ].filter((action) => !action.optional || capabilities?.phone);
 
-  const handleStart = async (method: "google" | "apple" | "email" | "phone", mode: "login" | "register", actionKey: string) => {
+  const fallbackActions = [
+    {
+      key: "hosted-login",
+      label: t("auth.action.hostedLogin"),
+      description: t("auth.action.hostedLoginDescription"),
+      mode: "login" as const,
+    },
+    {
+      key: "hosted-register",
+      label: t("auth.action.hostedRegister"),
+      description: t("auth.action.hostedRegisterDescription"),
+      mode: "register" as const,
+    },
+  ];
+
+  const handleStart = async (
+    mode: "login" | "register",
+    actionKey: string,
+    method?: "google" | "apple" | "email" | "phone",
+  ) => {
     if (requiresCaptcha && !captchaToken) {
       return;
     }
@@ -163,14 +185,17 @@ export default function AuthPage() {
     try {
       await authApi.startOidcLogin({
         captchaToken: captchaToken || undefined,
-        method,
         mode,
+        method,
       });
     } finally {
       setSubmitting(false);
       setSelectedAction(null);
     }
   };
+
+  const showProviderSpecificActions = Boolean(capabilities) && !capabilitiesError;
+  const showFallbackActions = Boolean(capabilitiesError);
 
   return (
     <UahubLayout hideModuleNav>
@@ -190,35 +215,63 @@ export default function AuthPage() {
             <p className={`mb-3 text-xs font-semibold uppercase tracking-[0.18em] ${isDark ? "text-slate-500" : "text-slate-400"}`}>
               {t("auth.methods")}
             </p>
-            <div className="grid gap-3 md:grid-cols-2">
-              {authActions.map((action) => {
-                const disabled = !action.enabled || submitting || turnstileMisconfigured || (requiresCaptcha && !captchaToken);
-                return (
-                  <button
-                    key={action.key}
-                    type="button"
-                    onClick={() => void handleStart(action.method, action.mode, action.key)}
-                    disabled={disabled}
-                    className={`rounded-2xl border p-4 text-left transition ${disabled ? "cursor-not-allowed opacity-60" : "hover:-translate-y-0.5"} ${isDark ? "border-[#22416b] bg-[#1a2d4c] text-slate-100" : "border-slate-200 bg-white text-slate-800"}`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold">{action.label}</p>
-                        <p className={`mt-1 text-xs leading-6 ${isDark ? "text-slate-400" : "text-slate-500"}`}>{action.description}</p>
+            {capabilitiesLoading ? (
+              <p className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t("auth.loadingCapabilities")}</p>
+            ) : null}
+            {showProviderSpecificActions ? (
+              <div className="grid gap-3 md:grid-cols-2">
+                {authActions.map((action) => {
+                  const disabled =
+                    !action.enabled || submitting || turnstileMisconfigured || (requiresCaptcha && !captchaToken);
+                  return (
+                    <button
+                      key={action.key}
+                      type="button"
+                      onClick={() => void handleStart(action.mode, action.key, action.method)}
+                      disabled={disabled}
+                      className={`rounded-2xl border p-4 text-left transition ${disabled ? "cursor-not-allowed opacity-60" : "hover:-translate-y-0.5"} ${isDark ? "border-[#22416b] bg-[#1a2d4c] text-slate-100" : "border-slate-200 bg-white text-slate-800"}`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-semibold">{action.label}</p>
+                          <p className={`mt-1 text-xs leading-6 ${isDark ? "text-slate-400" : "text-slate-500"}`}>{action.description}</p>
+                        </div>
+                        {!action.enabled ? (
+                          <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${isDark ? "bg-[#11203a] text-slate-300" : "bg-slate-100 text-slate-600"}`}>
+                            {t("auth.status.setupRequired")}
+                          </span>
+                        ) : null}
                       </div>
-                      {!action.enabled ? (
-                        <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${isDark ? "bg-[#11203a] text-slate-300" : "bg-slate-100 text-slate-600"}`}>
-                          {t("auth.status.setupRequired")}
-                        </span>
+                      {submitting && selectedAction === action.key ? (
+                        <p className={`mt-3 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t("auth.redirecting")}</p>
                       ) : null}
-                    </div>
-                    {submitting && selectedAction === action.key ? (
-                      <p className={`mt-3 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t("auth.redirecting")}</p>
-                    ) : null}
-                  </button>
-                );
-              })}
-            </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+            {showFallbackActions ? (
+              <div className="grid gap-3 md:grid-cols-2">
+                {fallbackActions.map((action) => {
+                  const disabled = submitting || turnstileMisconfigured || (requiresCaptcha && !captchaToken);
+                  return (
+                    <button
+                      key={action.key}
+                      type="button"
+                      onClick={() => void handleStart(action.mode, action.key)}
+                      disabled={disabled}
+                      className={`rounded-2xl border p-4 text-left transition ${disabled ? "cursor-not-allowed opacity-60" : "hover:-translate-y-0.5"} ${isDark ? "border-[#22416b] bg-[#1a2d4c] text-slate-100" : "border-slate-200 bg-white text-slate-800"}`}
+                    >
+                      <p className="text-sm font-semibold">{action.label}</p>
+                      <p className={`mt-1 text-xs leading-6 ${isDark ? "text-slate-400" : "text-slate-500"}`}>{action.description}</p>
+                      {submitting && selectedAction === action.key ? (
+                        <p className={`mt-3 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t("auth.redirecting")}</p>
+                      ) : null}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
             <p className={`mt-3 text-xs ${isDark ? "text-slate-500" : "text-slate-400"}`}>
               {locale === "ua"
                 ? "Фактичний вибір провайдера виконується на захищеній hosted-сторінці автентифікації."
@@ -237,7 +290,10 @@ export default function AuthPage() {
           {capabilitiesError ? (
             <div className={`mb-6 flex items-start gap-3 rounded-2xl border p-4 ${isDark ? "border-red-900/40 bg-red-950/20" : "border-red-200 bg-red-50"}`}>
               <AlertCircle className={`mt-0.5 h-5 w-5 shrink-0 ${isDark ? "text-red-300" : "text-red-600"}`} />
-              <p className={`text-sm ${isDark ? "text-red-300" : "text-red-600"}`}>{capabilitiesError}</p>
+              <div>
+                <p className={`text-sm ${isDark ? "text-red-300" : "text-red-600"}`}>{capabilitiesError}</p>
+                <p className={`mt-2 text-xs ${isDark ? "text-red-200" : "text-red-700"}`}>{t("auth.capabilitiesFallback")}</p>
+              </div>
             </div>
           ) : null}
 

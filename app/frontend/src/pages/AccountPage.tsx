@@ -2,11 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import { Menu } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import UahubLayout from "@/components/UahubLayout";
+import { AccountBusinessPanel } from "@/components/account/AccountBusinessPanel";
 import { AccountDashboard } from "@/components/account/AccountDashboard";
 import { AccountListingsPanel } from "@/components/account/AccountListingsPanel";
+import { AccountMessagesPanel } from "@/components/account/AccountMessagesPanel";
 import { AccountPlaceholderPanel } from "@/components/account/AccountPlaceholderPanel";
 import { AccountProfilePanel } from "@/components/account/AccountProfilePanel";
 import { AccountSavedPanel } from "@/components/account/AccountSavedPanel";
+import { AccountSettingsPanel } from "@/components/account/AccountSettingsPanel";
 import { AccountSidebar, type AccountTab } from "@/components/account/AccountSidebar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/lib/ThemeContext";
@@ -56,14 +59,17 @@ export default function AccountPage() {
         return <AccountDashboard />;
       case "profile":
         return <AccountProfilePanel />;
+      case "business":
+        return <AccountBusinessPanel />;
       case "listings":
         return <AccountListingsPanel />;
+      case "messages":
+        return <AccountMessagesPanel />;
       case "saved":
         return <AccountSavedPanel />;
-      case "business":
-      case "messages":
-      case "billing":
       case "settings":
+        return <AccountSettingsPanel />;
+      case "billing":
         return <AccountPlaceholderPanel tab={activeTab} />;
       default:
         return <AccountDashboard />;
