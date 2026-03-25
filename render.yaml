@@ -1,0 +1,76 @@
+databases:
+  - name: ua-hub-db
+    databaseName: ua_hub
+    user: ua_hub
+
+services:
+  - type: web
+    name: ua-hub-api
+    env: python
+    plan: starter
+    rootDir: app/backend
+    autoDeploy: true
+    healthCheckPath: /health
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ua-hub-db
+          property: connectionString
+      - key: ENVIRONMENT
+        value: prod
+      - key: MGX_LOAD_MOCK_DATA
+        value: "false"
+      - key: MGX_IGNORE_INIT_DATA
+        value: "true"
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_EXPIRE_MINUTES
+        value: "60"
+      - key: PYTHON_BACKEND_URL
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: ADMIN_USER_ID
+        sync: false
+      - key: ADMIN_USER_EMAIL
+        sync: false
+      - key: OIDC_ISSUER_URL
+        sync: false
+      - key: OIDC_CLIENT_ID
+        sync: false
+      - key: OIDC_CLIENT_SECRET
+        sync: false
+      - key: OIDC_SCOPE
+        value: "openid profile email"
+      - key: OIDC_EMAIL_CONNECTION
+        sync: false
+      - key: OIDC_GOOGLE_CONNECTION
+        sync: false
+      - key: OIDC_APPLE_CONNECTION
+        sync: false
+      - key: OIDC_PHONE_CONNECTION
+        sync: false
+      - key: OIDC_CONNECTION_PARAM
+        value: connection
+      - key: OIDC_SCREEN_HINT_PARAM
+        value: screen_hint
+      - key: OIDC_SIGNUP_HINT_VALUE
+        value: signup
+      - key: OIDC_LOGIN_HINT_VALUE
+        value: login
+      - key: OIDC_REQUIRE_VERIFIED_EMAIL
+        value: "true"
+      - key: OIDC_ENABLE_EMAIL_AUTH
+        value: "true"
+      - key: OIDC_ENABLE_GOOGLE_AUTH
+        value: "true"
+      - key: OIDC_ENABLE_APPLE_AUTH
+        value: "false"
+      - key: OIDC_ENABLE_PHONE_AUTH
+        value: "false"
+      - key: TURNSTILE_SECRET_KEY
+        sync: false
