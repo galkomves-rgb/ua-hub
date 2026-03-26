@@ -1,23 +1,56 @@
-// Runtime configuration
-let runtimeConfig: {
+type AppEnv = 'local' | 'preview' | 'staging' | 'production';
+
+type RuntimeConfig = {
   API_BASE_URL: string;
-  APP_ENV: 'local' | 'preview' | 'staging' | 'production';
+  APP_ENV: AppEnv;
   SITE_URL: string;
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
-} | null = null;
+};
+
+// Runtime configuration
+let runtimeConfig: RuntimeConfig | null = null;
 
 // Configuration loading state
 let configLoading = true;
 
-// Default fallback configuration
-const defaultConfig = {
-  API_BASE_URL: 'http://127.0.0.1:8000', // Only used if runtime config fails to load
-  APP_ENV: 'local' as const,
-  SITE_URL: 'http://localhost:3000',
-  SUPABASE_URL: '',
-  SUPABASE_ANON_KEY: '',
-};
+function getWindowLocation(): Location | null {
+  return typeof window !== 'undefined' ? window.location : null;
+}
+
+function getSafeFallbackConfig(): RuntimeConfig {
+  const location = getWindowLocation();
+  const host = location?.hostname ?? '';
+  const origin = location?.origin ?? 'http://localhost:3000';
+
+  if (host === 'ua-hub.vercel.app') {
+    return {
+      API_BASE_URL: 'https://ua-hub-api-production.up.railway.app',
+      APP_ENV: 'staging',
+      SITE_URL: 'https://ua-hub.vercel.app',
+      SUPABASE_URL: '',
+      SUPABASE_ANON_KEY: '',
+    };
+  }
+
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return {
+      API_BASE_URL: 'http://127.0.0.1:8000',
+      APP_ENV: 'local',
+      SITE_URL: origin,
+      SUPABASE_URL: '',
+      SUPABASE_ANON_KEY: '',
+    };
+  }
+
+  return {
+    API_BASE_URL: origin,
+    APP_ENV: 'production',
+    SITE_URL: origin,
+    SUPABASE_URL: '',
+    SUPABASE_ANON_KEY: '',
+  };
+}
 
 // Function to load runtime configuration
 export async function loadRuntimeConfig(): Promise<void> {
@@ -54,10 +87,12 @@ export async function loadRuntimeConfig(): Promise<void> {
 
 // Get current configuration
 export function getConfig() {
-  // If config is still loading, return default config to avoid using stale Vite env vars
+  const fallbackConfig = getSafeFallbackConfig();
+
+  // If config is still loading, return environment-aware fallback config
   if (configLoading) {
     console.log('Config still loading, using default config');
-    return defaultConfig;
+    return fallbackConfig;
   }
 
   // First try runtime config (for Lambda)
@@ -70,7 +105,7 @@ export function getConfig() {
   if (import.meta.env.VITE_API_BASE_URL) {
     const viteConfig = {
       API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
-      APP_ENV: (import.meta.env.VITE_PUBLIC_APP_ENV as 'local' | 'preview' | 'staging' | 'production' | undefined) || 'local',
+      APP_ENV: (import.meta.env.VITE_PUBLIC_APP_ENV as AppEnv | undefined) || fallbackConfig.APP_ENV,
       SITE_URL: (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined) || window.location.origin,
       SUPABASE_URL: (import.meta.env.VITE_PUBLIC_SUPABASE_URL as string | undefined) || '',
       SUPABASE_ANON_KEY: (import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY as string | undefined) || '',
@@ -79,9 +114,9 @@ export function getConfig() {
     return viteConfig;
   }
 
-  // Finally fall back to default
-  console.log('Using default config');
-  return defaultConfig;
+  // Finally fall back to environment-aware defaults
+  console.warn('Using fallback config because runtime and Vite config are unavailable');
+  return fallbackConfig;
 }
 
 // Dynamic API_BASE_URL getter - this will always return the current config
@@ -89,7 +124,7 @@ export function getAPIBaseURL(): string {
   return getConfig().API_BASE_URL;
 }
 
-export function getAppEnv(): 'local' | 'preview' | 'staging' | 'production' {
+export function getAppEnv(): AppEnv {
   return getConfig().APP_ENV;
 }
 
