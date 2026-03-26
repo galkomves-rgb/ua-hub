@@ -82,6 +82,7 @@ class FileUpDownResponse(BaseModel):
 
     upload_url: str = Field(default="", description="Presigned URL for uploading the file")
     download_url: str = Field(default="", description="Presigned URL for downloading the file")
+    access_url: str = Field(default="", description="Stable public access URL for the file when available")
     expires_at: str = Field(..., description="Upload URL expiration time")
 
 

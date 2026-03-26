@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Save, UserCircle2 } from "lucide-react";
+import { AlertCircle, Save, Upload, UserCircle2, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   createUserProfile,
@@ -11,6 +11,7 @@ import {
 } from "@/lib/account-api";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
+import { uploadImageFile } from "@/lib/media-storage";
 
 type EditableProfileForm = {
   name: string;
@@ -47,6 +48,9 @@ export function AccountProfilePanel() {
   const profileMissing = profileQuery.error instanceof Error && profileQuery.error.message === "PROFILE_NOT_FOUND";
 
   const [form, setForm] = useState<EditableProfileForm>(() => buildFormState(null, user?.name || ""));
+  const [isDraggingAvatar, setIsDraggingAvatar] = useState(false);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [avatarUploadError, setAvatarUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     setForm(buildFormState(profile, user?.name || ""));
@@ -83,6 +87,40 @@ export function AccountProfilePanel() {
       preferred_language: form.preferred_language,
       avatar_url: form.avatar_url.trim() || null,
     });
+  };
+
+  const handleAvatarFiles = async (files: File[]) => {
+    if (files.length === 0) {
+      return;
+    }
+
+    setAvatarUploadError(null);
+    setIsUploadingAvatar(true);
+
+    try {
+      const uploadedAvatar = await uploadImageFile(files[0], "avatar");
+      setForm((current) => ({ ...current, avatar_url: uploadedAvatar.accessUrl }));
+    } catch (error) {
+      console.error("Failed to upload avatar:", error);
+      setAvatarUploadError(error instanceof Error ? error.message : "Не вдалося завантажити фото профілю.");
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  const handleAvatarInputChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    await handleAvatarFiles(files);
+  };
+
+  const handleAvatarDrop = async (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDraggingAvatar(false);
+
+    const files = Array.from(event.dataTransfer.files || []);
+    await handleAvatarFiles(files);
   };
 
   return (
@@ -256,22 +294,73 @@ export function AccountProfilePanel() {
 
               <div>
                 <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
-                  {t("account.profile.avatarUrl")}
+                  Фото профілю
                 </label>
-                <input
-                  type="url"
-                  value={form.avatar_url}
-                  onChange={(event) => setForm((current) => ({ ...current, avatar_url: event.target.value }))}
-                  placeholder="https://"
-                  className={`w-full rounded-2xl border px-4 py-3 text-sm ${
-                    isDark
-                      ? "border-[#22416b] bg-[#0d1a2e] text-slate-100"
-                      : "border-slate-300 bg-white text-slate-900"
+                <div
+                  onDragEnter={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setIsDraggingAvatar(true);
+                  }}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (!isDraggingAvatar) {
+                      setIsDraggingAvatar(true);
+                    }
+                  }}
+                  onDragLeave={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (event.currentTarget === event.target) {
+                      setIsDraggingAvatar(false);
+                    }
+                  }}
+                  onDrop={handleAvatarDrop}
+                  className={`rounded-2xl border-2 border-dashed p-4 transition-colors ${
+                    isDraggingAvatar
+                      ? isDark ? "border-[#4a9eff] bg-[#12233d]" : "border-blue-500 bg-blue-50"
+                      : isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-300 bg-white"
                   }`}
-                />
-                <p className={`mt-2 text-xs ${isDark ? "text-slate-500" : "text-slate-400"}`}>
-                  {t("account.profile.avatarHint")}
-                </p>
+                >
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleAvatarInputChange}
+                    className="hidden"
+                    id="avatarUploadInput"
+                  />
+                  <label htmlFor="avatarUploadInput" className="block cursor-pointer">
+                    <div className="flex items-center gap-3">
+                      <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${isDark ? "bg-[#1a2d4c]" : "bg-slate-100"}`}>
+                        <Upload className={`h-5 w-5 ${isDark ? "text-slate-300" : "text-slate-500"}`} />
+                      </div>
+                      <div>
+                        <p className={`text-sm font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                          {isUploadingAvatar ? "Завантажуємо фото..." : "Натисніть, щоб вибрати фото, або перетягніть файл сюди"}
+                        </p>
+                        <p className={`mt-1 text-xs ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                          JPG, PNG до 5 МБ
+                        </p>
+                      </div>
+                    </div>
+                  </label>
+                </div>
+                {avatarUploadError ? (
+                  <div className={`mt-3 rounded-2xl border p-3 text-sm ${isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-600"}`}>
+                    {avatarUploadError}
+                  </div>
+                ) : null}
+                {form.avatar_url ? (
+                  <button
+                    type="button"
+                    onClick={() => setForm((current) => ({ ...current, avatar_url: "" }))}
+                    className={`mt-3 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium ${isDark ? "bg-[#1a2d4c] text-slate-200" : "bg-slate-100 text-slate-700"}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Видалити фото
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>

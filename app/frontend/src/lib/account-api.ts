@@ -499,6 +499,36 @@ function extractApiErrorMessage(data: unknown, fallback = "Request failed") {
     return detail.trim();
   }
 
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (!item || typeof item !== "object") {
+          return null;
+        }
+
+        const location = Array.isArray((item as { loc?: unknown }).loc)
+          ? ((item as { loc: unknown[] }).loc
+              .filter((part) => part !== "body")
+              .map((part) => String(part))
+              .join(" → ") || null)
+          : null;
+        const message = typeof (item as { msg?: unknown }).msg === "string"
+          ? (item as { msg: string }).msg.trim()
+          : null;
+
+        if (!message) {
+          return null;
+        }
+
+        return location ? `${location}: ${message}` : message;
+      })
+      .filter((item): item is string => Boolean(item));
+
+    if (messages.length > 0) {
+      return messages.join("; ");
+    }
+  }
+
   if (detail && typeof detail === "object") {
     const nestedMessage = "message" in detail ? detail.message : null;
     if (typeof nestedMessage === "string" && nestedMessage.trim()) {

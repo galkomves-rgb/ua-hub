@@ -141,6 +141,7 @@ class StorageService:
             # Format response according to ObjectStorage service response
             return FileUpDownResponse(
                 upload_url=result.get("upload_url"),
+                access_url=result.get("access_url", ""),
                 expires_at=result.get("expires_at"),
             )
         except Exception as e:
@@ -165,6 +166,7 @@ class StorageService:
             # Format response according to ObjectStorage service response
             return FileUpDownResponse(
                 download_url=result.get("download_url"),
+                access_url=result.get("access_url", ""),
                 expires_at=result.get("expires_at"),
             )
 

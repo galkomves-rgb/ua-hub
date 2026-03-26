@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation, Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -16,6 +16,7 @@ import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
 import { useGlobalCity } from "@/lib/global-preferences";
 import { useAuth } from "@/contexts/AuthContext";
+import { uploadImageFile } from "@/lib/media-storage";
 import {
   MODULES, MODULE_ORDER, SAMPLE_LISTINGS, SAMPLE_BUSINESSES,
   IMAGES,
@@ -70,21 +71,6 @@ function getPlanCta(productCode: BillingProductCode): string {
   if (productCode === "business_starter") return "Start publishing";
   if (productCode === "business_growth") return "Get more responses";
   return "Show at the top";
-}
-
-function readFileAsDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        resolve(reader.result);
-        return;
-      }
-      reject(new Error("Failed to read file"));
-    };
-    reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
-    reader.readAsDataURL(file);
-  });
 }
 
 // ─── Listing Detail ───
@@ -487,6 +473,9 @@ function CreateListingPage() {
     ownerType: "private_user",
     currency: "EUR",
   });
+  const [isDraggingImages, setIsDraggingImages] = useState(false);
+  const [isUploadingImages, setIsUploadingImages] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
 
   const steps = [
     t("create.step1"), t("create.step2"), t("create.step3"),
@@ -507,6 +496,67 @@ function CreateListingPage() {
   const activeBusinessSlug = businessProfilesQuery.data?.[0]?.slug ?? "";
   const effectiveOwnerType = userProfileQuery.data?.account_type === "business" && activeBusinessSlug ? "business_profile" : formData.ownerType;
   const effectiveOwnerId = effectiveOwnerType === "business_profile" ? activeBusinessSlug : user?.id ?? "";
+
+  const handleImageFiles = async (files: File[]) => {
+    if (files.length === 0) {
+      return;
+    }
+
+    setImageUploadError(null);
+    setIsUploadingImages(true);
+
+    try {
+      const uploadedAssets = await Promise.all(files.map((file) => uploadImageFile(file, "listing")));
+      setFormData((current) => ({
+        ...current,
+        images: [...current.images, ...uploadedAssets.map((asset) => asset.accessUrl)],
+      }));
+    } catch (error) {
+      console.error("Failed to upload listing images:", error);
+      setImageUploadError(error instanceof Error ? error.message : "Не вдалося завантажити фото.");
+    } finally {
+      setIsUploadingImages(false);
+    }
+  };
+
+  const handleImageInputChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    await handleImageFiles(files);
+  };
+
+  const handleImageDrop = async (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setIsDraggingImages(false);
+
+    const files = Array.from(event.dataTransfer.files || []);
+    await handleImageFiles(files);
+  };
+
+  const validateBeforePublish = () => {
+    if (!formData.title.trim() || formData.title.trim().length < 3) {
+      return "Заголовок має містити щонайменше 3 символи.";
+    }
+
+    if (!formData.description.trim() || formData.description.trim().length < 10) {
+      return "Опис має містити щонайменше 10 символів.";
+    }
+
+    if (!formData.city.trim()) {
+      return "Вкажіть місто.";
+    }
+
+    if (!formData.contact.trim()) {
+      return "Додайте контактну інформацію.";
+    }
+
+    if (!effectiveOwnerId) {
+      return "Не вдалося визначити власника оголошення. Увійдіть у профіль ще раз.";
+    }
+
+    return null;
+  };
 
   useEffect(() => {
     if (!editingId) {
@@ -584,7 +634,13 @@ function CreateListingPage() {
 
   const handlePublish = async () => {
     if (!user || !selectedModule || !selectedCategory) {
-      alert("Будь ласка, заповніть всі необхідні поля");
+      alert(user ? "Будь ласка, заповніть всі необхідні поля" : "Щоб створити оголошення, потрібно увійти в акаунт.");
+      return;
+    }
+
+    const validationError = validateBeforePublish();
+    if (validationError) {
+      alert(validationError);
       return;
     }
 
@@ -640,6 +696,31 @@ function CreateListingPage() {
       alert(error instanceof Error ? error.message : "Помилка при створенні оголошення");
     }
   };
+
+  if (!user) {
+    return (
+      <Layout>
+        <div className="max-w-3xl mx-auto px-4 py-12">
+          <div className={`rounded-2xl border p-6 text-center ${isDark ? "border-[#1a3050] bg-[#111d32]" : "border-slate-200 bg-white"}`}>
+            <h1 className={`text-xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+              Створювати оголошення можуть лише зареєстровані користувачі
+            </h1>
+            <p className={`mt-3 text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>
+              Увійдіть або зареєструйтеся, щоб додати своє оголошення, завантажити фото та керувати публікаціями.
+            </p>
+            <div className="mt-5 flex justify-center gap-3">
+              <Link
+                to="/auth"
+                className={`inline-flex items-center rounded-xl px-5 py-3 text-sm font-semibold ${isDark ? "bg-gradient-to-r from-[#FFD700] to-[#e6c200] text-[#0d1a2e]" : "bg-gradient-to-r from-[#0057B8] to-[#0070E0] text-white"}`}
+              >
+                Увійти або зареєструватися
+              </Link>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -805,36 +886,54 @@ function CreateListingPage() {
           {step === 3 && (
             <div>
               <h2 className={`text-sm font-bold mb-4 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("create.step4")}</h2>
-              <div className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
-                isDark ? "border-[#1a3050] hover:border-[#4a9eff]" : "border-gray-200 hover:border-blue-400"
-              }`}>
+              <div
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  setIsDraggingImages(true);
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (!isDraggingImages) {
+                    setIsDraggingImages(true);
+                  }
+                }}
+                onDragLeave={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  if (event.currentTarget === event.target) {
+                    setIsDraggingImages(false);
+                  }
+                }}
+                onDrop={handleImageDrop}
+                className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-colors ${
+                  isDraggingImages
+                    ? isDark ? "border-[#4a9eff] bg-[#12233d]" : "border-blue-500 bg-blue-50"
+                    : isDark ? "border-[#1a3050] hover:border-[#4a9eff]" : "border-gray-200 hover:border-blue-400"
+                }`}
+              >
                 <input
                   type="file"
                   multiple
                   accept="image/*"
-                  onChange={async (e) => {
-                    const files = Array.from(e.target.files || []);
-                    if (files.length === 0) {
-                      return;
-                    }
-
-                    try {
-                      const urls = await Promise.all(files.map((file) => readFileAsDataUrl(file)));
-                      setFormData((current) => ({ ...current, images: [...current.images, ...urls] }));
-                    } catch (error) {
-                      console.error("Failed to read selected images:", error);
-                      alert("Не вдалося підготувати фото до завантаження");
-                    }
-                  }}
+                  onChange={handleImageInputChange}
                   className="hidden"
                   id="imageInput"
                 />
                 <label htmlFor="imageInput" className="block cursor-pointer">
                   <Upload className={`w-8 h-8 mx-auto mb-2 ${isDark ? "text-gray-500" : "text-gray-300"}`} />
-                  <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>Перетягніть фото сюди або натисніть для завантаження</p>
+                  <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>
+                    {isUploadingImages ? "Завантажуємо фото..." : "Перетягніть фото сюди або натисніть, щоб вибрати файли з компʼютера"}
+                  </p>
                   <p className={`text-xs mt-1 ${isDark ? "text-gray-600" : "text-gray-400"}`}>JPG, PNG до 5 МБ</p>
                 </label>
               </div>
+              {imageUploadError ? (
+                <div className={`mt-3 rounded-xl border px-4 py-3 text-sm ${isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-600"}`}>
+                  {imageUploadError}
+                </div>
+              ) : null}
               {formData.images.length > 0 && (
                 <div className="mt-4 grid grid-cols-3 gap-2">
                   {formData.images.map((img, i) => (
