@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     supabase_url: str | None = None
     supabase_service_role_key: str | None = None
     supabase_jwt_secret: str | None = None
+    oss_service_url: str | None = None
+    oss_api_key: str | None = None
     jwt_secret_key: str | None = None
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60

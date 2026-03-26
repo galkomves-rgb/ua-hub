@@ -1,24 +1,4 @@
-import { getAPIBaseURL } from "@/lib/config";
-
-type StorageBucketInfo = {
-  bucket_name: string;
-  visibility: "public" | "private";
-};
-
-type ListBucketsResponse = {
-  buckets: StorageBucketInfo[];
-};
-
-type UploadUrlResponse = {
-  upload_url: string;
-  access_url?: string;
-  expires_at: string;
-};
-
-type StorageRequestError = {
-  detail?: unknown;
-  message?: unknown;
-};
+import { getSupabaseClient } from "@/lib/supabase";
 
 export type UploadedMediaAsset = {
   bucketName: string;
@@ -29,147 +9,23 @@ export type UploadedMediaAsset = {
 };
 
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024;
-const PREFERRED_BUCKET_NAMES = [
-  "ua-hub-media",
-  "uahub-media",
-  "ua-hub-public",
-  "public-media",
-  "media",
-  "images",
-  "public",
-];
+const STORAGE_BUCKETS = {
+  avatar: "avatars",
+  listing: "listing-images",
+} as const;
 
-let cachedBucketPromise: Promise<string> | null = null;
+function normalizeStorageError(message: string, bucketName: string) {
+  const normalizedMessage = message.trim();
 
-function getAuthToken() {
-  return localStorage.getItem("auth_token");
-}
-
-function getStorageHeaders(additionalHeaders?: HeadersInit): HeadersInit {
-  const token = getAuthToken();
-
-  return {
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...(additionalHeaders ?? {}),
-  };
-}
-
-function extractStorageErrorMessage(data: unknown, fallback: string) {
-  if (!data || typeof data !== "object") {
-    return fallback;
+  if (/bucket/i.test(normalizedMessage) && /not found|does not exist/i.test(normalizedMessage)) {
+    return `У Supabase Storage не знайдено bucket \"${bucketName}\". Створіть його в Supabase → Storage.`;
   }
 
-  const typedData = data as StorageRequestError;
-  const detail = typedData.detail;
-
-  if (typeof detail === "string" && detail.trim()) {
-    return detail.trim();
+  if (/row level security|policy|unauthorized|permission/i.test(normalizedMessage)) {
+    return `Supabase Storage відхилив завантаження. Перевірте policies для bucket \"${bucketName}\".`;
   }
 
-  if (Array.isArray(detail)) {
-    const messages = detail
-      .map((item) => {
-        if (!item || typeof item !== "object") {
-          return null;
-        }
-
-        const location = Array.isArray((item as { loc?: unknown }).loc)
-          ? ((item as { loc: unknown[] }).loc
-              .filter((part) => part !== "body")
-              .map((part) => String(part))
-              .join(" → ") || null)
-          : null;
-        const message = typeof (item as { msg?: unknown }).msg === "string"
-          ? (item as { msg: string }).msg.trim()
-          : null;
-
-        if (!message) {
-          return null;
-        }
-
-        return location ? `${location}: ${message}` : message;
-      })
-      .filter((item): item is string => Boolean(item));
-
-    if (messages.length > 0) {
-      return messages.join("; ");
-    }
-  }
-
-  if (detail && typeof detail === "object" && typeof (detail as { message?: unknown }).message === "string") {
-    const nestedMessage = (detail as { message: string }).message.trim();
-    if (nestedMessage) {
-      return nestedMessage;
-    }
-  }
-
-  if (typeof typedData.message === "string" && typedData.message.trim()) {
-    return typedData.message.trim();
-  }
-
-  return fallback;
-}
-
-async function storageFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${getAPIBaseURL()}${path}`, {
-    ...init,
-    headers: getStorageHeaders(init?.headers),
-  });
-
-  if (!response.ok) {
-    let message = "Не вдалося звернутися до сервісу завантаження";
-
-    try {
-      const parsed = (await response.json()) as StorageRequestError;
-      message = extractStorageErrorMessage(parsed, message);
-    } catch {
-      // Ignore JSON parsing issues and keep fallback message.
-    }
-
-    throw new Error(message);
-  }
-
-  return response.json() as Promise<T>;
-}
-
-function scoreBucket(bucket: StorageBucketInfo) {
-  const normalizedName = bucket.bucket_name.toLowerCase();
-  let score = bucket.visibility === "public" ? 100 : 0;
-
-  const exactMatchIndex = PREFERRED_BUCKET_NAMES.indexOf(normalizedName);
-  if (exactMatchIndex >= 0) {
-    score += 50 - exactMatchIndex;
-  }
-
-  if (normalizedName.includes("media")) {
-    score += 20;
-  }
-
-  if (normalizedName.includes("image") || normalizedName.includes("avatar") || normalizedName.includes("listing")) {
-    score += 10;
-  }
-
-  return score;
-}
-
-async function getMediaBucketName() {
-  if (!cachedBucketPromise) {
-    cachedBucketPromise = (async () => {
-      const response = await storageFetch<ListBucketsResponse>("/api/v1/storage/list-buckets");
-      const buckets = Array.isArray(response.buckets) ? response.buckets : [];
-
-      if (buckets.length === 0) {
-        throw new Error("Сховище зображень ще не налаштоване. Зверніться до адміністратора.");
-      }
-
-      return [...buckets].sort((left, right) => scoreBucket(right) - scoreBucket(left))[0].bucket_name;
-    })().catch((error) => {
-      cachedBucketPromise = null;
-      throw error;
-    });
-  }
-
-  return cachedBucketPromise;
+  return normalizedMessage || "Не вдалося завантажити файл у Supabase Storage.";
 }
 
 function getFileExtension(fileName: string) {
@@ -209,44 +65,54 @@ export function buildMediaObjectKey(file: File, purpose: string) {
   return `${prefix}-${uuid}.${extension}`;
 }
 
+async function getAuthenticatedSupabaseUserId() {
+  const supabase = getSupabaseClient();
+
+  if (!supabase) {
+    throw new Error("Supabase Storage не налаштований у frontend environment.");
+  }
+
+  const { data, error } = await supabase.auth.getUser();
+  if (error) {
+    throw new Error(error.message || "Не вдалося отримати Supabase-сесію.");
+  }
+
+  const userId = data.user?.id;
+  if (!userId) {
+    throw new Error("Щоб завантажити фото, потрібно увійти в акаунт.");
+  }
+
+  return { supabase, userId };
+}
+
 export async function uploadImageFile(file: File, purpose: "avatar" | "listing"):
 Promise<UploadedMediaAsset> {
   validateImageFile(file);
 
-  const bucketName = await getMediaBucketName();
-  const objectKey = buildMediaObjectKey(file, purpose);
-  const presigned = await storageFetch<UploadUrlResponse>("/api/v1/storage/upload-url", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...getStorageHeaders(),
-    },
-    body: JSON.stringify({
-      bucket_name: bucketName,
-      object_key: objectKey,
-    }),
+  const { supabase, userId } = await getAuthenticatedSupabaseUserId();
+  const bucketName = STORAGE_BUCKETS[purpose];
+  const objectKey = `${userId}/${buildMediaObjectKey(file, purpose)}`;
+  const { error: uploadError } = await supabase.storage.from(bucketName).upload(objectKey, file, {
+    cacheControl: "3600",
+    contentType: file.type || "application/octet-stream",
+    upsert: false,
   });
 
-  const uploadResponse = await fetch(presigned.upload_url, {
-    method: "PUT",
-    body: file,
-    headers: {
-      "Content-Type": file.type || "application/octet-stream",
-    },
-  });
-
-  if (!uploadResponse.ok) {
-    throw new Error(`Не вдалося завантажити ${file.name}.`);
+  if (uploadError) {
+    throw new Error(normalizeStorageError(uploadError.message, bucketName));
   }
 
-  if (!presigned.access_url) {
-    throw new Error("Сервіс зображень не повернув публічне посилання на файл.");
+  const { data: publicUrlData } = supabase.storage.from(bucketName).getPublicUrl(objectKey);
+  const accessUrl = publicUrlData.publicUrl;
+
+  if (!accessUrl) {
+    throw new Error(`Supabase Storage не повернув публічне посилання для ${file.name}.`);
   }
 
   return {
     bucketName,
     objectKey,
-    accessUrl: presigned.access_url,
+    accessUrl,
     fileName: file.name,
     size: file.size,
   };

@@ -65,6 +65,16 @@ In the Vercel project, set:
 
 Then redeploy the frontend.
 
+## Supabase Storage setup
+
+For avatar and listing image uploads, use Supabase Storage instead of the custom OSS service.
+
+- Create public buckets `avatars` and `listing-images`
+- Ensure the frontend has access to `SUPABASE_URL` and `SUPABASE_ANON_KEY` through `/api/config` and/or Vercel env vars
+- Add Storage policies so authenticated users can write only into their own folder
+
+See [docs/supabase-storage-setup.md](docs/supabase-storage-setup.md) for the exact bucket names, env vars, and SQL policies.
+
 ## Verification checklist
 
 After deploy, these URLs must work:
