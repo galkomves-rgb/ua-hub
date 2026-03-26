@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Search, SlidersHorizontal, X, ChevronDown, ArrowLeft, Home } from "lucide-react";
 import Layout from "@/components/Layout";
@@ -7,7 +8,8 @@ import AdBanner from "@/components/AdBanner";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
 import { useGlobalCity } from "@/lib/global-preferences";
-import { MODULES, SAMPLE_LISTINGS, SAMPLE_BUSINESSES, IMAGES } from "@/lib/platform";
+import { fetchPublicListings } from "@/lib/public-listings";
+import { MODULES, SAMPLE_BUSINESSES, IMAGES } from "@/lib/platform";
 
 function normalizeCityFilter(value: string): string {
   return value === "All Spain" ? "all" : value;
@@ -36,11 +38,26 @@ export default function ModulePage() {
   }, [globalCity]);
 
   const isBusiness = moduleId === "business";
+  const publicListingsQuery = useQuery({
+    queryKey: ["public-module-listings", moduleId, selectedCategory, selectedCity],
+    queryFn: () => fetchPublicListings({
+      module: moduleId,
+      category: selectedCategory === "all" ? undefined : selectedCategory,
+      city: selectedCity === "all" ? undefined : selectedCity,
+      limit: 100,
+    }),
+    enabled: Boolean(moduleId) && !isBusiness,
+  });
+  const allModuleListingsQuery = useQuery({
+    queryKey: ["public-module-listings-all", moduleId],
+    queryFn: () => fetchPublicListings({ module: moduleId, limit: 100 }),
+    enabled: Boolean(moduleId) && !isBusiness,
+  });
 
   // Filter listings
   const filteredListings = useMemo(() => {
     if (!moduleId) return [];
-    let items = SAMPLE_LISTINGS.filter((l) => l.module === moduleId);
+    let items = [...(publicListingsQuery.data ?? [])];
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -70,7 +87,7 @@ export default function ModulePage() {
     }
 
     return items;
-  }, [moduleId, searchQuery, selectedCategory, selectedCity, selectedType, sortBy]);
+  }, [moduleId, publicListingsQuery.data, searchQuery, selectedCategory, selectedCity, selectedType, sortBy]);
 
   // Filter businesses
   const filteredBusinesses = useMemo(() => {
@@ -121,9 +138,7 @@ export default function ModulePage() {
         }
       });
     } else {
-      SAMPLE_LISTINGS
-        .filter((listing) => listing.module === moduleId)
-        .forEach((listing) => {
+      (allModuleListingsQuery.data ?? []).forEach((listing) => {
           if (listing.city?.trim()) {
             citySet.add(listing.city.trim());
           }
@@ -131,7 +146,7 @@ export default function ModulePage() {
     }
 
     return Array.from(citySet).sort((a, b) => a.localeCompare(b));
-  }, [isBusiness, moduleId]);
+  }, [allModuleListingsQuery.data, isBusiness, moduleId]);
 
   const clearFilters = () => {
     setSelectedCategory("all");
@@ -397,6 +412,12 @@ export default function ModulePage() {
 
             {/* Ad Banner */}
             <AdBanner position="banner" module={moduleId} />
+
+            {!isBusiness && publicListingsQuery.isError ? (
+              <div className={`mb-4 rounded-xl border p-4 text-sm ${isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>
+                {publicListingsQuery.error instanceof Error ? publicListingsQuery.error.message : "Failed to load listings"}
+              </div>
+            ) : null}
 
             {/* Results count */}
             <p className={`text-xs mb-4 ${isDark ? "text-gray-500" : "text-gray-400"}`}>

@@ -1,11 +1,15 @@
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { Plus, TrendingUp, Shield, Users as UsersIcon } from "lucide-react";
 import Layout from "@/components/Layout";
 import { ListingCard, BusinessCard, ModuleCard, SectionHeader } from "@/components/Cards";
+import { deriveListingLabels } from "@/lib/label-taxonomy";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
 import { useGlobalCity } from "@/lib/global-preferences";
-import { MODULES, MODULE_ORDER, SAMPLE_LISTINGS, SAMPLE_BUSINESSES, IMAGES } from "@/lib/platform";
+import { fetchPublicListings } from "@/lib/public-listings";
+import { MODULES, MODULE_ORDER, SAMPLE_BUSINESSES, IMAGES } from "@/lib/platform";
 
 export default function HomePage() {
   const { theme } = useTheme();
@@ -14,14 +18,19 @@ export default function HomePage() {
   const isDark = theme === "dark";
 
   const selectedCity = globalCity === "All Spain" ? "all" : globalCity;
-  const cityFilteredListings = selectedCity === "all"
-    ? SAMPLE_LISTINGS
-    : SAMPLE_LISTINGS.filter((listing) => listing.city === selectedCity);
   const cityFilteredBusinesses = selectedCity === "all"
     ? SAMPLE_BUSINESSES
     : SAMPLE_BUSINESSES.filter((business) => business.city === selectedCity);
+  const listingsQuery = useQuery({
+    queryKey: ["public-home-listings", selectedCity],
+    queryFn: () => fetchPublicListings({ city: selectedCity === "all" ? undefined : selectedCity, limit: 100 }),
+  });
+  const cityFilteredListings = listingsQuery.data ?? [];
 
-  const featuredListings = cityFilteredListings.filter((l) => l.badges.includes("featured") || l.isVerified).slice(0, 4);
+  const featuredListings = useMemo(
+    () => cityFilteredListings.filter((listing) => deriveListingLabels(listing).includes("featured")).slice(0, 4),
+    [cityFilteredListings],
+  );
   const upcomingEvents = cityFilteredListings.filter((l) => l.module === "events").slice(0, 3);
   const verifiedBusinesses = cityFilteredBusinesses
     .filter((b) => (b as { isVerified?: boolean; verified?: boolean }).isVerified || (b as { verified?: boolean }).verified)
@@ -99,6 +108,11 @@ export default function HomePage() {
         {/* ─── Featured Listings ─── */}
         <section>
           <SectionHeader title={t("home.featured")} linkTo="/jobs" linkLabel={t("common.showAll")} />
+          {listingsQuery.isError ? (
+            <div className={`mb-4 rounded-xl border p-4 text-sm ${isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>
+              {listingsQuery.error instanceof Error ? listingsQuery.error.message : "Failed to load listings"}
+            </div>
+          ) : null}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {featuredListings.map((listing) => (
               <ListingCard key={listing.id} listing={listing} />

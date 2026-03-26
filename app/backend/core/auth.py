@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import logging
+import os
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
@@ -262,10 +263,16 @@ def build_logout_url(id_token: Optional[str] = None) -> str:
     """Build OIDC logout URL."""
     import urllib.parse
 
-    params = {"post_logout_redirect_uri": f"{settings.frontend_url}/logout-callback"}
+    frontend_url = getattr(settings, "frontend_url", os.environ.get("PYTHON_FRONTEND_URL", "/"))
+    issuer_url = getattr(settings, "oidc_issuer_url", "")
+
+    if not issuer_url:
+        return frontend_url.rstrip("/") or "/"
+
+    params = {"post_logout_redirect_uri": f"{frontend_url}/logout-callback"}
 
     if id_token:
         params["id_token_hint"] = id_token
 
-    logout_url = f"{settings.oidc_issuer_url}/logout?" + urllib.parse.urlencode(params)
+    logout_url = f"{issuer_url}/logout?" + urllib.parse.urlencode(params)
     return logout_url

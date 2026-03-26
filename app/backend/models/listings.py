@@ -19,6 +19,9 @@ class Listings(Base):
     region = Column(String, nullable=True)
     owner_type = Column(String, nullable=False)  # private_user, business_profile, organization
     owner_id = Column(String, nullable=False)
+    pricing_tier = Column(String, nullable=False, default="free")  # free, basic, business
+    visibility = Column(String, nullable=False, default="standard")  # standard, boosted, featured
+    ranking_score = Column(Integer, nullable=False, default=0)
     badges = Column(String, nullable=True)  # JSON array
     images_json = Column(String, nullable=True)  # JSON array of image URLs
     event_date = Column(String, nullable=True)
@@ -36,3 +39,7 @@ class Listings(Base):
     @property
     def expires_at(self):
         return self.expiry_date
+
+    @property
+    def owner_user_id(self):
+        return self.user_id

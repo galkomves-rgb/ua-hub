@@ -1,10 +1,12 @@
-from datetime import datetime, timezone
+import json
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.listings import Listings
 from models.messages import Messages
 from models.saved import SavedListing
+from services.monetization import MonetizationService, PaymentRequiredError
 
 
 LISTING_STATUS_DRAFT = "draft"
@@ -13,6 +15,8 @@ LISTING_STATUS_PUBLISHED = "published"
 LISTING_STATUS_REJECTED = "rejected"
 LISTING_STATUS_EXPIRED = "expired"
 LISTING_STATUS_ARCHIVED = "archived"
+LISTING_STATUS_ACTIVE = "active"
+MODERATOR_BADGES_ALLOWED = {"featured", "urgent", "remote", "online", "free"}
 
 
 class ListingsService:
@@ -20,6 +24,31 @@ class ListingsService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _parse_badges(raw_value: str | None) -> list[str]:
+        if not raw_value:
+            return []
+        try:
+            parsed = json.loads(raw_value)
+        except (TypeError, ValueError):
+            return []
+        if not isinstance(parsed, list):
+            return []
+        return [str(item) for item in parsed if isinstance(item, str)]
+
+    @staticmethod
+    def _dump_badges(values: list[str]) -> str:
+        return json.dumps(values, ensure_ascii=True)
+
+    @staticmethod
+    def _sanitize_moderator_badges(values: list[str] | None) -> str:
+        normalized: list[str] = []
+        for value in values or []:
+            label = value.strip().lower()
+            if label in MODERATOR_BADGES_ALLOWED and label not in normalized:
+                normalized.append(label)
+        return ListingsService._dump_badges(normalized)
 
     async def create_listing(
         self,
@@ -31,11 +60,14 @@ class ListingsService:
         city: str,
         owner_type: str,
         owner_id: str,
+        pricing_tier: str = "free",
+        visibility: str = "standard",
+        ranking_score: int = 0,
+        expiry_date: datetime | None = None,
         price: str = None,
         currency: str = "EUR",
         subcategory: str = None,
         region: str = None,
-        badges: str = None,
         images_json: str = "[]",
         meta_json: str = "{}",
     ) -> Listings:
@@ -54,8 +86,12 @@ class ListingsService:
             region=region,
             owner_type=owner_type,
             owner_id=owner_id,
-            badges=badges,
+            pricing_tier=pricing_tier,
+            visibility=visibility,
+            ranking_score=ranking_score,
+            badges=self._dump_badges([]),
             images_json=images_json,
+            expiry_date=expiry_date,
             status=LISTING_STATUS_DRAFT,
             is_featured=False,
             is_promoted=False,
@@ -109,7 +145,7 @@ class ListingsService:
         if filters:
             query = query.where(and_(*filters))
 
-        query = query.order_by(desc(Listings.created_at)).limit(limit).offset(offset)
+        query = query.order_by(desc(Listings.ranking_score), desc(Listings.created_at)).limit(limit).offset(offset)
         result = await self.db.execute(query)
         return result.scalars().all()
 
@@ -186,6 +222,10 @@ class ListingsService:
                     "title": listing.title,
                     "module": listing.module,
                     "category": listing.category,
+                    "owner_type": listing.owner_type,
+                    "pricing_tier": listing.pricing_tier,
+                    "visibility": listing.visibility,
+                    "ranking_score": int(listing.ranking_score or 0),
                     "status": listing.status,
                     "created_at": listing.created_at,
                     "expires_at": listing.expires_at,
@@ -197,6 +237,7 @@ class ListingsService:
                     "is_verified": bool(listing.is_verified),
                     "moderation_reason": listing.moderation_reason,
                     "badges": listing.badges,
+                    "images_json": listing.images_json,
                 }
             )
 
@@ -226,7 +267,7 @@ class ListingsService:
         if city:
             query = query.where(Listings.city == city)
 
-        query = query.order_by(desc(Listings.created_at)).limit(limit).offset(offset)
+        query = query.order_by(desc(Listings.ranking_score), desc(Listings.created_at)).limit(limit).offset(offset)
         result = await self.db.execute(query)
         return result.scalars().all()
 
@@ -240,7 +281,6 @@ class ListingsService:
         category: str = None,
         subcategory: str = None,
         region: str = None,
-        badges: str = None,
         images_json: str = None,
         meta_json: str = None,
     ) -> Listings | None:
@@ -263,8 +303,6 @@ class ListingsService:
             listing.subcategory = subcategory
         if region is not None:
             listing.region = region
-        if badges is not None:
-            listing.badges = badges
         if images_json is not None:
             listing.images_json = images_json
         if meta_json is not None:
@@ -310,7 +348,7 @@ class ListingsService:
         if module:
             query = query.where(Listings.module == module)
 
-        query = query.order_by(desc(Listings.created_at)).limit(limit)
+        query = query.order_by(desc(Listings.ranking_score), desc(Listings.created_at)).limit(limit)
         result = await self.db.execute(query)
         return result.scalars().all()
 
@@ -326,7 +364,7 @@ class ListingsService:
             )
         )
 
-        query = query.order_by(desc(Listings.created_at)).limit(limit).offset(offset)
+        query = query.order_by(desc(Listings.ranking_score), desc(Listings.created_at)).limit(limit).offset(offset)
         result = await self.db.execute(query)
         return result.scalars().all()
 
@@ -335,6 +373,9 @@ class ListingsService:
         listing = await self.get_listing(listing_id)
         if not listing or listing.status not in {LISTING_STATUS_DRAFT, LISTING_STATUS_REJECTED}:
             return None
+
+        monetization_service = MonetizationService(self.db)
+        await monetization_service.assert_listing_submission_allowed(listing)
 
         listing.status = LISTING_STATUS_MODERATION_PENDING
         listing.moderation_reason = None
@@ -369,16 +410,8 @@ class ListingsService:
         return listing
 
     async def boost_listing(self, listing_id: int) -> Listings | None:
-        """Promote an active listing."""
-        listing = await self.get_listing(listing_id)
-        if not listing or listing.status not in {LISTING_STATUS_PUBLISHED, "active"}:
-            return None
-
-        listing.is_promoted = True
-        listing.updated_at = datetime.now(timezone.utc)
-        await self.db.commit()
-        await self.db.refresh(listing)
-        return listing
+        """Direct listing boosts are disabled; use paid billing checkout instead."""
+        return None
 
     async def duplicate_listing(self, listing_id: int) -> Listings | None:
         """Create a draft copy of an existing listing."""
@@ -400,6 +433,9 @@ class ListingsService:
             region=source.region,
             owner_type=source.owner_type,
             owner_id=source.owner_id,
+            pricing_tier=source.pricing_tier,
+            visibility=source.visibility,
+            ranking_score=source.ranking_score,
             badges=source.badges,
             images_json=source.images_json,
             expiry_date=None,
@@ -417,3 +453,90 @@ class ListingsService:
         await self.db.commit()
         await self.db.refresh(duplicate)
         return duplicate
+
+    async def list_moderation_queue(
+        self,
+        status: str = LISTING_STATUS_MODERATION_PENDING,
+        module: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[dict]:
+        query = select(Listings)
+
+        if status == "all":
+            query = query.where(Listings.status.in_([LISTING_STATUS_MODERATION_PENDING, LISTING_STATUS_REJECTED]))
+        else:
+            query = query.where(Listings.status == status)
+
+        if module:
+            query = query.where(Listings.module == module)
+
+        query = query.order_by(desc(Listings.updated_at), desc(Listings.created_at)).limit(limit).offset(offset)
+        result = await self.db.execute(query)
+        listings = result.scalars().all()
+
+        items: list[dict] = []
+        for listing in listings:
+            items.append(
+                {
+                    "id": listing.id,
+                    "title": listing.title,
+                    "module": listing.module,
+                    "category": listing.category,
+                    "owner_type": listing.owner_type,
+                    "pricing_tier": listing.pricing_tier,
+                    "visibility": listing.visibility,
+                    "ranking_score": int(listing.ranking_score or 0),
+                    "status": listing.status,
+                    "created_at": listing.created_at,
+                    "expires_at": listing.expires_at,
+                    "views_count": listing.views_count or 0,
+                    "unread_messages_count": 0,
+                    "saved_count": 0,
+                    "is_featured": bool(listing.is_featured),
+                    "is_promoted": bool(listing.is_promoted),
+                    "is_verified": bool(listing.is_verified),
+                    "moderation_reason": listing.moderation_reason,
+                    "badges": listing.badges,
+                    "images_json": listing.images_json,
+                }
+            )
+
+        return items
+
+    async def moderate_listing(
+        self,
+        listing_id: int,
+        decision: str,
+        moderation_reason: str | None = None,
+        category: str | None = None,
+        badges: list[str] | None = None,
+    ) -> Listings | None:
+        listing = await self.get_listing(listing_id)
+        if not listing:
+            return None
+
+        if listing.status != LISTING_STATUS_MODERATION_PENDING:
+            raise ValueError("Only listings in moderation can be moderated")
+
+        if category and category.strip():
+            listing.category = category.strip()
+
+        if badges is not None:
+            listing.badges = self._sanitize_moderator_badges(badges)
+
+        if decision == "approve":
+            listing.status = LISTING_STATUS_PUBLISHED
+            listing.moderation_reason = None
+        elif decision == "reject":
+            if not moderation_reason or not moderation_reason.strip():
+                raise ValueError("Moderation reason is required when rejecting a listing")
+            listing.status = LISTING_STATUS_REJECTED
+            listing.moderation_reason = moderation_reason.strip()
+        else:
+            raise ValueError("Unsupported moderation decision")
+
+        listing.updated_at = datetime.now(timezone.utc)
+        await self.db.commit()
+        await self.db.refresh(listing)
+        return listing

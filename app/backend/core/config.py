@@ -12,19 +12,41 @@ class Settings(BaseSettings):
     app_name: str = "FastAPI Modular Template"
     debug: bool = False
     version: str = "1.0.0"
+    app_env: str = "local"
 
     # Server
     host: str = "0.0.0.0"
     port: int = 8000
+    backend_public_url: str | None = None
+    frontend_public_url: str | None = None
 
     # AWS Lambda Configuration
     is_lambda: bool = False
     lambda_function_name: str = "fastapi-backend"
     aws_region: str = "us-east-1"
 
+    # Integrations
+    supabase_url: str | None = None
+    supabase_service_role_key: str | None = None
+    supabase_jwt_secret: str | None = None
+
+    @property
+    def is_local(self) -> bool:
+        return self.app_env == "local"
+
+    @property
+    def is_preview(self) -> bool:
+        return self.app_env == "preview"
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env == "production"
+
     @property
     def backend_url(self) -> str:
         """Generate backend URL from host and port."""
+        if self.backend_public_url:
+            return self.backend_public_url.rstrip("/")
         if self.is_lambda:
             # In Lambda environment, return the API Gateway URL
             return os.environ.get(
@@ -34,6 +56,15 @@ class Settings(BaseSettings):
             # Use localhost for external callbacks instead of 0.0.0.0
             display_host = "127.0.0.1" if self.host == "0.0.0.0" else self.host
             return os.environ.get("PYTHON_BACKEND_URL", f"http://{display_host}:{self.port}")
+
+    @property
+    def frontend_url(self) -> str:
+        return (
+            self.frontend_public_url
+            or os.environ.get("FRONTEND_URL")
+            or os.environ.get("PYTHON_FRONTEND_URL")
+            or "/"
+        )
 
     class Config:
         case_sensitive = False

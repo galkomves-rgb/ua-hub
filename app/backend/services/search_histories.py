@@ -55,9 +55,9 @@ class Search_historiesService:
             raise
 
     async def get_list(
-        self, 
-        skip: int = 0, 
-        limit: int = 20, 
+        self,
+        skip: int = 0,
+        limit: int = 20,
         user_id: Optional[str] = None,
         query_dict: Optional[Dict[str, Any]] = None,
         sort: Optional[str] = None,
@@ -66,17 +66,17 @@ class Search_historiesService:
         try:
             query = select(Search_histories)
             count_query = select(func.count(Search_histories.id))
-            
+
             if user_id:
                 query = query.where(Search_histories.user_id == user_id)
                 count_query = count_query.where(Search_histories.user_id == user_id)
-            
+
             if query_dict:
                 for field, value in query_dict.items():
                     if hasattr(Search_histories, field):
                         query = query.where(getattr(Search_histories, field) == value)
                         count_query = count_query.where(getattr(Search_histories, field) == value)
-            
+
             count_result = await self.db.execute(count_query)
             total = count_result.scalar()
 

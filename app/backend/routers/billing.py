@@ -5,6 +5,7 @@ from dependencies.database import get_db_session
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from schemas.auth import UserResponse
 from schemas.billing import (
+    BillingProductResponse,
     BillingAdminOverrideRequest,
     BillingCheckoutRequest,
     BillingCheckoutResponse,
@@ -20,6 +21,14 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/billing", tags=["billing"])
 admin_router = APIRouter(prefix="/api/v1/admin/billing", tags=["admin-billing"])
+
+
+@router.get("/products", response_model=list[BillingProductResponse])
+async def list_billing_products(
+    db: AsyncSession = Depends(get_db_session),
+):
+    service = BillingService(db)
+    return service.list_public_products()
 
 
 @router.get("/overview", response_model=BillingOverviewResponse)

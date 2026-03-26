@@ -72,6 +72,7 @@ async def get_settings(current_user: UserResponse = Depends(get_admin_user)):
 
         # Define descriptions for configuration items
         backend_descriptions = {
+            "APP_ENV": "Canonical environment name: local | preview | staging | production",
             "DATABASE_URL": "Database connection string",
             "STRIPE_SECRET_KEY": "Stripe secret key",
             "STRIPE_SUCCESS_URL": "Payment success callback URL",
@@ -83,15 +84,26 @@ async def get_settings(current_user: UserResponse = Depends(get_admin_user)):
             "OIDC_SCOPE": "OIDC scopes",
             "HOST": "Server host address",
             "PORT": "Server port",
-            "FRONTEND_URL": "Frontend URL",
+            "BACKEND_PUBLIC_URL": "Public backend base URL",
+            "FRONTEND_PUBLIC_URL": "Public frontend base URL",
             "JWT_SECRET_KEY": "JWT signing secret key",
             "JWT_ALGORITHM": "JWT signing algorithm",
             "JWT_EXPIRE_MINUTES": "JWT expiration time (minutes)",
             "ADMIN_USER_ID": "Admin user ID",
             "ADMIN_USER_EMAIL": "Admin user email",
+            "SUPABASE_URL": "Supabase project URL placeholder",
+            "SUPABASE_SERVICE_ROLE_KEY": "Supabase service role secret",
+            "SUPABASE_JWT_SECRET": "Supabase JWT secret",
         }
 
-        frontend_descriptions = {"VITE_API_BASE_URL": "Base API URL", "VITE_FRONTEND_URL": "Frontend URL"}
+        frontend_descriptions = {
+            "VITE_PUBLIC_APP_ENV": "Canonical public environment name: local | preview | staging | production",
+            "VITE_API_BASE_URL": "Public backend base URL for the web client",
+            "VITE_PUBLIC_SITE_URL": "Public frontend site URL",
+            "VITE_TURNSTILE_SITE_KEY": "Turnstile public site key",
+            "VITE_PUBLIC_SUPABASE_URL": "Supabase public project URL placeholder",
+            "VITE_PUBLIC_SUPABASE_ANON_KEY": "Supabase public anon key placeholder",
+        }
 
         # Build response data
         backend_config = {}

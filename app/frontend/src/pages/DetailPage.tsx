@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useParams, useLocation, Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft, MapPin, Clock, User, Briefcase, Share2, Flag, Heart,
@@ -7,18 +8,83 @@ import {
 } from "lucide-react";
 import Layout from "@/components/Layout";
 import { ListingCard, SectionHeader } from "@/components/Cards";
+import { createMonetizedListing, fetchBillingProducts, fetchMyBusinessProfiles, fetchUserProfile, submitListing, updateListing, type BillingProduct, type BillingProductCode } from "@/lib/account-api";
+import { deriveListingLabels } from "@/lib/label-taxonomy";
+import { fetchPublicListing, fetchPublicListings } from "@/lib/public-listings";
+import { getAPIBaseURL } from "@/lib/config";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
 import { useGlobalCity } from "@/lib/global-preferences";
-import { getModuleLabelSystem } from "@/lib/label-taxonomy";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   MODULES, MODULE_ORDER, SAMPLE_LISTINGS, SAMPLE_BUSINESSES,
-  PRICING_PLANS, IMAGES,
+  IMAGES,
 } from "@/lib/platform";
 
 function normalizeCityFilter(value: string): string {
   return value === "All Spain" ? "all" : value;
+}
+
+function formatPlanAmount(amount: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat("en-GB", {
+      style: "currency",
+      currency: currency.toUpperCase(),
+      minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
+      maximumFractionDigits: amount % 1 === 0 ? 0 : 2,
+    }).format(amount);
+  } catch {
+    return `${amount} ${currency.toUpperCase()}`;
+  }
+}
+
+function buildPlanFeatures(product: BillingProduct): string[] {
+  const features = [product.description];
+
+  if (product.duration_days) {
+    features.push(`Active for ${product.duration_days} days`);
+  }
+
+  if (product.listing_quota === null && product.category === "business_subscription") {
+    features.push("Unlimited publishing");
+  } else if (typeof product.listing_quota === "number") {
+    features.push(`Publish up to ${product.listing_quota} listings`);
+  }
+
+  if (product.category === "listing_promotion") {
+    features.push("Apply to one listing");
+  }
+
+  if (product.category === "business_subscription") {
+    features.push("Renews monthly while active");
+  }
+
+  return features;
+}
+
+function getPlanCta(productCode: BillingProductCode): string {
+  if (productCode === "listing_free") return "Start free";
+  if (productCode === "listing_basic") return "Get more responses";
+  if (productCode === "promotion_boost") return "Your listing appears first";
+  if (productCode === "promotion_featured") return "Show at the top";
+  if (productCode === "business_starter") return "Start publishing";
+  if (productCode === "business_growth") return "Get more responses";
+  return "Show at the top";
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") {
+        resolve(reader.result);
+        return;
+      }
+      reject(new Error("Failed to read file"));
+    };
+    reader.onerror = () => reject(reader.error ?? new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
 }
 
 // ─── Listing Detail ───
@@ -32,13 +98,21 @@ function ListingDetail() {
   const { city: globalCity } = useGlobalCity();
   const isDark = theme === "dark";
   const selectedCity = normalizeCityFilter(globalCity);
+  const numericListingId = Number(listingId);
+  const publicListingQuery = useQuery({
+    queryKey: ["public-listing-detail", numericListingId],
+    queryFn: () => fetchPublicListing(numericListingId),
+    enabled: Number.isInteger(numericListingId),
+  });
 
-  const listing = SAMPLE_LISTINGS.find((l) => l.id === listingId);
+  const listing = publicListingQuery.data ?? SAMPLE_LISTINGS.find((l) => l.id === listingId);
   if (!listing) {
     return (
       <Layout>
         <div className="max-w-6xl mx-auto px-4 py-16 text-center">
-          <p className={`text-sm ${isDark ? "text-gray-500" : "text-gray-400"}`}>Оголошення не знайдено</p>
+          <p className={`text-sm ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+            {publicListingQuery.isLoading ? "Завантаження..." : "Оголошення не знайдено"}
+          </p>
           <Link to={`/${moduleId}`} className={`text-sm font-medium mt-4 inline-block ${isDark ? "text-[#4a9eff]" : "text-[#0057B8]"}`}>
             ← {t("detail.back")}
           </Link>
@@ -47,12 +121,28 @@ function ListingDetail() {
     );
   }
 
-  const relatedListings = SAMPLE_LISTINGS.filter(
-    (l) =>
-      l.module === listing.module &&
-      l.id !== listing.id &&
-      (selectedCity === "all" || l.city === selectedCity)
-  ).slice(0, 3);
+  const relatedPublicListingsQuery = useQuery({
+    queryKey: ["public-related-listings", listing.module, selectedCity],
+    queryFn: () => fetchPublicListings({ module: listing.module, city: selectedCity === "all" ? undefined : selectedCity, limit: 12 }),
+    enabled: Boolean(publicListingQuery.data),
+  });
+
+  const relatedListings = (publicListingQuery.data ? (relatedPublicListingsQuery.data ?? []) : SAMPLE_LISTINGS)
+    .filter((l) => l.module === listing.module && l.id !== listing.id && (selectedCity === "all" || l.city === selectedCity))
+    .slice(0, 3);
+  const ownerType = listing.ownerType || listing.authorType || "private_user";
+  const ownerLabel = listing.ownerId || listing.authorName || ownerType;
+  const listingBadges = deriveListingLabels({
+    module: listing.module,
+    badges: listing.badges,
+    ownerType,
+    createdAt: listing.createdAt,
+    isFeatured: listing.isFeatured,
+    isPromoted: listing.isPromoted,
+    isVerified: listing.isVerified,
+  });
+  const mapsUrl = listing.mapsUrl || listing.meta?.google_maps_url || listing.meta?.maps_url || listing.meta?.location_url;
+  const description = listing.description || listing.shortDesc || "";
 
   const mod = MODULES[listing.module];
 
@@ -74,9 +164,9 @@ function ListingDetail() {
             {/* Title card */}
             <div className={`rounded-xl border p-5 mb-4 ${isDark ? "bg-[#111d32] border-[#1a3050]" : "bg-white border-gray-200/80"}`}>
               {/* Badges */}
-              {listing.badges.length > 0 && (
+              {listingBadges.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mb-3">
-                  {listing.badges.map((b) => {
+                  {listingBadges.map((b) => {
                     const badgeConfig: Record<string, { label: string; cls: string }> = {
                       verified: { label: t("card.verified"), cls: isDark ? "text-emerald-400 bg-emerald-900/30" : "text-emerald-600 bg-emerald-50" },
                       premium: { label: t("card.premium"), cls: isDark ? "text-amber-400 bg-amber-900/30" : "text-amber-600 bg-amber-50" },
@@ -128,7 +218,9 @@ function ListingDetail() {
               {/* Module-specific meta */}
               {listing.meta && Object.keys(listing.meta).length > 0 && (
                 <div className={`flex flex-wrap gap-2 p-3 rounded-lg mb-4 ${isDark ? "bg-[#0d1a2e]" : "bg-gray-50"}`}>
-                  {Object.entries(listing.meta).map(([key, val]) => (
+                  {Object.entries(listing.meta)
+                    .filter(([key]) => !["contact", "google_maps_url", "maps_url", "location_url"].includes(key))
+                    .map(([key, val]) => (
                     <div key={key} className="text-xs">
                       <span className={isDark ? "text-gray-500" : "text-gray-400"}>{key}: </span>
                       <span className={`font-medium ${isDark ? "text-gray-300" : "text-gray-700"}`}>{val}</span>
@@ -143,7 +235,7 @@ function ListingDetail() {
                   {t("detail.description")}
                 </h2>
                 <p className={`text-sm leading-relaxed ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                  {listing.description}
+                  {description}
                 </p>
               </div>
 
@@ -189,24 +281,24 @@ function ListingDetail() {
               </h3>
               <div className="flex items-center gap-3 mb-3">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                  listing.ownerType === "business_profile"
+                  ownerType === "business_profile"
                     ? isDark ? "bg-indigo-900/40" : "bg-indigo-50"
                     : isDark ? "bg-[#1a2a40]" : "bg-gray-100"
                 }`}>
-                  {listing.ownerType === "business_profile"
+                  {ownerType === "business_profile"
                     ? <Briefcase className={`w-5 h-5 ${isDark ? "text-indigo-400" : "text-indigo-500"}`} />
                     : <User className={`w-5 h-5 ${isDark ? "text-gray-400" : "text-gray-500"}`} />
                   }
                 </div>
                 <div>
-                  <p className={`text-sm font-bold ${isDark ? "text-gray-200" : "text-gray-800"}`}>{listing.ownerId}</p>
+                  <p className={`text-sm font-bold ${isDark ? "text-gray-200" : "text-gray-800"}`}>{ownerLabel}</p>
                   <p className={`text-xs ${isDark ? "text-gray-500" : "text-gray-400"}`}>
-                    {listing.ownerType === "business_profile" ? t("card.business") : t("card.private")}
+                    {ownerType === "business_profile" ? t("card.business") : t("card.private")}
                   </p>
                 </div>
               </div>
               <Link
-                to={`/messages?to=${encodeURIComponent(listing.ownerId)}&listing=${listing.id}&title=${encodeURIComponent(listing.title)}`}
+                to={`/messages?to=${encodeURIComponent(ownerLabel)}&listing=${listing.id}&title=${encodeURIComponent(listing.title)}`}
                 className={`w-full h-10 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
                   isDark
                     ? "bg-gradient-to-r from-[#FFD700] to-[#e6c200] text-[#0d1a2e] hover:shadow-md hover:shadow-yellow-500/20"
@@ -226,6 +318,16 @@ function ListingDetail() {
                 <MapPin className="w-4 h-4" />
                 <span className="text-sm">{listing.city}, Іспанія</span>
               </div>
+              {mapsUrl ? (
+                <a
+                  href={mapsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={`mt-3 inline-flex h-10 items-center justify-center rounded-lg px-4 text-sm font-semibold ${isDark ? "bg-[#1a2d4c] text-slate-100 hover:bg-[#21365a]" : "bg-blue-50 text-[#0057B8] hover:bg-blue-100"}`}
+                >
+                  {t("detail.location")}
+                </a>
+              ) : null}
             </div>
           </aside>
         </div>
@@ -373,7 +475,6 @@ function CreateListingPage() {
   const [step, setStep] = useState(0);
   const [selectedModule, setSelectedModule] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
-  const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
   const [loadedListingStatus, setLoadedListingStatus] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: "",
@@ -381,6 +482,7 @@ function CreateListingPage() {
     price: "",
     city: "",
     contact: "",
+    googleMapsUrl: "",
     images: [] as string[],
     ownerType: "private_user",
     currency: "EUR",
@@ -392,17 +494,19 @@ function CreateListingPage() {
   ];
 
   const mod = selectedModule ? MODULES[selectedModule] : null;
-  const moduleLabelSystem = getModuleLabelSystem();
-  const allowedLabels = useMemo(() => moduleLabelSystem[selectedModule] ?? [], [moduleLabelSystem, selectedModule]);
-
-  useEffect(() => {
-    if (!selectedModule) {
-      setSelectedLabels([]);
-      return;
-    }
-
-    setSelectedLabels((current) => current.filter((label) => allowedLabels.includes(label as never)));
-  }, [allowedLabels, selectedModule]);
+  const userProfileQuery = useQuery({
+    queryKey: ["create-listing-user-profile"],
+    queryFn: fetchUserProfile,
+    enabled: Boolean(user),
+  });
+  const businessProfilesQuery = useQuery({
+    queryKey: ["create-listing-business-profiles"],
+    queryFn: fetchMyBusinessProfiles,
+    enabled: userProfileQuery.data?.account_type === "business",
+  });
+  const activeBusinessSlug = businessProfilesQuery.data?.[0]?.slug ?? "";
+  const effectiveOwnerType = userProfileQuery.data?.account_type === "business" && activeBusinessSlug ? "business_profile" : formData.ownerType;
+  const effectiveOwnerId = effectiveOwnerType === "business_profile" ? activeBusinessSlug : user?.id ?? "";
 
   useEffect(() => {
     if (!editingId) {
@@ -415,7 +519,7 @@ function CreateListingPage() {
     const loadListing = async () => {
       try {
         const response = await fetch(
-          `${import.meta.env.VITE_API_URL || "http://localhost:8000"}/api/v1/listings/${editingId}?record_view=false`,
+          `${getAPIBaseURL()}/api/v1/listings/${editingId}?record_view=false`,
           {
             headers: {
               Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
@@ -440,35 +544,19 @@ function CreateListingPage() {
           parsedImages = [];
         }
 
-        let parsedBadges: string[] = [];
-        try {
-          const rawBadges = JSON.parse(listing.badges || "[]");
-          parsedBadges = Array.isArray(rawBadges) ? rawBadges : [];
-        } catch {
-          parsedBadges = [];
-        }
-
-        if (listing.is_featured && !parsedBadges.includes("featured")) {
-          parsedBadges.push("featured");
-        }
-        if (listing.is_promoted && !parsedBadges.includes("premium")) {
-          parsedBadges.push("premium");
-        }
-        if (listing.is_verified && !parsedBadges.includes("verified")) {
-          parsedBadges.push("verified");
-        }
-
         let contact = "";
+        let googleMapsUrl = "";
         try {
           const meta = JSON.parse(listing.meta_json || "{}");
           contact = typeof meta?.contact === "string" ? meta.contact : "";
+          googleMapsUrl = typeof meta?.google_maps_url === "string" ? meta.google_maps_url : "";
         } catch {
           contact = "";
+          googleMapsUrl = "";
         }
 
         setSelectedModule(listing.module || "");
         setSelectedCategory(listing.category || "");
-        setSelectedLabels(parsedBadges);
         setLoadedListingStatus(listing.status || null);
         setFormData({
           title: listing.title || "",
@@ -476,6 +564,7 @@ function CreateListingPage() {
           price: listing.price || "",
           city: listing.city || "",
           contact,
+          googleMapsUrl,
           images: parsedImages,
           ownerType: listing.owner_type || "private_user",
           currency: listing.currency || "EUR",
@@ -493,29 +582,15 @@ function CreateListingPage() {
     };
   }, [editingId]);
 
-  const getLabelDisplayName = (label: string) => {
-    if (label === "verified") return t("card.verified");
-    if (label === "premium") return t("card.premium");
-    if (label === "featured") return t("card.featured");
-    if (label === "urgent") return t("card.urgent");
-    if (label === "new") return t("card.new");
-    if (label === "remote") return t("card.remote");
-    if (label === "online") return t("card.online");
-    if (label === "business") return t("card.business");
-    if (label === "private") return t("card.private");
-    if (label === "free") return t("card.free");
-    return label;
-  };
-
   const handlePublish = async () => {
     if (!user || !selectedModule || !selectedCategory) {
       alert("Будь ласка, заповніть всі необхідні поля");
       return;
     }
 
-    const hasInvalidLabels = selectedLabels.some((label) => !allowedLabels.includes(label as never));
-    if (hasInvalidLabels) {
-      alert("Обрані лейбли не відповідають правилам цього розділу");
+    if (userProfileQuery.data?.account_type === "business" && !activeBusinessSlug) {
+      alert("Створіть бізнес-профіль, щоб публікувати як бізнес");
+      navigate("/account?tab=business");
       return;
     }
 
@@ -528,76 +603,41 @@ function CreateListingPage() {
         price: formData.price || null,
         currency: formData.currency,
         city: formData.city,
-        owner_type: formData.ownerType,
-        owner_id: user.id,
-        badges: JSON.stringify(selectedLabels),
+        owner_type: effectiveOwnerType,
+        owner_id: effectiveOwnerId,
         images_json: JSON.stringify(formData.images),
-        meta_json: JSON.stringify({ contact: formData.contact }),
+        meta_json: JSON.stringify({
+          contact: formData.contact,
+          google_maps_url: formData.googleMapsUrl,
+        }),
       };
 
-      const apiBase = import.meta.env.VITE_API_URL || "http://localhost:8000";
-      const token = localStorage.getItem("auth_token");
-
       if (editingId) {
-        const updateResponse = await fetch(`${apiBase}/api/v1/listings/${editingId}`, {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(listingPayload),
-        });
-
-        if (!updateResponse.ok) {
-          throw new Error("Failed to update listing");
-        }
+        await updateListing(editingId, listingPayload);
 
         if (loadedListingStatus === "draft" || loadedListingStatus === "rejected") {
-          const submitResponse = await fetch(`${apiBase}/api/v1/listings/${editingId}/submit`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          });
-
-          if (!submitResponse.ok) {
-            throw new Error("Failed to submit listing for moderation");
-          }
+          await submitListing(editingId);
         }
 
         navigate("/account?tab=listings");
         return;
       }
 
-      const response = await fetch(`${apiBase}/api/v1/listings`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(listingPayload),
+      const createdListing = await createMonetizedListing({
+        ...listingPayload,
+        pricing_tier: effectiveOwnerType === "business_profile" ? "business" : "free",
       });
-
-      if (!response.ok) {
-        throw new Error("Failed to create listing");
-      }
-
-      const createdListing = await response.json();
-      const submitResponse = await fetch(`${apiBase}/api/v1/listings/${createdListing.id}/submit`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!submitResponse.ok) {
-        throw new Error("Failed to submit listing for moderation");
-      }
+      await submitListing(createdListing.listing.id);
 
       navigate("/account?tab=listings");
     } catch (error) {
+      const paywall = error && typeof error === "object" && "paywall" in error ? (error as { paywall?: { required_product_code: string; listing_id: number } }).paywall : null;
+      if (paywall?.required_product_code && paywall.listing_id) {
+        navigate(`/account?tab=billing&product=${paywall.required_product_code}&listingId=${paywall.listing_id}`);
+        return;
+      }
       console.error("Error publishing listing:", error);
-      alert("Помилка при створенні оголошення");
+      alert(error instanceof Error ? error.message : "Помилка при створенні оголошення");
     }
   };
 
@@ -607,6 +647,13 @@ function CreateListingPage() {
         <h1 className={`text-xl font-bold mb-6 ${isDark ? "text-gray-100" : "text-gray-900"}`}>
           {editingId ? t("account.listings.edit") : t("create.title")}
         </h1>
+        {!editingId ? (
+          <div className={`mb-6 rounded-2xl border p-4 text-sm ${isDark ? "border-[#22416b] bg-[#111d32] text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+            {userProfileQuery.data?.account_type === "business"
+              ? "Business publishing requires an active plan before the listing can go live."
+              : "You can start with one free listing for 3 days. After that, new listings continue through Basic."}
+          </div>
+        ) : null}
 
         {/* Steps indicator */}
         <div className="flex items-center gap-1 mb-8 overflow-x-auto">
@@ -740,43 +787,17 @@ function CreateListingPage() {
                   />
                 </div>
               </div>
-
-              {allowedLabels.length > 0 && (
-                <div>
-                  <label className={`text-xs font-medium mb-1 block ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                    Лейбли оголошення
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {allowedLabels.map((label) => {
-                      const active = selectedLabels.includes(label);
-                      return (
-                        <button
-                          key={label}
-                          type="button"
-                          onClick={() => {
-                            setSelectedLabels((current) =>
-                              current.includes(label)
-                                ? current.filter((item) => item !== label)
-                                : [...current, label],
-                            );
-                          }}
-                          className={`h-8 rounded-lg border px-3 text-xs font-medium transition-colors ${
-                            active
-                              ? isDark
-                                ? "border-[#FFD700] bg-[#FFD700]/10 text-[#FFD700]"
-                                : "border-[#0057B8] bg-blue-50 text-[#0057B8]"
-                              : isDark
-                                ? "border-[#1a3050] text-gray-300 hover:bg-[#1a2a40]"
-                                : "border-gray-200 text-gray-600 hover:bg-gray-50"
-                          }`}
-                        >
-                          {getLabelDisplayName(label)}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
+              <div>
+                <label className={`text-xs font-medium mb-1 block ${isDark ? "text-gray-400" : "text-gray-500"}`}>Google Maps URL</label>
+                <input
+                  value={formData.googleMapsUrl}
+                  onChange={(e) => setFormData({ ...formData, googleMapsUrl: e.target.value })}
+                  className={`w-full h-10 px-3 text-sm rounded-lg border focus:outline-none ${
+                    isDark ? "bg-[#0d1a2e] border-[#1a3050] text-gray-200 focus:border-[#4a9eff]" : "bg-gray-50 border-gray-200 text-gray-700 focus:border-blue-400"
+                  }`}
+                  placeholder="https://maps.google.com/..."
+                />
+              </div>
             </div>
           )}
 
@@ -791,10 +812,19 @@ function CreateListingPage() {
                   type="file"
                   multiple
                   accept="image/*"
-                  onChange={(e) => {
+                  onChange={async (e) => {
                     const files = Array.from(e.target.files || []);
-                    const urls = files.map((f) => URL.createObjectURL(f));
-                    setFormData({ ...formData, images: [...formData.images, ...urls] });
+                    if (files.length === 0) {
+                      return;
+                    }
+
+                    try {
+                      const urls = await Promise.all(files.map((file) => readFileAsDataUrl(file)));
+                      setFormData((current) => ({ ...current, images: [...current.images, ...urls] }));
+                    } catch (error) {
+                      console.error("Failed to read selected images:", error);
+                      alert("Не вдалося підготувати фото до завантаження");
+                    }
                   }}
                   className="hidden"
                   id="imageInput"
@@ -838,6 +868,9 @@ function CreateListingPage() {
                   placeholder="Телефон, email або месенджер"
                 />
               </div>
+              <p className={`text-xs ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+                Лейбли типу "нове", "бізнес", "перевірено" або промо-позначки призначаються автоматично, через оплату або модератором.
+              </p>
             </div>
           )}
 
@@ -850,15 +883,9 @@ function CreateListingPage() {
                 <p className={`text-xs mb-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>{formData.description || "Без опису"}</p>
                 {formData.price && <p className={`text-sm font-bold ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`}>{formData.price} €</p>}
                 <p className={`text-xs mt-1 ${isDark ? "text-gray-500" : "text-gray-400"}`}>{formData.city}</p>
-                {selectedLabels.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {selectedLabels.map((label) => (
-                      <span key={label} className={`rounded-md px-2 py-0.5 text-[11px] ${isDark ? "bg-[#1a2a40] text-gray-300" : "bg-gray-100 text-gray-600"}`}>
-                        {getLabelDisplayName(label)}
-                      </span>
-                    ))}
-                  </div>
-                )}
+                {formData.googleMapsUrl ? (
+                  <p className={`text-xs mt-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Google Maps link буде доступний після публікації.</p>
+                ) : null}
               </div>
             </div>
           )}
@@ -910,9 +937,27 @@ function CreateListingPage() {
 function PricingPage() {
   const { theme } = useTheme();
   const { t } = useI18n();
+  const { user } = useAuth();
   const isDark = theme === "dark";
+  const navigate = useNavigate();
+  const [segment, setSegment] = useState<"private" | "business">("private");
+  const productsQuery = useQuery({
+    queryKey: ["public-billing-products"],
+    queryFn: fetchBillingProducts,
+  });
 
-  const planNames = [t("pricing.free"), t("pricing.basic"), t("pricing.premium"), t("pricing.business")];
+  const plans = useMemo(() => {
+    const products = productsQuery.data ?? [];
+    return products
+      .filter((product) => (segment === "private" ? product.target_type === "listing" : product.target_type === "business_profile"))
+      .map((product) => ({
+        ...product,
+        cta: getPlanCta(product.code as BillingProductCode),
+        featured: product.code === "business_growth",
+        displayPrice: formatPlanAmount(product.amount, product.currency),
+        features: buildPlanFeatures(product),
+      }));
+  }, [productsQuery.data, segment]);
 
   return (
     <Layout>
@@ -921,22 +966,48 @@ function PricingPage() {
           {t("pricing.title")}
         </h1>
         <p className={`text-sm text-center mb-8 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-          Оберіть план, який підходить саме вам
+          Choose what gets you more responses.
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {PRICING_PLANS.map((plan, i) => (
+        <div className={`mx-auto mb-8 flex max-w-md rounded-2xl border p-1 ${isDark ? "border-[#1a3050] bg-[#111d32]" : "border-slate-200 bg-slate-50"}`}>
+          {(["private", "business"] as const).map((item) => (
+            <button
+              key={item}
+              type="button"
+              onClick={() => setSegment(item)}
+              className={`flex-1 rounded-xl px-4 py-3 text-sm font-semibold ${segment === item ? (isDark ? "bg-[#FFD700] text-[#0d1a2e]" : "bg-[#0057B8] text-white") : (isDark ? "text-slate-300" : "text-slate-600")}`}
+            >
+              {item === "private" ? "Individuals" : "Business"}
+            </button>
+          ))}
+        </div>
+        <div className={`mb-6 rounded-2xl border p-4 text-sm ${isDark ? "border-[#22416b] bg-[#111d32] text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+          {segment === "private"
+            ? "Start free once, then keep going with paid listing options and promotions."
+            : "Choose a plan first, then keep publishing inside your monthly limit."}
+        </div>
+        {productsQuery.isLoading ? (
+          <div className={`mb-6 rounded-2xl border p-4 text-sm ${isDark ? "border-[#22416b] bg-[#111d32] text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+            Loading pricing...
+          </div>
+        ) : null}
+        {productsQuery.isError ? (
+          <div className={`mb-6 rounded-2xl border p-4 text-sm ${isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-600"}`}>
+            {productsQuery.error instanceof Error ? productsQuery.error.message : "Failed to load pricing."}
+          </div>
+        ) : null}
+        <div className={`grid grid-cols-1 gap-4 ${segment === "private" ? "sm:grid-cols-2 lg:grid-cols-4" : "md:grid-cols-3"}`}>
+          {plans.map((plan) => (
             <div
-              key={plan.id}
+              key={plan.code}
               className={`rounded-xl border p-5 transition-all ${
-                i === 2
+                plan.featured
                   ? isDark ? "border-[#FFD700]/40 bg-[#111d32] ring-1 ring-[#FFD700]/20" : "border-[#0057B8] bg-white ring-1 ring-blue-100"
                   : isDark ? "border-[#1a3050] bg-[#111d32]" : "border-gray-200/80 bg-white"
               }`}
             >
-              <h3 className={`text-sm font-bold mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{planNames[i]}</h3>
+              <h3 className={`text-sm font-bold mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{plan.title}</h3>
               <p className={`text-2xl font-extrabold mb-4 ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`}>
-                {plan.price === "0" ? t("pricing.free") : `€${plan.price}`}
-                {plan.price !== "0" && <span className={`text-xs font-normal ${isDark ? "text-gray-500" : "text-gray-400"}`}>{t("pricing.perMonth")}</span>}
+                {plan.displayPrice}
               </p>
               <ul className="space-y-2">
                 {plan.features.map((f, fi) => (
@@ -946,8 +1017,21 @@ function PricingPage() {
                   </li>
                 ))}
               </ul>
-              <button className={`w-full h-9 mt-5 rounded-lg text-xs font-semibold transition-all ${
-                i === 2
+              <button
+                type="button"
+                onClick={() => {
+                  if (!user) {
+                    navigate("/auth");
+                    return;
+                  }
+                  if (plan.code === "listing_free") {
+                    navigate("/create");
+                    return;
+                  }
+                  navigate(`/account?tab=billing&product=${plan.code}`);
+                }}
+                className={`w-full h-9 mt-5 rounded-lg text-xs font-semibold transition-all ${
+                plan.featured
                   ? isDark
                     ? "bg-gradient-to-r from-[#FFD700] to-[#e6c200] text-[#0d1a2e]"
                     : "bg-gradient-to-r from-[#0057B8] to-[#0070E0] text-white"
@@ -955,7 +1039,7 @@ function PricingPage() {
                     ? "border border-[#1a3050] text-gray-300 hover:bg-[#1a2a40]"
                     : "border border-gray-200 text-gray-600 hover:bg-gray-50"
               }`}>
-                {plan.price === "0" ? "Почати" : "Обрати план"}
+                {plan.cta}
               </button>
             </div>
           ))}

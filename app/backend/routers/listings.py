@@ -1,48 +1,41 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from dependencies.auth import get_current_user_id
+from dependencies.auth import get_admin_user, get_current_user_id
 from dependencies.database import get_db_session
+from schemas.auth import UserResponse
 from schemas.listings import (
     ListingActionResponse,
     ListingCreate,
     ListingDetailResponse,
     ListingListResponse,
+    ListingModerationRequest,
     ListingResponse,
     ListingSummaryResponse,
     ListingUpdate,
 )
 from services.listings_service import ListingsService
+from services.monetization import PaymentRequiredError
 
 router = APIRouter(prefix="/api/v1/listings", tags=["listings"])
+admin_router = APIRouter(prefix="/api/v1/admin/listings", tags=["admin-listings"])
 
 
-@router.post("", response_model=ListingResponse)
+@router.post("", deprecated=True)
 async def create_listing(
     listing_data: ListingCreate,
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Create a new listing for authenticated user."""
-    service = ListingsService(db)
-    listing = await service.create_listing(
-        user_id=user_id,
-        module=listing_data.module,
-        category=listing_data.category,
-        subcategory=listing_data.subcategory,
-        title=listing_data.title,
-        description=listing_data.description,
-        price=listing_data.price,
-        currency=listing_data.currency,
-        city=listing_data.city,
-        region=listing_data.region,
-        owner_type=listing_data.owner_type,
-        owner_id=listing_data.owner_id,
-        badges=listing_data.badges,
-        images_json=listing_data.images_json,
-        meta_json=listing_data.meta_json,
+    """Legacy create endpoint is disabled; use the canonical monetized create flow."""
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "message": "Listing creation moved to /api/v1/listings/create",
+            "canonical_endpoint": "/api/v1/listings/create",
+            "paywall_flow": "create_paywall_submit",
+        },
     )
-    return listing
 
 
 @router.get("", response_model=ListingListResponse)
@@ -220,7 +213,6 @@ async def update_listing(
         category=listing_data.category,
         subcategory=listing_data.subcategory,
         region=listing_data.region,
-        badges=listing_data.badges,
         images_json=listing_data.images_json,
         meta_json=listing_data.meta_json,
     )
@@ -244,7 +236,21 @@ async def submit_listing(
     if listing.user_id != user_id:
         raise HTTPException(status_code=403, detail="Not authorized to submit this listing")
 
-    updated_listing = await service.submit_listing(listing_id)
+    try:
+        updated_listing = await service.submit_listing(listing_id)
+    except PaymentRequiredError as exc:
+        raise HTTPException(
+            status_code=402,
+            detail={
+                "message": str(exc),
+                "required_product_code": exc.product_code,
+                "paywall_reason": exc.paywall_reason,
+                "listing_id": exc.listing_id or listing_id,
+            },
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     if not updated_listing:
         raise HTTPException(status_code=400, detail="Listing cannot be submitted in its current state")
 
@@ -303,7 +309,7 @@ async def boost_listing(
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db_session),
 ):
-    """Boost an active listing."""
+    """Block direct boosts; listing promotion must go through billing checkout."""
     service = ListingsService(db)
     listing = await service.get_listing(listing_id)
 
@@ -312,12 +318,48 @@ async def boost_listing(
 
     if listing.user_id != user_id:
         raise HTTPException(status_code=403, detail="Not authorized to boost this listing")
+    raise HTTPException(
+        status_code=402,
+        detail="Listing promotion requires a paid billing checkout",
+    )
 
-    updated_listing = await service.boost_listing(listing_id)
-    if not updated_listing:
-        raise HTTPException(status_code=400, detail="Listing cannot be boosted in its current state")
 
-    return updated_listing
+@admin_router.get("/moderation-queue", response_model=list[ListingSummaryResponse])
+async def get_moderation_queue(
+    status: str = Query("moderation_pending", pattern="^(moderation_pending|rejected|all)$"),
+    module: str | None = Query(None),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    _admin_user: UserResponse = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    service = ListingsService(db)
+    return await service.list_moderation_queue(status=status, module=module, limit=limit, offset=offset)
+
+
+@admin_router.post("/{listing_id}/moderate", response_model=ListingActionResponse)
+async def moderate_listing(
+    listing_id: int,
+    payload: ListingModerationRequest,
+    _admin_user: UserResponse = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    service = ListingsService(db)
+    try:
+        listing = await service.moderate_listing(
+            listing_id=listing_id,
+            decision=payload.decision,
+            moderation_reason=payload.moderation_reason,
+            category=payload.category,
+            badges=payload.badges,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    return listing
 
 
 @router.post("/{listing_id}/duplicate", response_model=ListingResponse)

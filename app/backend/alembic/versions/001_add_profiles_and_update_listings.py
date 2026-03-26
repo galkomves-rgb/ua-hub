@@ -72,12 +72,12 @@ def upgrade() -> None:
         batch_op.add_column(sa.Column('is_verified', sa.Boolean(), server_default=sa.text('false'), nullable=False))
         batch_op.add_column(sa.Column('expiry_date', sa.DateTime(timezone=True), nullable=True))
         batch_op.add_column(sa.Column('updated_at', sa.DateTime(timezone=True), nullable=True))
-    
+
     # Migrate old columns to new ones
     op.execute(
         sa.text("""
-        UPDATE listings 
-        SET 
+        UPDATE listings
+        SET
             description = COALESCE(short_desc, ''),
             owner_type = author_type,
             owner_id = author_name,
@@ -85,16 +85,16 @@ def upgrade() -> None:
         WHERE description IS NULL
         """)
     )
-    
+
     # Set status based on is_active
     op.execute(
         sa.text("""
-        UPDATE listings 
+        UPDATE listings
         SET status = CASE WHEN is_active = true THEN 'active' ELSE 'expired' END
         WHERE status = 'active'
         """)
     )
-    
+
     with op.batch_alter_table('listings') as batch_op:
         batch_op.alter_column('description', existing_type=sa.Text(), nullable=False)
         batch_op.alter_column('owner_type', existing_type=sa.String(), nullable=False)
@@ -106,7 +106,7 @@ def downgrade() -> None:
     # Drop profile tables
     op.drop_table('business_profiles')
     op.drop_table('user_profiles')
-    
+
     with op.batch_alter_table('listings') as batch_op:
         batch_op.drop_column('updated_at')
         batch_op.drop_column('expiry_date')

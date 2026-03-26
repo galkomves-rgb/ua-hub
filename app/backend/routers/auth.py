@@ -25,6 +25,7 @@ from fastapi.responses import RedirectResponse
 from models.auth import User
 from schemas.auth import (
     AuthCapabilitiesResponse,
+    DevLoginRequest,
     LogoutResponse,
     PlatformTokenExchangeRequest,
     TokenExchangeResponse,
@@ -55,6 +56,15 @@ def _env_flag(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _current_app_env() -> str:
+    return (os.getenv("APP_ENV") or os.getenv("ENVIRONMENT") or "production").strip().lower()
+
+
+def _dev_auth_enabled() -> bool:
+    environment = _current_app_env()
+    return environment in {"local", "dev"} and _env_flag("DEV_AUTH_ENABLED")
+
+
 def get_auth_capabilities() -> AuthCapabilitiesResponse:
     google_enabled = _env_flag("OIDC_ENABLE_GOOGLE_AUTH") or bool(getattr(settings, "oidc_google_connection", ""))
     apple_enabled = _env_flag("OIDC_ENABLE_APPLE_AUTH") or bool(getattr(settings, "oidc_apple_connection", ""))
@@ -70,6 +80,7 @@ def get_auth_capabilities() -> AuthCapabilitiesResponse:
         phone=phone_enabled,
         turnstile_enabled=turnstile_enabled,
         email_confirmation_required=email_confirmation_required,
+        dev_auth_enabled=_dev_auth_enabled(),
     )
 
 
@@ -139,6 +150,42 @@ def _enforce_auth_rate_limit(request: Request, bucket: str) -> None:
 @router.get("/capabilities", response_model=AuthCapabilitiesResponse)
 async def auth_capabilities():
     return get_auth_capabilities()
+
+
+@router.post("/dev-login", response_model=TokenExchangeResponse)
+async def dev_login(
+    payload: DevLoginRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    if not _dev_auth_enabled():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+    role = (payload.role or "user").strip().lower()
+    if role not in {"user", "admin"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported dev auth role")
+
+    if role == "admin":
+        default_user_id = getattr(settings, "admin_user_id", "") or "dev-admin"
+        default_email = getattr(settings, "admin_user_email", "") or "admin@local.test"
+    else:
+        default_user_id = "dev-user"
+        default_email = "user@local.test"
+
+    user_id = (payload.user_id or default_user_id).strip()
+    email = (payload.email or default_email).strip().lower()
+    if not user_id or not email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Dev auth user id and email are required")
+
+    name = (payload.name or derive_name_from_email(email)).strip() or derive_name_from_email(email)
+
+    auth_service = AuthService(db)
+    token, _expires_at, _claims = await auth_service.issue_app_token(
+        user=User(id=user_id, email=email, name=name, role=role),
+        user_agent=request.headers.get("user-agent"),
+        ip_address=_get_request_ip(request),
+    )
+    return TokenExchangeResponse(token=token)
 
 
 async def verify_turnstile_token(token: str, remote_ip: str | None = None) -> bool:
@@ -271,11 +318,12 @@ async def callback(
     """Handle OIDC callback."""
     _enforce_auth_rate_limit(request, "callback")
     backend_url = get_dynamic_backend_url(request)
+    frontend_url = settings.frontend_url.rstrip("/") if settings.frontend_url != "/" else ""
 
     def redirect_with_error(message: str) -> RedirectResponse:
         fragment = urlencode({"msg": message})
         return RedirectResponse(
-            url=f"{backend_url}/auth/error?{fragment}",
+            url=f"{frontend_url}/auth/error?{fragment}",
             status_code=status.HTTP_302_FOUND,
         )
 
@@ -379,7 +427,7 @@ async def callback(
             }
         )
 
-        redirect_url = f"{backend_url}/auth/callback?{fragment}"
+        redirect_url = f"{frontend_url}/auth/callback?{fragment}"
         logger.info("[callback] OIDC callback successful, redirecting to %s", redirect_url)
         redirect_response = RedirectResponse(
             url=redirect_url,

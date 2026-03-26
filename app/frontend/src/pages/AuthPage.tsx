@@ -197,6 +197,18 @@ export default function AuthPage() {
   const showProviderSpecificActions = Boolean(capabilities) && !capabilitiesError;
   const showFallbackActions = Boolean(capabilitiesError);
 
+  const handleDevLogin = async (role: "user" | "admin") => {
+    setSubmitting(true);
+    setSelectedAction(`dev-${role}`);
+    try {
+      await authApi.devLogin({ role });
+      window.location.replace(role === "admin" ? "/account" : "/onboarding");
+    } finally {
+      setSubmitting(false);
+      setSelectedAction(null);
+    }
+  };
+
   return (
     <UahubLayout hideModuleNav>
       <div className="mx-auto max-w-3xl px-4 py-12 lg:px-6">
@@ -311,6 +323,47 @@ export default function AuthPage() {
               {!captchaReady ? (
                 <p className={`mt-3 text-xs ${isDark ? "text-slate-500" : "text-slate-400"}`}>{t("auth.captchaLoading")}</p>
               ) : null}
+            </div>
+          ) : null}
+
+          {capabilities?.dev_auth_enabled ? (
+            <div className={`rounded-2xl border p-4 ${isDark ? "border-amber-500/30 bg-amber-500/10" : "border-amber-200 bg-amber-50"}`}>
+              <p className={`text-sm font-semibold ${isDark ? "text-amber-100" : "text-amber-900"}`}>
+                Local development login
+              </p>
+              <p className={`mt-2 text-xs leading-6 ${isDark ? "text-amber-200/80" : "text-amber-800"}`}>
+                This shortcut is enabled only in local development. It bypasses external OIDC so you can test user and admin flows in the browser.
+              </p>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => void handleDevLogin("user")}
+                  disabled={submitting}
+                  className={`rounded-2xl border p-4 text-left transition ${submitting ? "cursor-not-allowed opacity-60" : "hover:-translate-y-0.5"} ${isDark ? "border-amber-400/30 bg-[#1a2d4c] text-slate-100" : "border-amber-200 bg-white text-slate-800"}`}
+                >
+                  <p className="text-sm font-semibold">Continue as test user</p>
+                  <p className={`mt-1 text-xs leading-6 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                    Opens onboarding and account flows without external auth provider.
+                  </p>
+                  {submitting && selectedAction === "dev-user" ? (
+                    <p className={`mt-3 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t("auth.redirecting")}</p>
+                  ) : null}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleDevLogin("admin")}
+                  disabled={submitting}
+                  className={`rounded-2xl border p-4 text-left transition ${submitting ? "cursor-not-allowed opacity-60" : "hover:-translate-y-0.5"} ${isDark ? "border-amber-400/30 bg-[#1a2d4c] text-slate-100" : "border-amber-200 bg-white text-slate-800"}`}
+                >
+                  <p className="text-sm font-semibold">Continue as test admin</p>
+                  <p className={`mt-1 text-xs leading-6 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                    Issues a local admin token using ADMIN_USER_ID and ADMIN_USER_EMAIL when configured.
+                  </p>
+                  {submitting && selectedAction === "dev-admin" ? (
+                    <p className={`mt-3 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t("auth.redirecting")}</p>
+                  ) : null}
+                </button>
+              </div>
             </div>
           ) : null}
         </section>

@@ -173,10 +173,15 @@ export function AccountBillingPanel() {
   const listings = (listingsQuery.data ?? []).filter((item) => item.status === "active" || item.status === "published");
 
   useEffect(() => {
+    const requestedProductCode = searchParams.get("product");
+    if (requestedProductCode && products.some((item) => item.code === requestedProductCode)) {
+      setSelectedProductCode(requestedProductCode);
+      return;
+    }
     if (!selectedProductCode && products.length > 0) {
       setSelectedProductCode(products[0].code);
     }
-  }, [products, selectedProductCode]);
+  }, [products, searchParams, selectedProductCode]);
 
   useEffect(() => {
     if (!selectedBusinessSlug && businesses[0]?.slug) {
@@ -185,10 +190,18 @@ export function AccountBillingPanel() {
   }, [businesses, selectedBusinessSlug]);
 
   useEffect(() => {
+    const requestedListingId = searchParams.get("listingId");
+    if (requestedListingId) {
+      const normalizedId = Number(requestedListingId);
+      if (!Number.isNaN(normalizedId) && listings.some((item) => item.id === normalizedId)) {
+        setSelectedListingId(normalizedId);
+        return;
+      }
+    }
     if (selectedListingId === null && listings[0]?.id) {
       setSelectedListingId(listings[0].id);
     }
-  }, [listings, selectedListingId]);
+  }, [listings, searchParams, selectedListingId]);
 
   const selectedProduct = useMemo(
     () => products.find((item) => item.code === selectedProductCode) ?? null,

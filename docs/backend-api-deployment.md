@@ -2,11 +2,17 @@
 
 ## Recommended service
 
+This document describes the current non-serverless FastAPI deployment shape. For a real shared staging cycle, keep these boundaries explicit:
+
+- frontend on Vercel
+- backend on a dedicated host or container service
+- Supabase can back `DATABASE_URL` and other data services where adopted later, but the current auth flow remains backend-owned OIDC until a separate migration is done
+
 Use a dedicated backend host, not Vercel Functions, for the current FastAPI app.
 
 Recommended baseline:
-- Render Web Service for `app/backend`
-- Render PostgreSQL for `DATABASE_URL`
+- dedicated backend host for `app/backend`
+- managed PostgreSQL for `DATABASE_URL` such as Supabase Postgres
 - Vercel only for `app/frontend`
 
 This matches the current repository architecture:
@@ -16,6 +22,8 @@ This matches the current repository architecture:
 ## Included deployment file
 
 The repository now contains [render.yaml](/Users/mikehalko/Documents/UAHUB/ua-hub/render.yaml).
+
+That file is still useful as a reference for a long-running backend service, but it is not the source of truth for a Supabase plus Vercel staging setup and still contains legacy variable names.
 
 It provisions:
 - `ua-hub-api` web service
@@ -30,8 +38,10 @@ It provisions:
 5. Set these required environment variables:
 
 ### Core
-- `PYTHON_BACKEND_URL=https://<your-render-backend-domain>`
-- `FRONTEND_URL=https://<your-vercel-frontend-domain>`
+- `APP_ENV=staging` for a shared staging stack or `APP_ENV=production` for live
+- `BACKEND_PUBLIC_URL=https://<your-backend-domain>`
+- `FRONTEND_PUBLIC_URL=https://<your-vercel-frontend-domain>`
+- `DATABASE_URL=<your-managed-postgres-connection-string>`
 
 ### Auth provider
 - `OIDC_ISSUER_URL`
@@ -53,7 +63,9 @@ It provisions:
 
 In the Vercel project, set:
 
-- `VITE_API_BASE_URL=https://<your-render-backend-domain>`
+- `VITE_PUBLIC_APP_ENV=staging` for shared staging or `production` for live
+- `VITE_API_BASE_URL=https://<your-backend-domain>`
+- `VITE_PUBLIC_SITE_URL=https://<your-vercel-frontend-domain>`
 - `VITE_TURNSTILE_SITE_KEY=<your-cloudflare-turnstile-site-key>`
 
 Then redeploy the frontend.
@@ -81,4 +93,41 @@ Then verify frontend integration from Vercel:
 
 - Mock data loading is disabled in the Render blueprint by default.
 - The frontend must point to the public backend URL through `VITE_API_BASE_URL`.
-- Keep one auth system only: the current hosted OIDC provider. Do not add Supabase Auth in parallel.
+- Keep one auth system only for this phase: the current hosted OIDC provider plus backend app JWT. Do not start a parallel Supabase Auth rollout inside staging prep.
+*** Add File: d:\Personal for DELETE\web proj\Ukrainians in Spain Platform_v7\app\backend\.env.staging.example
+APP_ENV=staging
+DEBUG=false
+DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@HOST:5432/uahub_staging
+JWT_SECRET_KEY=replace-in-staging-secret-store
+JWT_ALGORITHM=HS256
+JWT_EXPIRE_MINUTES=1440
+BACKEND_PUBLIC_URL=https://api-staging.example.com
+FRONTEND_PUBLIC_URL=https://staging.example.com
+ALLOWED_DOMAINS=staging.example.com,api-staging.example.com
+
+# Auth / OIDC secrets
+OIDC_ISSUER_URL=
+OIDC_CLIENT_ID=
+OIDC_CLIENT_SECRET=
+
+# Billing secrets
+STRIPE_SECRET_KEY=
+STRIPE_WEBHOOK_SECRET=
+
+# Supabase secret placeholders
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_JWT_SECRET=
+
+# Staging safety defaults
+DEV_AUTH_ENABLED=false
+MGX_LOAD_MOCK_DATA=false
+*** Add File: d:\Personal for DELETE\web proj\Ukrainians in Spain Platform_v7\app\frontend\.env.staging.example
+VITE_PUBLIC_APP_ENV=staging
+VITE_API_BASE_URL=https://api-staging.example.com
+VITE_PUBLIC_SITE_URL=https://staging.example.com
+VITE_TURNSTILE_SITE_KEY=
+
+# Supabase public placeholders
+VITE_PUBLIC_SUPABASE_URL=
+VITE_PUBLIC_SUPABASE_ANON_KEY=

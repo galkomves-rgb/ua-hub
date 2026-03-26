@@ -27,6 +27,13 @@ class TokenExchangeResponse(BaseModel):
     token: str
 
 
+class DevLoginRequest(BaseModel):
+    role: str = "user"
+    email: Optional[str] = None
+    name: Optional[str] = None
+    user_id: Optional[str] = None
+
+
 class AuthCapabilitiesResponse(BaseModel):
     google: bool
     apple: bool
@@ -35,6 +42,7 @@ class AuthCapabilitiesResponse(BaseModel):
     phone: bool
     turnstile_enabled: bool
     email_confirmation_required: bool
+    dev_auth_enabled: bool = False
 
 
 class LogoutResponse(BaseModel):

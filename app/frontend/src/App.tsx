@@ -24,7 +24,9 @@ import SearchPage from "./pages/SearchPage";
 import AuthPage from "./pages/AuthPage";
 import AuthCallback from "./pages/AuthCallback";
 import AuthError from "./pages/AuthError";
+import LogoutCallbackPage from "./pages/LogoutCallbackPage";
 import OnboardingPage from "./pages/OnboardingPage";
+import AdminModerationPage from "./pages/AdminModerationPage";
 
 const queryClient = new QueryClient();
 
@@ -88,6 +90,7 @@ const App = () => (
                 <Route path="/search" element={<SearchPage />} />
                 <Route path="/auth" element={<AuthPage />} />
                 <Route path="/onboarding" element={<OnboardingPage />} />
+                <Route path="/admin/moderation" element={<AdminModerationPage />} />
                 {/* Platform pages */}
                 <Route path="/pricing" element={<PricingPage />} />
                 <Route path="/about" element={<AboutPage />} />
@@ -96,6 +99,7 @@ const App = () => (
                 {/* Auth */}
                 <Route path="/auth/callback" element={<AuthCallback />} />
                 <Route path="/auth/error" element={<AuthError />} />
+                <Route path="/logout-callback" element={<LogoutCallbackPage />} />
               </Routes>
             </BrowserRouter>
           </TooltipProvider>

@@ -51,6 +51,50 @@ export function normalizeSectionLabels(moduleId: string, labels: string[] | unde
   return sortByPriority(Array.from(normalized));
 }
 
+export function deriveListingLabels(listing: {
+  module: string;
+  badges?: string[];
+  ownerType?: string;
+  owner_type?: string;
+  createdAt?: string;
+  created_at?: string;
+  isVerified?: boolean;
+  is_verified?: boolean;
+  isFeatured?: boolean;
+  is_featured?: boolean;
+  isPromoted?: boolean;
+  is_promoted?: boolean;
+}): LabelId[] {
+  const labels = new Set<LabelId>(normalizeSectionLabels(listing.module, listing.badges));
+  const ownerType = listing.ownerType ?? listing.owner_type;
+  const createdAt = listing.createdAt ?? listing.created_at;
+  const createdDate = createdAt ? new Date(createdAt) : null;
+  const isRecent = createdDate instanceof Date && !Number.isNaN(createdDate.getTime())
+    ? createdDate >= new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    : false;
+
+  if (ownerType === "business_profile" || ownerType === "organization") {
+    labels.add("business");
+  }
+  if (ownerType === "private_user") {
+    labels.add("private");
+  }
+  if (listing.isVerified ?? listing.is_verified) {
+    labels.add("verified");
+  }
+  if (listing.isFeatured ?? listing.is_featured) {
+    labels.add("featured");
+  }
+  if (listing.isPromoted ?? listing.is_promoted) {
+    labels.add("premium");
+  }
+  if (isRecent) {
+    labels.add("new");
+  }
+
+  return sortByPriority(Array.from(labels));
+}
+
 export function deriveBusinessLabels(biz: {
   isVerified?: boolean;
   verified?: boolean;

@@ -229,11 +229,18 @@ export type ListingManagementStatus =
   | "archived"
   | "active";
 
+export type ListingPricingTier = "free" | "basic" | "business";
+export type ListingVisibility = "standard" | "boosted" | "featured";
+
 export interface ListingManagementItem {
   id: number;
   title: string;
   module: string;
   category: string;
+  owner_type: string;
+  pricing_tier?: ListingPricingTier | null;
+  visibility?: ListingVisibility | null;
+  ranking_score?: number;
   status: ListingManagementStatus;
   created_at: string;
   expires_at: string | null;
@@ -245,6 +252,86 @@ export interface ListingManagementItem {
   is_verified: boolean;
   moderation_reason: string | null;
   badges: string | null;
+  images_json: string | null;
+}
+
+export interface ListingModerationPayload {
+  decision: "approve" | "reject";
+  moderation_reason?: string | null;
+  category?: string | null;
+  badges?: string[] | null;
+}
+
+export interface MonetizedListingCreatePayload {
+  module: string;
+  category: string;
+  subcategory?: string | null;
+  title: string;
+  description: string;
+  price?: string | null;
+  currency: string;
+  city: string;
+  region?: string | null;
+  owner_type: "private_user" | "business_profile" | "organization";
+  owner_id: string;
+  images_json: string;
+  meta_json: string;
+  pricing_tier?: ListingPricingTier | null;
+}
+
+export interface ListingUpdatePayload {
+  title?: string;
+  description?: string;
+  price?: string | null;
+  city?: string;
+  category?: string;
+  subcategory?: string | null;
+  region?: string | null;
+  images_json?: string;
+  meta_json?: string;
+}
+
+export interface SubscriptionCurrentResponse {
+  profile_type: "private" | "business";
+  has_active_subscription: boolean;
+  plan: "starter" | "growth" | "pro" | null;
+  status: string | null;
+  expires_at: string | null;
+  listing_quota: number | null;
+  active_listings_count: number;
+  remaining_listing_quota: number | null;
+  paywall_reason: string | null;
+}
+
+export type BillingProductCode =
+  | "listing_free"
+  | "listing_basic"
+  | "promotion_boost"
+  | "promotion_featured"
+  | "business_starter"
+  | "business_growth"
+  | "business_pro";
+
+export interface PaymentCreatePayload {
+  type: BillingProductCode;
+  listing_id?: number;
+  business_slug?: string;
+  success_url?: string;
+  cancel_url?: string;
+}
+
+export interface PaymentCreateResponse {
+  payment_id: number;
+  session_id: string;
+  checkout_url: string | null;
+  type: PaymentCreatePayload["type"];
+}
+
+export interface CreateListingPaywallError {
+  message: string;
+  required_product_code: BillingProductCode;
+  paywall_reason: string;
+  listing_id: number;
 }
 
 export interface MessagingConversationSummary {
@@ -471,12 +558,34 @@ export function fetchBillingOverview() {
   return accountFetch<BillingOverviewResponse>("/api/v1/billing/overview");
 }
 
+export function fetchBillingProducts() {
+  return accountFetch<BillingProduct[]>("/api/v1/billing/products");
+}
+
+export function fetchCurrentSubscription() {
+  return accountFetch<SubscriptionCurrentResponse>("/api/v1/subscriptions/current");
+}
+
 export function fetchBillingHistory(limit = 100) {
   return accountFetch<BillingHistoryItem[]>(`/api/v1/billing/history?limit=${limit}`);
 }
 
 export function createBillingCheckout(payload: BillingCheckoutPayload) {
   return accountFetch<BillingCheckoutResponse>("/api/v1/billing/checkout", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createPayment(payload: PaymentCreatePayload) {
+  return accountFetch<PaymentCreateResponse>("/api/v1/payments/create", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function confirmPayment(payload: BillingVerifyPayload) {
+  return accountFetch<{ payment: BillingHistoryItem }>("/api/v1/payments/confirm", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -545,11 +654,71 @@ export function fetchMyListings(filters?: {
   );
 }
 
+export function fetchMyMonetizedListings() {
+  return accountFetch<ListingManagementItem[]>("/api/v1/listings/my");
+}
+
+export async function createMonetizedListing(payload: MonetizedListingCreatePayload) {
+  const token = localStorage.getItem("auth_token");
+  const response = await fetch(`${getAPIBaseURL()}/api/v1/listings/create`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const raw = await response.text();
+  const parsed = raw ? JSON.parse(raw) : null;
+
+  if (response.status === 402) {
+    throw Object.assign(new Error(parsed?.detail?.message || "Payment required"), {
+      code: "PAYMENT_REQUIRED",
+      paywall: parsed?.detail as CreateListingPaywallError,
+    });
+  }
+
+  if (!response.ok) {
+    throw new Error(parsed?.detail || `Request failed with status ${response.status}`);
+  }
+
+  return parsed as { listing: { id: number }; payment_required: boolean; required_product_code: string | null; message: string | null };
+}
+
+export function createBoostPromotion(listingId: number) {
+  return accountFetch<PaymentCreateResponse>("/api/v1/promotions/boost", {
+    method: "POST",
+    body: JSON.stringify({ listing_id: listingId }),
+  });
+}
+
+export function createFeaturedPromotion(listingId: number) {
+  return accountFetch<PaymentCreateResponse>("/api/v1/promotions/featured", {
+    method: "POST",
+    body: JSON.stringify({ listing_id: listingId }),
+  });
+}
+
+export function activateSubscription(payload: { plan: "starter" | "growth" | "pro"; business_slug: string }) {
+  return accountFetch<PaymentCreateResponse>("/api/v1/subscriptions/activate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function archiveListing(listingId: number) {
   return accountFetch<{ id: number; status: ListingManagementStatus }>(
     `/api/v1/listings/${listingId}/archive`,
     { method: "POST" },
   );
+}
+
+export async function updateListing(listingId: number, payload: ListingUpdatePayload) {
+  return accountFetch<ListingManagementItem>(`/api/v1/listings/${listingId}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function renewListing(listingId: number) {
@@ -567,10 +736,29 @@ export async function boostListing(listingId: number) {
 }
 
 export async function submitListing(listingId: number) {
-  return accountFetch<{ id: number; status: ListingManagementStatus }>(
-    `/api/v1/listings/${listingId}/submit`,
-    { method: "POST" },
-  );
+  const token = localStorage.getItem("auth_token");
+  const response = await fetch(`${getAPIBaseURL()}/api/v1/listings/${listingId}/submit`, {
+    method: "POST",
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  const raw = await response.text();
+  const parsed = raw ? JSON.parse(raw) : null;
+
+  if (response.status === 402) {
+    throw Object.assign(new Error(parsed?.detail?.message || "Payment required"), {
+      code: "PAYMENT_REQUIRED",
+      paywall: parsed?.detail as CreateListingPaywallError,
+    });
+  }
+
+  if (!response.ok) {
+    throw new Error(parsed?.detail || `Request failed with status ${response.status}`);
+  }
+
+  return parsed as { id: number; status: ListingManagementStatus };
 }
 
 export async function duplicateListing(listingId: number) {
@@ -583,6 +771,33 @@ export async function deleteListing(listingId: number) {
   return accountFetch<void>(`/api/v1/listings/${listingId}`, {
     method: "DELETE",
   });
+}
+
+export function fetchModerationQueue(filters?: {
+  status?: "moderation_pending" | "rejected" | "all";
+  module?: string;
+}) {
+  const params = new URLSearchParams();
+  if (filters?.status) {
+    params.set("status", filters.status);
+  }
+  if (filters?.module) {
+    params.set("module", filters.module);
+  }
+  const suffix = params.toString();
+  return accountFetch<ListingManagementItem[]>(
+    `/api/v1/admin/listings/moderation-queue${suffix ? `?${suffix}` : ""}`,
+  );
+}
+
+export function moderateListing(listingId: number, payload: ListingModerationPayload) {
+  return accountFetch<{ id: number; status: ListingManagementStatus }>(
+    `/api/v1/admin/listings/${listingId}/moderate`,
+    {
+      method: "POST",
+      body: JSON.stringify(payload),
+    },
+  );
 }
 
 export function fetchMessagingInbox() {

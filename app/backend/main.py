@@ -172,8 +172,9 @@ async def general_exception_handler(request: Request, exc: Exception):
     # Log full error details regardless of environment
     logger.error(f"Exception: {error_type}: {error_message}\n{traceback.format_exc()}")
 
-    # Determine if we're in dev environment
-    is_dev = os.getenv("ENVIRONMENT", "prod").lower() == "dev"
+    # Determine if we're in local development environment
+    current_env = (os.getenv("APP_ENV") or os.getenv("ENVIRONMENT") or "production").lower()
+    is_dev = current_env in {"local", "dev"}
 
     if is_dev:
         # Dev environment: return full stack trace and exception details

@@ -18,6 +18,10 @@ class ListingManagementItem(BaseModel):
     title: str
     module: str
     category: str
+    owner_type: str | None = None
+    pricing_tier: str | None = None
+    visibility: str | None = None
+    ranking_score: int = 0
     status: str
     created_at: datetime
     expires_at: datetime | None = None
@@ -26,6 +30,8 @@ class ListingManagementItem(BaseModel):
     is_featured: bool
     is_promoted: bool
     moderation_reason: str | None = None
+    badges: str | None = None
+    images_json: str | None = None
 
     class Config:
         from_attributes = True

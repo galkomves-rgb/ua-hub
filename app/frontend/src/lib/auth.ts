@@ -12,6 +12,14 @@ export interface AuthCapabilities {
   phone: boolean;
   turnstile_enabled: boolean;
   email_confirmation_required: boolean;
+  dev_auth_enabled: boolean;
+}
+
+export interface DevLoginOptions {
+  role?: 'user' | 'admin';
+  email?: string;
+  name?: string;
+  user_id?: string;
 }
 
 export interface LogoutResponse {
@@ -90,6 +98,15 @@ class RPApi {
       url.searchParams.set('mode', options.mode);
     }
     window.location.href = url.toString();
+  }
+
+  async devLogin(options?: DevLoginOptions) {
+    const response = await this.client.post<TokenExchangeResponse>(
+      `${this.getBaseURL()}/api/v1/auth/dev-login`,
+      options ?? {}
+    );
+    localStorage.setItem('auth_token', response.data.token);
+    return response.data;
   }
 
   async logout() {

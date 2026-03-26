@@ -18,7 +18,6 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import {
   archiveListing,
-  boostListing,
   deleteListing,
   duplicateListing,
   fetchMyListings,
@@ -71,6 +70,20 @@ function getStatusLabel(status: ListingManagementStatus, locale: "ua" | "es" | "
   const key = `account.status.${status}`;
   const translated = t(key, locale);
   return translated === key ? status : translated;
+}
+
+function getPricingTierLabel(value: string | null | undefined, locale: "ua" | "es" | "en") {
+  if (value === "free") return locale === "ua" ? "Free" : locale === "es" ? "Gratis" : "Free";
+  if (value === "basic") return locale === "ua" ? "Basic" : locale === "es" ? "Básico" : "Basic";
+  if (value === "business") return locale === "ua" ? "Business" : locale === "es" ? "Empresa" : "Business";
+  return null;
+}
+
+function getVisibilityLabel(value: string | null | undefined, locale: "ua" | "es" | "en") {
+  if (value === "boosted") return locale === "ua" ? "Boosted" : locale === "es" ? "Impulsado" : "Boosted";
+  if (value === "featured") return locale === "ua" ? "Featured" : locale === "es" ? "Destacado" : "Featured";
+  if (value === "standard") return locale === "ua" ? "Standard" : locale === "es" ? "Estándar" : "Standard";
+  return null;
 }
 
 function parseBadges(rawBadges: string | null) {
@@ -154,6 +167,8 @@ function ListingRow({
           <div className="mb-2 flex flex-wrap items-center gap-2">
             <h3 className={`text-base font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{item.title}</h3>
             <ListingBadge label={getStatusLabel(item.status, locale)} tone="blue" />
+            {getPricingTierLabel(item.pricing_tier, locale) ? <ListingBadge label={getPricingTierLabel(item.pricing_tier, locale)!} tone="slate" /> : null}
+            {item.visibility && item.visibility !== "standard" && getVisibilityLabel(item.visibility, locale) ? <ListingBadge label={getVisibilityLabel(item.visibility, locale)!} tone="fuchsia" /> : null}
             {item.is_featured ? <ListingBadge label={t("account.listings.featured")} tone="amber" /> : null}
             {item.is_promoted ? <ListingBadge label={t("account.listings.promoted")} tone="fuchsia" /> : null}
             {badges.includes("urgent") ? <ListingBadge label={t("account.listings.urgent")} tone="red" /> : null}
@@ -187,6 +202,10 @@ function ListingRow({
             <p>
               <span className={`font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>{t("account.listings.saves")}:</span>{" "}
               {item.saved_count}
+            </p>
+            <p>
+              <span className={`font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>Ranking:</span>{" "}
+              {item.ranking_score ?? 0}
             </p>
           </div>
 
@@ -334,8 +353,20 @@ export function AccountListingsPanel() {
 
   const archiveMutation = useMutation({ mutationFn: archiveListing, onSuccess: invalidateListings });
   const renewMutation = useMutation({ mutationFn: renewListing, onSuccess: invalidateListings });
-  const boostMutation = useMutation({ mutationFn: boostListing, onSuccess: invalidateListings });
-  const submitMutation = useMutation({ mutationFn: submitListing, onSuccess: invalidateListings });
+  const submitMutation = useMutation({
+    mutationFn: submitListing,
+    onSuccess: invalidateListings,
+    onError: (error) => {
+      const paywall =
+        error && typeof error === "object" && "paywall" in error
+          ? (error as { paywall?: { required_product_code?: string; listing_id?: number } }).paywall
+          : null;
+
+      if (paywall?.required_product_code && paywall.listing_id) {
+        navigate(`/account?tab=billing&product=${paywall.required_product_code}&listingId=${paywall.listing_id}`);
+      }
+    },
+  });
   const deleteMutation = useMutation({ mutationFn: deleteListing, onSuccess: invalidateListings });
   const duplicateMutation = useMutation({
     mutationFn: duplicateListing,
@@ -348,7 +379,6 @@ export function AccountListingsPanel() {
   const activeMutationId =
     archiveMutation.variables ??
     renewMutation.variables ??
-    boostMutation.variables ??
     submitMutation.variables ??
     deleteMutation.variables ??
     duplicateMutation.variables ??
@@ -486,7 +516,7 @@ export function AccountListingsPanel() {
               isPending={activeMutationId === item.id}
               onArchive={handleArchive}
               onRenew={(listingId) => renewMutation.mutate(listingId)}
-              onBoost={(listingId) => boostMutation.mutate(listingId)}
+                  onBoost={(listingId) => navigate(`/account?tab=billing&product=promotion_boost&listingId=${listingId}`)}
               onDuplicate={(listingId) => duplicateMutation.mutate(listingId)}
               onDelete={handleDelete}
               onSubmit={(listingId) => submitMutation.mutate(listingId)}

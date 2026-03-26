@@ -44,32 +44,32 @@ def format_traceback() -> str:
 def initialize_dynamic_routes():
     """Initialize dynamic routes by scanning frontend dist directory"""
     global dynamic_routes_initialized, seo_paths
-    
+
     if dynamic_routes_initialized:
         return
-    
+
     dist_path = "/var/task/frontend/dist"
-    
+
     try:
         if os.path.exists(dist_path):
             for root, dirs, files in os.walk(dist_path):
                 if "index.html" in files:
                     rel_path = os.path.relpath(root, dist_path)
-                    
+
                     # Skip root index.html (for SPA)
                     if rel_path == ".":
                         continue
-                    
+
                     url_path = "/" + rel_path.replace(os.sep, "/")
-                    
+
                     # Only register SEO paths
                     if url_path == "/blog" or url_path.startswith("/blog/"):
                         seo_paths.add(url_path)
                         logger.info(f"Registered SEO route: {url_path}")
-        
+
         dynamic_routes_initialized = True
         logger.info(f"Dynamic routes initialized: seo_paths={len(seo_paths)}")
-        
+
     except Exception as e:
         logger.error(f"Failed to initialize dynamic routes: {e}\n{format_traceback()}")
         dynamic_routes_initialized = True
@@ -171,7 +171,7 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
     try:
         # Initialize dynamic routes on first request (cold start)
         initialize_dynamic_routes()
-        
+
         # Extract request information from the event
         # Support both API Gateway v1 and v2 event formats
         if "version" in event and event["version"] == "2.0":
@@ -247,25 +247,26 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         ):
             # Serve static files (includes .html for Google Search Console verification, etc.)
             return serve_static_file(path)
-        
+
         elif path == "/sitemap.xml":
             return serve_sitemap(request_domain)
-        
+
         elif path == "/robots.txt":
             return serve_robots()
-        
+
         # Dynamically registered routes: SEO HTML pages (only if exact path is registered)
         # Normalize path by removing trailing slash for matching
         elif path.rstrip("/") in seo_paths:
             return serve_seo_html(path, request_domain)
-        
+
         else:
             # Route to frontend (SPA) - ALL other paths go to frontend
             result = serve_frontend()
             return result
 
     except Exception as e:
-        error_info = f"{e}\n{format_traceback()}" if os.getenv("ENVIRONMENT", "prod").lower() == "dev" else str(e)
+        current_env = (os.getenv("APP_ENV") or os.getenv("ENVIRONMENT") or "production").lower()
+        error_info = f"{e}\n{format_traceback()}" if current_env in {"local", "dev"} else str(e)
         logger.error(f"Lambda handler error: {error_info}")
         return {
             "statusCode": 500,
@@ -418,9 +419,11 @@ def handle_config_request(headers: dict, query_params: dict) -> Dict[str, Any]:
     # Security: Only return frontend-required configuration
     # Define what frontend actually needs (based on code analysis)
     frontend_required_config = {
-        "API_BASE_URL": os.environ.get("VITE_API_BASE_URL", "http://127.0.0.1:8000")
-        # Only add other configs if frontend actually uses them
-        # DO NOT expose: VITE_FRONTEND_URL, secrets, internal URLs, etc.
+        "APP_ENV": os.environ.get("APP_ENV", os.environ.get("ENVIRONMENT", "local")),
+        "API_BASE_URL": os.environ.get("BACKEND_PUBLIC_URL") or os.environ.get("PYTHON_BACKEND_URL", "http://127.0.0.1:8000"),
+        "SITE_URL": os.environ.get("FRONTEND_PUBLIC_URL") or os.environ.get("FRONTEND_URL") or os.environ.get("PYTHON_FRONTEND_URL", "http://localhost:3000"),
+        "SUPABASE_URL": os.environ.get("VITE_PUBLIC_SUPABASE_URL", ""),
+        "SUPABASE_ANON_KEY": os.environ.get("VITE_PUBLIC_SUPABASE_ANON_KEY", ""),
     }
 
     # Security: Validate and sanitize the configuration
@@ -488,8 +491,11 @@ def sanitize_config(config: dict) -> dict:
 
     # Define allowed configuration keys that frontend actually uses
     allowed_keys = [
-        "API_BASE_URL"  # Only this is actually used by frontend
-        # Add other keys only if frontend code actually uses them
+        "APP_ENV",
+        "API_BASE_URL",
+        "SITE_URL",
+        "SUPABASE_URL",
+        "SUPABASE_ANON_KEY",
     ]
 
     # Only include allowed keys with validation
@@ -504,6 +510,16 @@ def sanitize_config(config: dict) -> dict:
                 else:
                     logger.debug(f"Invalid API_BASE_URL format: {url}")
                     sanitized[key] = "http://127.0.0.1:8000"  # Safe fallback
+            elif key in {"SITE_URL", "SUPABASE_URL"}:
+                value = config[key]
+                if isinstance(value, str) and (value == "" or value.startswith("http://") or value.startswith("https://")):
+                    sanitized[key] = value
+            elif key == "SUPABASE_ANON_KEY":
+                value = config[key]
+                sanitized[key] = value if isinstance(value, str) else ""
+            elif key == "APP_ENV":
+                value = str(config[key]).lower()
+                sanitized[key] = value if value in {"local", "preview", "staging", "production"} else "local"
             else:
                 sanitized[key] = config[key]
 
@@ -522,11 +538,11 @@ def serve_sitemap(request_domain: str = "") -> Dict[str, Any]:
     sitemap_path = "/var/task/frontend/dist/sitemap.xml"
     if not os.path.exists(sitemap_path):
         return {"statusCode": 404, "headers": {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"}, "body": "sitemap.xml not found"}
-    
+
     try:
         with open(sitemap_path, "r", encoding="utf-8") as f:
             content = replace_seo_domain(f.read(), request_domain)
-        
+
         return {
             "statusCode": 200,
             "headers": {"Content-Type": "application/xml", "Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"},
@@ -542,11 +558,11 @@ def serve_robots() -> Dict[str, Any]:
     robots_path = "/var/task/frontend/dist/robots.txt"
     if not os.path.exists(robots_path):
         return {"statusCode": 404, "headers": {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*"}, "body": "robots.txt not found"}
-    
+
     try:
         with open(robots_path, "r", encoding="utf-8") as f:
             content = f.read()
-        
+
         return {
             "statusCode": 200,
             "headers": {"Content-Type": "text/plain", "Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"},
@@ -560,14 +576,14 @@ def serve_robots() -> Dict[str, Any]:
 def serve_seo_html(path: str, request_domain: str = "") -> Dict[str, Any]:
     """Serve SEO HTML files from index.html"""
     html_path = f"/var/task/frontend/dist{path.rstrip('/')}/index.html"
-    
+
     if not os.path.exists(html_path):
         return {"statusCode": 404, "headers": {"Content-Type": "text/html", "Access-Control-Allow-Origin": "*"}, "body": "<html><body><h1>404 Not Found</h1></body></html>"}
-    
+
     try:
         with open(html_path, "r", encoding="utf-8") as f:
             content = replace_seo_domain(f.read(), request_domain)
-        
+
         return {
             "statusCode": 200,
             "headers": {"Content-Type": "text/html", "Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache"},

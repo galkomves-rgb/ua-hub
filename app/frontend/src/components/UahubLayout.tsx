@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ChevronDown, LogOut, Menu, MessageSquare, Search, User, X } from "lucide-react";
+import { ChevronDown, LogOut, Menu, MessageSquare, Search, Shield, User, X } from "lucide-react";
 import { createClient } from "@metagptx/web-sdk";
 import ThemeToggle from "@/components/ThemeToggle";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,7 +19,7 @@ export default function UahubLayout({ children, hideModuleNav }: LayoutProps) {
   const { theme } = useTheme();
   const { locale, setLocale } = useI18n();
   const { city, setCity } = useGlobalCity();
-  const { user, login, logout } = useAuth();
+  const { user, login, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const isDark = theme === "dark";
@@ -500,6 +500,15 @@ export default function UahubLayout({ children, hideModuleNav }: LayoutProps) {
                     >
                       {locale === "ua" ? "Мій акаунт" : locale === "es" ? "Mi cuenta" : "My account"}
                     </Link>
+                    {isAdmin ? (
+                      <Link
+                        to="/admin/moderation"
+                        className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${isDark ? "text-slate-200 hover:bg-[#162b49]" : "text-slate-700 hover:bg-slate-50"}`}
+                      >
+                        <Shield className="h-4 w-4" />
+                        {locale === "ua" ? "Модерація" : locale === "es" ? "Moderación" : "Moderation"}
+                      </Link>
+                    ) : null}
                     <button
                       type="button"
                       onClick={logout}

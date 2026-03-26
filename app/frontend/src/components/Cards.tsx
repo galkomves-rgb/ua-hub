@@ -5,8 +5,22 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
-import { deriveBusinessLabels, normalizeSectionLabels } from "@/lib/label-taxonomy";
+import { deriveBusinessLabels, deriveListingLabels } from "@/lib/label-taxonomy";
 import type { Listing, BusinessProfile } from "@/lib/platform";
+
+type ListingCardData = Listing & {
+  rawId?: number;
+  ownerType?: string;
+  ownerId?: string;
+  isFeatured?: boolean;
+  isPromoted?: boolean;
+  isVerified?: boolean;
+  image?: string;
+  date?: string;
+  shortDesc?: string;
+  authorType?: string;
+  authorName?: string;
+};
 
 // ─── Badge Component ───
 function Badge({ type }: { type: string }) {
@@ -62,14 +76,26 @@ function getMetaFieldIcon(key: string) {
 }
 
 // ─── Listing Card ───
-export function ListingCard({ listing }: { listing: Listing }) {
+export function ListingCard({ listing }: { listing: ListingCardData }) {
   const { theme } = useTheme();
   const { t } = useI18n();
   const isDark = theme === "dark";
 
   const isEvent = listing.module === "events";
   const hasImage = !!listing.image;
-  const normalizedBadges = normalizeSectionLabels(listing.module, listing.badges);
+  const description = listing.description || listing.shortDesc || "";
+  const ownerType = listing.ownerType || listing.authorType || "private_user";
+  const ownerLabel = listing.ownerId || listing.authorName || ownerType;
+  const mapsUrl = listing.meta?.google_maps_url || listing.meta?.maps_url || listing.meta?.location_url;
+  const normalizedBadges = deriveListingLabels({
+    module: listing.module,
+    badges: listing.badges,
+    ownerType,
+    createdAt: listing.createdAt,
+    isFeatured: listing.isFeatured,
+    isPromoted: listing.isPromoted,
+    isVerified: listing.isVerified,
+  });
 
   return (
     <Link
@@ -104,7 +130,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
 
         {/* Description */}
         <p className={`text-xs leading-relaxed mb-3 line-clamp-2 ${isDark ? "text-gray-500" : "text-gray-500"}`}>
-          {listing.description}
+          {description}
         </p>
 
         {/* Meta row */}
@@ -131,7 +157,7 @@ export function ListingCard({ listing }: { listing: Listing }) {
         {/* Module-specific meta */}
         {listing.meta && (
           <div className="flex flex-wrap gap-2 mb-3">
-            {Object.entries(listing.meta).filter(([k]) => !["time", "place"].includes(k)).map(([key, val]) => (
+            {Object.entries(listing.meta).filter(([k]) => !["time", "place", "contact", "google_maps_url", "maps_url", "location_url"].includes(k)).map(([key, val]) => (
               <span key={key} className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md ${
                 isDark ? "bg-[#1a2a40] text-gray-400" : "bg-gray-50 text-gray-500"
               }`}>
@@ -142,6 +168,12 @@ export function ListingCard({ listing }: { listing: Listing }) {
                 {val}
               </span>
             ))}
+            {mapsUrl ? (
+              <span className={`inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md ${isDark ? "bg-blue-900/30 text-blue-300" : "bg-blue-50 text-blue-700"}`}>
+                <MapPin className="w-3 h-3" />
+                {t("detail.location")}
+              </span>
+            ) : null}
           </div>
         )}
 
@@ -152,8 +184,8 @@ export function ListingCard({ listing }: { listing: Listing }) {
             {listing.city}
           </span>
           <span className={`flex items-center gap-1 text-[11px] ${isDark ? "text-gray-600" : "text-gray-400"}`}>
-            {listing.ownerType === "business_profile" ? <Briefcase className="w-3 h-3" /> : <User className="w-3 h-3" />}
-            {listing.ownerType}
+            {ownerType === "business_profile" || ownerType === "business" ? <Briefcase className="w-3 h-3" /> : <User className="w-3 h-3" />}
+            {ownerLabel}
           </span>
         </div>
       </div>

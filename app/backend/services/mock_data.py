@@ -22,7 +22,8 @@ async def initialize_mock_data():
         logger.info("Ignore initialize data")
         return
     should_load_mock_data = os.environ.get("MGX_LOAD_MOCK_DATA", "").lower() in ("1", "true", "yes")
-    is_dev_environment = os.environ.get("ENVIRONMENT", "").lower() == "dev"
+    current_env = (os.environ.get("APP_ENV") or os.environ.get("ENVIRONMENT") or "").lower()
+    is_dev_environment = current_env in {"local", "dev"}
     if not should_load_mock_data and not is_dev_environment:
         logger.info("Mock data initialization disabled outside explicit dev mode")
         return

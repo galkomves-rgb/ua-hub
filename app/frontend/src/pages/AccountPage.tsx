@@ -44,11 +44,23 @@ export default function AccountPage() {
   }, [searchParams]);
 
   useEffect(() => {
+    if (loading || user) {
+      return;
+    }
+
+    navigate("/auth", { replace: true });
+  }, [loading, navigate, user]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
     const requestedTab = searchParams.get("tab");
     if (!requestedTab || !ACCOUNT_TABS.includes(requestedTab as AccountTab)) {
       setSearchParams({ tab: "dashboard" }, { replace: true });
     }
-  }, [searchParams, setSearchParams]);
+  }, [searchParams, setSearchParams, user]);
 
   useEffect(() => {
     if (!user) {
@@ -129,19 +141,8 @@ export default function AccountPage() {
           >
             <h1 className="mb-3 text-2xl font-bold">{t("account.title")}</h1>
             <p className={`mb-6 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-              {t("account.loginRequired")}
+              {t("common.loading")}
             </p>
-            <button
-              type="button"
-              onClick={() => login()}
-              className={`rounded-2xl px-5 py-3 text-sm font-semibold ${
-                isDark
-                  ? "bg-gradient-to-r from-[#FFD700] to-[#e6c200] text-[#0d1a2e]"
-                  : "bg-gradient-to-r from-[#0057B8] to-[#0070E0] text-white"
-              }`}
-            >
-              {t("account.loginCta")}
-            </button>
           </div>
         </div>
       </UahubLayout>

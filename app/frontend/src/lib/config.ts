@@ -1,6 +1,10 @@
 // Runtime configuration
 let runtimeConfig: {
   API_BASE_URL: string;
+  APP_ENV: 'local' | 'preview' | 'staging' | 'production';
+  SITE_URL: string;
+  SUPABASE_URL: string;
+  SUPABASE_ANON_KEY: string;
 } | null = null;
 
 // Configuration loading state
@@ -9,6 +13,10 @@ let configLoading = true;
 // Default fallback configuration
 const defaultConfig = {
   API_BASE_URL: 'http://127.0.0.1:8000', // Only used if runtime config fails to load
+  APP_ENV: 'local' as const,
+  SITE_URL: 'http://localhost:3000',
+  SUPABASE_URL: '',
+  SUPABASE_ANON_KEY: '',
 };
 
 // Function to load runtime configuration
@@ -62,6 +70,10 @@ export function getConfig() {
   if (import.meta.env.VITE_API_BASE_URL) {
     const viteConfig = {
       API_BASE_URL: import.meta.env.VITE_API_BASE_URL,
+      APP_ENV: (import.meta.env.VITE_PUBLIC_APP_ENV as 'local' | 'preview' | 'staging' | 'production' | undefined) || 'local',
+      SITE_URL: (import.meta.env.VITE_PUBLIC_SITE_URL as string | undefined) || window.location.origin,
+      SUPABASE_URL: (import.meta.env.VITE_PUBLIC_SUPABASE_URL as string | undefined) || '',
+      SUPABASE_ANON_KEY: (import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY as string | undefined) || '',
     };
     console.log('Using Vite environment config');
     return viteConfig;
@@ -77,6 +89,10 @@ export function getAPIBaseURL(): string {
   return getConfig().API_BASE_URL;
 }
 
+export function getAppEnv(): 'local' | 'preview' | 'staging' | 'production' {
+  return getConfig().APP_ENV;
+}
+
 // For backward compatibility, but this should be avoided
 // Removed static export to prevent using stale config values
 // export const API_BASE_URL = getAPIBaseURL();
@@ -84,5 +100,17 @@ export function getAPIBaseURL(): string {
 export const config = {
   get API_BASE_URL() {
     return getAPIBaseURL();
+  },
+  get APP_ENV() {
+    return getAppEnv();
+  },
+  get SITE_URL() {
+    return getConfig().SITE_URL;
+  },
+  get SUPABASE_URL() {
+    return getConfig().SUPABASE_URL;
+  },
+  get SUPABASE_ANON_KEY() {
+    return getConfig().SUPABASE_ANON_KEY;
   },
 };

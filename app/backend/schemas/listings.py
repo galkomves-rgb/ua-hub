@@ -22,6 +22,8 @@ class ListingBase(BaseModel):
     region: str | None = Field(None, max_length=100)
     owner_type: str = Field(..., pattern="^(private_user|business_profile|organization)$")
     owner_id: str = Field(..., max_length=255)
+    pricing_tier: str = Field("free", pattern="^(free|basic|business)$")
+    visibility: str = Field("standard", pattern="^(standard|boosted|featured)$")
     badges: str | None = Field(None, max_length=1000)
     images_json: str = Field("[]", max_length=5000)
     meta_json: str = Field("{}", max_length=2000)
@@ -56,11 +58,22 @@ class ListingActionResponse(BaseModel):
         from_attributes = True
 
 
+class ListingModerationRequest(BaseModel):
+    decision: str = Field(..., pattern="^(approve|reject)$")
+    moderation_reason: str | None = Field(None, max_length=2000)
+    category: str | None = Field(None, min_length=1, max_length=100)
+    badges: list[str] | None = None
+
+
 class ListingSummaryResponse(BaseModel):
     id: int
     title: str
     module: str
     category: str
+    owner_type: str
+    pricing_tier: str | None = None
+    visibility: str | None = None
+    ranking_score: int = 0
     status: str = Field(..., pattern=LISTING_STATUS_PATTERN)
     created_at: datetime
     expires_at: datetime | None = None
@@ -72,6 +85,7 @@ class ListingSummaryResponse(BaseModel):
     is_verified: bool
     moderation_reason: str | None = None
     badges: str | None = None
+    images_json: str | None = None
 
     class Config:
         from_attributes = True
@@ -88,6 +102,7 @@ class ListingResponse(ListingBase):
     is_verified: bool
     moderation_reason: str | None = None
     views_count: int
+    ranking_score: int = 0
     created_at: datetime
     updated_at: datetime
 

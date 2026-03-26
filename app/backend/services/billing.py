@@ -8,101 +8,36 @@ import stripe
 from core.config import settings
 from models.billing import BillingAuditLog, BillingEntitlement, BillingPayment, BillingSubscription
 from models.listings import Listings
+from models.monetization import ListingPromotion
 from models.profiles import BusinessProfile
 from services.payment import CheckoutError, CheckoutSessionRequest, PaymentService
+from services.monetization import (
+    BUSINESS_PLAN_PRODUCT_MAP,
+    PRODUCT_CATALOG,
+    MonetizationService,
+    PRIVATE_FREE_PRODUCT_CODE,
+    PRIVATE_BASIC_PRODUCT_CODE,
+    PROMOTION_BOOST,
+    PROMOTION_FEATURED,
+)
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
 
-PRODUCT_CATALOG: dict[str, dict[str, Any]] = {
-    "listing_featured": {
-        "title": "Featured listing",
-        "description": "Highlights a listing in premium placements for 14 days.",
-        "category": "listing_addon",
+PUBLIC_PRODUCT_CATALOG: dict[str, dict[str, Any]] = {
+    PRIVATE_FREE_PRODUCT_CODE: {
+        "title": "Free",
+        "description": "Go live for 3 days.",
+        "category": "listing_trial",
         "target_type": "listing",
-        "amount": Decimal("12.00"),
+        "amount": Decimal("0.00"),
         "currency": "eur",
-        "duration_days": 14,
-        "entitlement_type": "featured",
-        "checkout_mode": "payment",
+        "duration_days": 3,
+        "listing_quota": 1,
     },
-    "listing_promoted": {
-        "title": "Promoted listing",
-        "description": "Boosts listing visibility across module feeds for 21 days.",
-        "category": "listing_addon",
-        "target_type": "listing",
-        "amount": Decimal("18.00"),
-        "currency": "eur",
-        "duration_days": 21,
-        "entitlement_type": "promoted",
-        "checkout_mode": "payment",
-    },
-    "listing_urgent": {
-        "title": "Urgent listing badge",
-        "description": "Adds an urgent badge to a listing for 7 days.",
-        "category": "listing_addon",
-        "target_type": "listing",
-        "amount": Decimal("7.00"),
-        "currency": "eur",
-        "duration_days": 7,
-        "entitlement_type": "urgent",
-        "checkout_mode": "payment",
-    },
-    "business_basic": {
-        "title": "Business Basic",
-        "description": "Monthly business subscription with directory presence and 10 active listings.",
-        "category": "business_subscription",
-        "target_type": "business_profile",
-        "amount": Decimal("29.00"),
-        "currency": "eur",
-        "duration_days": 30,
-        "entitlement_type": "business_subscription",
-        "plan_code": "basic",
-        "listing_quota": 10,
-        "is_premium": False,
-        "checkout_mode": "payment",
-    },
-    "business_premium": {
-        "title": "Business Premium",
-        "description": "Monthly premium business subscription with higher visibility and 30 active listings.",
-        "category": "business_subscription",
-        "target_type": "business_profile",
-        "amount": Decimal("59.00"),
-        "currency": "eur",
-        "duration_days": 30,
-        "entitlement_type": "business_subscription",
-        "plan_code": "premium",
-        "listing_quota": 30,
-        "is_premium": True,
-        "checkout_mode": "payment",
-    },
-    "business_growth": {
-        "title": "Business Growth",
-        "description": "Monthly top-tier business subscription with 60 active listings and maximum visibility.",
-        "category": "business_subscription",
-        "target_type": "business_profile",
-        "amount": Decimal("99.00"),
-        "currency": "eur",
-        "duration_days": 30,
-        "entitlement_type": "business_subscription",
-        "plan_code": "business",
-        "listing_quota": 60,
-        "is_premium": True,
-        "checkout_mode": "payment",
-    },
-    "business_verification": {
-        "title": "Business verification review",
-        "description": "One-time verification review fee for a business profile.",
-        "category": "verification_fee",
-        "target_type": "business_profile",
-        "amount": Decimal("19.00"),
-        "currency": "eur",
-        "duration_days": None,
-        "entitlement_type": "verification_review",
-        "checkout_mode": "payment",
-    },
+    **PRODUCT_CATALOG,
 }
 
 
@@ -155,6 +90,12 @@ class BillingService:
             "listing_quota": product.get("listing_quota"),
             "is_recurring": product["category"] == "business_subscription",
         }
+
+    def list_public_products(self) -> list[dict[str, Any]]:
+        return [
+            self._product_to_response(code, product)
+            for code, product in PUBLIC_PRODUCT_CATALOG.items()
+        ]
 
     async def _log_audit(
         self,
@@ -210,6 +151,7 @@ class BillingService:
 
     async def _sync_expired_billing_state(self, user_id: str) -> None:
         now = datetime.now(timezone.utc)
+        monetization_service = MonetizationService(self.db)
         entitlements_result = await self.db.execute(
             select(BillingEntitlement).where(
                 BillingEntitlement.user_id == user_id,
@@ -224,15 +166,16 @@ class BillingService:
             entitlement.status = "expired"
             changed = True
             if entitlement.listing_id:
-                listing = await self.db.get(Listings, entitlement.listing_id)
-                if listing:
-                    if entitlement.entitlement_type == "featured":
-                        listing.is_featured = False
-                    elif entitlement.entitlement_type == "promoted":
-                        listing.is_promoted = False
-                    elif entitlement.entitlement_type == "urgent":
-                        badges = self._parse_badges(listing.badges)
-                        listing.badges = self._dump_badges([badge for badge in badges if badge != "urgent"])
+                promotion_result = await self.db.execute(
+                    select(ListingPromotion).where(
+                        ListingPromotion.payment_id == entitlement.payment_id,
+                        ListingPromotion.status == "active",
+                    )
+                )
+                for promotion in promotion_result.scalars().all():
+                    promotion.status = "expired"
+                    promotion.updated_at = now
+                await monetization_service.recompute_listing_state(entitlement.listing_id)
             if entitlement.business_profile_id and entitlement.entitlement_type == "business_subscription":
                 business = await self.db.get(BusinessProfile, entitlement.business_profile_id)
                 if business and business.subscription_renewal_date and business.subscription_renewal_date <= now:
@@ -377,7 +320,7 @@ class BillingService:
             .where(
                 BillingEntitlement.user_id == user_id,
                 BillingEntitlement.status == "active",
-                BillingEntitlement.entitlement_type.in_(["featured", "promoted", "urgent"]),
+                BillingEntitlement.entitlement_type.in_([PROMOTION_FEATURED, PROMOTION_BOOST]),
             )
             .order_by(BillingEntitlement.ends_at.asc().nullslast(), BillingEntitlement.created_at.desc())
         )
@@ -456,8 +399,6 @@ class BillingService:
             owned_business = await self._get_owned_business(user_id, business_slug)
             if not owned_business:
                 raise ValueError("Business profile not found or does not belong to the current user")
-            if product_code == "business_verification" and owned_business.verification_status in {"pending", "verified"}:
-                raise ValueError("Business verification fee is not available for this profile")
 
         await self._ensure_checkout_ready()
 
@@ -471,7 +412,7 @@ class BillingService:
             target_type=target_type,
             title=product["title"],
             status="pending",
-            entitlement_status="pending" if product["category"] != "verification_fee" else "not_applicable",
+            entitlement_status="pending",
             amount_total=product["amount"],
             currency=product["currency"],
             checkout_mode=product.get("checkout_mode", "payment"),
@@ -574,30 +515,40 @@ class BillingService:
             payment.stripe_invoice_id = getattr(invoice, "id", None)
             payment.invoice_url = getattr(invoice, "hosted_invoice_url", None)
 
-        if product["category"] == "listing_addon":
+        monetization_service = MonetizationService(self.db)
+
+        if product["category"] == "listing_purchase":
+            listing = await self.db.get(Listings, payment.listing_id)
+            if listing:
+                listing.pricing_tier = product["pricing_tier"]
+                listing.visibility = product["visibility"]
+                listing.expiry_date = period_end
+                listing.updated_at = now
+                await monetization_service.recompute_listing_state(listing.id)
+
+        elif product["category"] == "listing_promotion":
             entitlement = BillingEntitlement(
                 user_id=payment.user_id,
                 payment_id=payment.id,
                 listing_id=payment.listing_id,
-                entitlement_type=product["entitlement_type"],
+                entitlement_type=product["promotion_type"],
                 status="active",
                 starts_at=period_start,
                 ends_at=period_end,
                 metadata_json=self._serialize_metadata(metadata),
             )
             self.db.add(entitlement)
-            listing = await self.db.get(Listings, payment.listing_id)
-            if listing:
-                if product["entitlement_type"] == "featured":
-                    listing.is_featured = True
-                elif product["entitlement_type"] == "promoted":
-                    listing.is_promoted = True
-                elif product["entitlement_type"] == "urgent":
-                    badges = self._parse_badges(listing.badges)
-                    if "urgent" not in badges:
-                        badges.append("urgent")
-                    listing.badges = self._dump_badges(badges)
+            promotion = ListingPromotion(
+                listing_id=payment.listing_id,
+                payment_id=payment.id,
+                promotion_type=product["promotion_type"],
+                status="active",
+                starts_at=period_start,
+                expires_at=period_end,
+            )
+            self.db.add(promotion)
             await self.db.flush()
+            await monetization_service.recompute_listing_state(payment.listing_id)
             await self._log_audit(
                 action="listing_entitlement_activated",
                 payment_id=payment.id,
@@ -605,7 +556,7 @@ class BillingService:
                 actor_user_id=payment.user_id,
                 from_status="pending",
                 to_status="active",
-                metadata={"listing_id": payment.listing_id, "entitlement_type": product["entitlement_type"]},
+                metadata={"listing_id": payment.listing_id, "entitlement_type": product["promotion_type"]},
             )
 
         elif product["category"] == "business_subscription":
@@ -654,6 +605,14 @@ class BillingService:
                 business.listing_quota = product["listing_quota"]
                 business.is_premium = bool(product.get("is_premium"))
             await self.db.flush()
+            listings_result = await self.db.execute(
+                select(Listings.id).where(
+                    Listings.owner_type == "business_profile",
+                    Listings.owner_id == business.slug if business else "",
+                )
+            )
+            for listing_id in listings_result.scalars().all():
+                await monetization_service.recompute_listing_state(int(listing_id))
             await self._log_audit(
                 action="business_subscription_activated",
                 payment_id=payment.id,
@@ -663,21 +622,6 @@ class BillingService:
                 from_status="pending",
                 to_status="active",
                 metadata={"business_profile_id": payment.business_profile_id, "plan_code": product["plan_code"]},
-            )
-
-        elif product["category"] == "verification_fee":
-            business = await self.db.get(BusinessProfile, payment.business_profile_id)
-            if business:
-                business.verification_status = "pending"
-                if not business.verification_requested_at:
-                    business.verification_requested_at = now
-            await self._log_audit(
-                action="business_verification_paid",
-                payment_id=payment.id,
-                actor_user_id=payment.user_id,
-                from_status="pending",
-                to_status="paid",
-                metadata={"business_profile_id": payment.business_profile_id},
             )
 
         await self.db.commit()
