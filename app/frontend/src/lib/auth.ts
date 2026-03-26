@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import { getAPIBaseURL } from './config';
+import { getSupabaseClient } from './supabase';
 
 type AuthMethod = 'google' | 'apple' | 'email' | 'phone';
 type AuthMode = 'login' | 'register';
@@ -15,6 +16,12 @@ export interface AuthCapabilities {
   dev_auth_enabled: boolean;
   oidc_configured: boolean;
   missing_settings: string[];
+  supabase_configured: boolean;
+  missing_supabase_settings: string[];
+}
+
+interface EmailAuthResult {
+  requiresEmailConfirmation: boolean;
 }
 
 export interface DevLoginOptions {
@@ -88,6 +95,72 @@ class RPApi {
     return response.data;
   }
 
+  private async exchangeSupabaseAccessToken(accessToken: string) {
+    const response = await this.client.post<TokenExchangeResponse>(
+      `${this.getBaseURL()}/api/v1/auth/supabase/exchange`,
+      { access_token: accessToken }
+    );
+    localStorage.setItem('auth_token', response.data.token);
+    return response.data.token;
+  }
+
+  async restoreSession() {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      return null;
+    }
+
+    const { data, error } = await supabase.auth.getSession();
+    if (error || !data.session?.access_token) {
+      return null;
+    }
+
+    return this.exchangeSupabaseAccessToken(data.session.access_token);
+  }
+
+  async signInWithEmail(email: string, password: string) {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      throw new Error('Supabase auth is not configured in the frontend environment');
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      throw new Error(error.message);
+    }
+    if (!data.session?.access_token) {
+      throw new Error('Supabase did not return an authenticated session');
+    }
+
+    await this.exchangeSupabaseAccessToken(data.session.access_token);
+  }
+
+  async signUpWithEmail(email: string, password: string): Promise<EmailAuthResult> {
+    const supabase = getSupabaseClient();
+    if (!supabase) {
+      throw new Error('Supabase auth is not configured in the frontend environment');
+    }
+
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${window.location.origin}/auth`,
+      },
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (!data.session?.access_token) {
+      return { requiresEmailConfirmation: true };
+    }
+
+    await this.exchangeSupabaseAccessToken(data.session.access_token);
+    return { requiresEmailConfirmation: false };
+  }
+
   async startOidcLogin(options?: StartOidcLoginOptions) {
     const url = new URL(`${this.getBaseURL()}/api/v1/auth/login`);
     if (options?.captchaToken) {
@@ -112,8 +185,17 @@ class RPApi {
   }
 
   async logout() {
+    const supabase = getSupabaseClient();
+    if (supabase) {
+      await supabase.auth.signOut().catch(() => undefined);
+    }
+
     try {
       const token = localStorage.getItem('auth_token');
+      if (!token) {
+        window.location.href = '/logout-callback';
+        return;
+      }
       const response = await this.client.get<LogoutResponse>(
         `${this.getBaseURL()}/api/v1/auth/logout`,
         token
@@ -128,7 +210,8 @@ class RPApi {
       // The backend will redirect to OIDC provider logout
       window.location.href = response.data.redirect_url;
     } catch (error) {
-      throw new Error(error.response?.data?.detail || 'Failed to logout');
+      localStorage.removeItem('auth_token');
+      window.location.href = '/logout-callback';
     }
   }
 

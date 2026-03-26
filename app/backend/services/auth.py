@@ -27,7 +27,8 @@ class AuthService:
         if existing_user:
             existing_user.email = user.email
             existing_user.name = user.name
-            existing_user.role = user.role or existing_user.role
+            if user.role and not (existing_user.role == "admin" and user.role != "admin"):
+                existing_user.role = user.role
             existing_user.last_login = last_login
             await self.db.flush()
             return existing_user

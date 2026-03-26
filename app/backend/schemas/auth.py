@@ -27,6 +27,10 @@ class TokenExchangeResponse(BaseModel):
     token: str
 
 
+class SupabaseTokenExchangeRequest(BaseModel):
+    access_token: str
+
+
 class DevLoginRequest(BaseModel):
     role: str = "user"
     email: Optional[str] = None
@@ -45,6 +49,8 @@ class AuthCapabilitiesResponse(BaseModel):
     dev_auth_enabled: bool = False
     oidc_configured: bool = False
     missing_settings: list[str] = []
+    supabase_configured: bool = False
+    missing_supabase_settings: list[str] = []
 
 
 class LogoutResponse(BaseModel):

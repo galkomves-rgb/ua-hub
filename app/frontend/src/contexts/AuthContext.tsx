@@ -48,7 +48,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       setLoading(true);
       setError(null);
-      const userData = await authApi.getCurrentUser();
+      let userData = await authApi.getCurrentUser();
+      if (!userData) {
+        const restoredToken = await authApi.restoreSession();
+        if (restoredToken) {
+          userData = await authApi.getCurrentUser();
+        }
+      }
       setUser(userData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');

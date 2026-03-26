@@ -2,7 +2,7 @@ import logging
 import os
 import time
 from typing import Optional
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 import httpx
 from core.auth import (
@@ -28,6 +28,7 @@ from schemas.auth import (
     DevLoginRequest,
     LogoutResponse,
     PlatformTokenExchangeRequest,
+    SupabaseTokenExchangeRequest,
     TokenExchangeResponse,
     UserResponse,
 )
@@ -45,10 +46,16 @@ REQUIRED_OIDC_SETTINGS = {
     "oidc_client_secret": "OIDC_CLIENT_SECRET",
     "oidc_scope": "OIDC_SCOPE",
 }
+SUPABASE_PUBLIC_KEY_ENV_CANDIDATES = (
+    "SUPABASE_ANON_KEY",
+    "SUPABASE_PUBLISHABLE_KEY",
+    "VITE_PUBLIC_SUPABASE_ANON_KEY",
+)
 AUTH_RATE_LIMITS: dict[str, tuple[int, int]] = {
     "login": (5, 300),
     "callback": (20, 300),
     "token_exchange": (10, 300),
+    "supabase_exchange": (15, 300),
     "logout": (20, 300),
     "logout_all": (10, 300),
 }
@@ -92,9 +99,89 @@ def ensure_oidc_is_configured() -> None:
         )
 
 
+def get_supabase_url() -> str:
+    configured_url = str(getattr(settings, "supabase_url", "") or os.getenv("VITE_PUBLIC_SUPABASE_URL", "")).strip()
+    if configured_url:
+        return configured_url.rstrip("/")
+
+    database_url = str(getattr(settings, "database_url", "") or "").strip()
+    if not database_url:
+        return ""
+
+    try:
+        parsed = urlparse(database_url)
+        username = parsed.username or ""
+        if username.startswith("postgres."):
+            project_ref = username.split(".", 1)[1]
+            return f"https://{project_ref}.supabase.co"
+    except Exception:
+        logger.debug("Failed to derive Supabase URL from DATABASE_URL", exc_info=True)
+
+    return ""
+
+
+def get_supabase_public_key() -> str:
+    for env_name in SUPABASE_PUBLIC_KEY_ENV_CANDIDATES:
+        value = (os.getenv(env_name) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def get_missing_supabase_settings() -> list[str]:
+    missing_settings: list[str] = []
+    if not get_supabase_url():
+        missing_settings.append("SUPABASE_URL")
+    if not get_supabase_public_key():
+        missing_settings.append("SUPABASE_ANON_KEY or SUPABASE_PUBLISHABLE_KEY")
+    return missing_settings
+
+
+def ensure_supabase_is_configured() -> None:
+    missing_settings = get_missing_supabase_settings()
+    if missing_settings:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Supabase authentication is not configured. Missing settings: "
+                + ", ".join(missing_settings)
+            ),
+        )
+
+
+async def get_supabase_user(access_token: str) -> dict:
+    supabase_url = get_supabase_url()
+    public_key = get_supabase_public_key()
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "apikey": public_key,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(f"{supabase_url}/auth/v1/user", headers=headers)
+    except httpx.HTTPError as exc:
+        logger.error("Supabase user lookup failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Unable to verify Supabase session") from exc
+
+    if response.status_code != status.HTTP_200_OK:
+        logger.warning("Supabase user lookup rejected token: status=%s body=%s", response.status_code, response.text)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Supabase session")
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        logger.error("Supabase user lookup returned invalid JSON")
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Invalid Supabase auth response") from exc
+
+    return payload
+
+
 def get_auth_capabilities() -> AuthCapabilitiesResponse:
     missing_settings = get_missing_oidc_settings()
     oidc_configured = not missing_settings
+    missing_supabase_settings = get_missing_supabase_settings()
+    supabase_configured = not missing_supabase_settings
     google_enabled = _env_flag("OIDC_ENABLE_GOOGLE_AUTH") or bool(getattr(settings, "oidc_google_connection", ""))
     apple_enabled = _env_flag("OIDC_ENABLE_APPLE_AUTH") or bool(getattr(settings, "oidc_apple_connection", ""))
     email_enabled = _env_flag("OIDC_ENABLE_EMAIL_AUTH") or bool(getattr(settings, "oidc_email_connection", ""))
@@ -104,14 +191,16 @@ def get_auth_capabilities() -> AuthCapabilitiesResponse:
     return AuthCapabilitiesResponse(
         google=oidc_configured and google_enabled,
         apple=oidc_configured and apple_enabled,
-        email_login=oidc_configured and email_enabled,
-        email_signup=oidc_configured and email_enabled,
+        email_login=(oidc_configured and email_enabled) or supabase_configured,
+        email_signup=(oidc_configured and email_enabled) or supabase_configured,
         phone=oidc_configured and phone_enabled,
         turnstile_enabled=turnstile_enabled,
         email_confirmation_required=email_confirmation_required,
         dev_auth_enabled=_dev_auth_enabled(),
         oidc_configured=oidc_configured,
         missing_settings=missing_settings,
+        supabase_configured=supabase_configured,
+        missing_supabase_settings=missing_supabase_settings,
     )
 
 
@@ -213,6 +302,42 @@ async def dev_login(
     auth_service = AuthService(db)
     token, _expires_at, _claims = await auth_service.issue_app_token(
         user=User(id=user_id, email=email, name=name, role=role),
+        user_agent=request.headers.get("user-agent"),
+        ip_address=_get_request_ip(request),
+    )
+    return TokenExchangeResponse(token=token)
+
+
+@router.post("/supabase/exchange", response_model=TokenExchangeResponse)
+async def exchange_supabase_token(
+    payload: SupabaseTokenExchangeRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    _enforce_auth_rate_limit(request, "supabase_exchange")
+    ensure_supabase_is_configured()
+
+    profile = await get_supabase_user(payload.access_token)
+    user_id = str(profile.get("id") or "").strip()
+    email = str(profile.get("email") or "").strip().lower()
+    if not user_id or not email:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Supabase session is missing user identity")
+
+    email_confirmed = bool(profile.get("email_confirmed_at") or profile.get("confirmed_at"))
+    if get_auth_capabilities().email_confirmation_required and not email_confirmed:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Please confirm your email address before continuing")
+
+    user_metadata = profile.get("user_metadata") or {}
+    default_name = derive_name_from_email(email)
+    name = str(user_metadata.get("name") or user_metadata.get("full_name") or default_name).strip() or default_name
+
+    admin_user_id = str(getattr(settings, "admin_user_id", "") or "").strip()
+    admin_user_email = str(getattr(settings, "admin_user_email", "") or "").strip().lower()
+    resolved_role = "admin" if user_id == admin_user_id or (admin_user_email and email == admin_user_email) else "user"
+
+    auth_service = AuthService(db)
+    token, _expires_at, _claims = await auth_service.issue_app_token(
+        user=User(id=user_id, email=email, name=name, role=resolved_role),
         user_agent=request.headers.get("user-agent"),
         ip_address=_get_request_ip(request),
     )

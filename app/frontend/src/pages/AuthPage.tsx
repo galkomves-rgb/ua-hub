@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Mail, ShieldCheck } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import UahubLayout from "@/components/UahubLayout";
 import { authApi, type AuthCapabilities } from "@/lib/auth";
 import { useTheme } from "@/lib/ThemeContext";
@@ -33,6 +36,12 @@ export default function AuthPage() {
   const [capabilitiesError, setCapabilitiesError] = useState<string | null>(null);
   const [capabilitiesLoading, setCapabilitiesLoading] = useState(true);
   const [selectedAction, setSelectedAction] = useState<string | null>(null);
+  const [emailMode, setEmailMode] = useState<"login" | "register">("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [emailAuthError, setEmailAuthError] = useState<string | null>(null);
+  const [emailAuthMessage, setEmailAuthMessage] = useState<string | null>(null);
   const widgetRef = useRef<HTMLDivElement | null>(null);
   const widgetIdRef = useRef<string | null>(null);
 
@@ -110,6 +119,7 @@ export default function AuthPage() {
 
   const requiresCaptcha = Boolean(capabilities?.turnstile_enabled);
   const turnstileMisconfigured = requiresCaptcha && !turnstileSiteKey;
+  const useSupabaseEmailAuth = Boolean(capabilities?.supabase_configured && !capabilities?.oidc_configured);
 
   const authActions = [
     {
@@ -174,6 +184,7 @@ export default function AuthPage() {
 
   const hasEnabledProviderActions = authActions.some((action) => action.enabled);
   const missingSettings = capabilities?.missing_settings ?? [];
+  const missingSupabaseSettings = capabilities?.missing_supabase_settings ?? [];
 
   const handleStart = async (
     mode: "login" | "register",
@@ -197,8 +208,41 @@ export default function AuthPage() {
     }
   };
 
-  const showProviderSpecificActions = Boolean(capabilities) && !capabilitiesError;
-  const showFallbackActions = Boolean(capabilitiesError) || Boolean(capabilities?.oidc_configured && !hasEnabledProviderActions);
+  const showProviderSpecificActions = Boolean(capabilities) && !capabilitiesError && !useSupabaseEmailAuth;
+  const showFallbackActions =
+    !useSupabaseEmailAuth && (Boolean(capabilitiesError) || Boolean(capabilities?.oidc_configured && !hasEnabledProviderActions));
+
+  const handleEmailSubmit = async () => {
+    setEmailAuthError(null);
+    setEmailAuthMessage(null);
+
+    if (emailMode === "register" && password !== confirmPassword) {
+      setEmailAuthError(t("auth.passwordMismatch"));
+      return;
+    }
+
+    setSubmitting(true);
+    setSelectedAction(`email-${emailMode}`);
+    try {
+      if (emailMode === "login") {
+        await authApi.signInWithEmail(email.trim(), password);
+        window.location.replace("/onboarding");
+        return;
+      }
+
+      const result = await authApi.signUpWithEmail(email.trim(), password);
+      if (result.requiresEmailConfirmation) {
+        setEmailAuthMessage(t("auth.emailConfirmCheckInbox"));
+      } else {
+        window.location.replace("/onboarding");
+      }
+    } catch (error) {
+      setEmailAuthError(error instanceof Error ? error.message : t("auth.emailAuthFailed"));
+    } finally {
+      setSubmitting(false);
+      setSelectedAction(null);
+    }
+  };
 
   const handleDevLogin = async (role: "user" | "admin") => {
     setSubmitting(true);
@@ -265,14 +309,56 @@ export default function AuthPage() {
                 })}
               </div>
             ) : null}
+            {useSupabaseEmailAuth ? (
+              <div className={`mt-4 rounded-2xl border p-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+                <div className="mb-4 flex flex-wrap gap-2">
+                  <Button type="button" variant={emailMode === "login" ? "default" : "outline"} onClick={() => setEmailMode("login")}>
+                    {t("auth.submitLogin")}
+                  </Button>
+                  <Button type="button" variant={emailMode === "register" ? "default" : "outline"} onClick={() => setEmailMode("register")}>
+                    {t("auth.submitRegister")}
+                  </Button>
+                </div>
+                <div className="grid gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="auth-email">{t("auth.emailLabel")}</Label>
+                    <Input id="auth-email" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="auth-password">{t("auth.passwordLabel")}</Label>
+                    <Input id="auth-password" type="password" autoComplete={emailMode === "login" ? "current-password" : "new-password"} value={password} onChange={(event) => setPassword(event.target.value)} />
+                  </div>
+                  {emailMode === "register" ? (
+                    <div className="grid gap-2">
+                      <Label htmlFor="auth-confirm-password">{t("auth.confirmPasswordLabel")}</Label>
+                      <Input id="auth-confirm-password" type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} />
+                    </div>
+                  ) : null}
+                  {emailAuthError ? (
+                    <p className={`text-sm ${isDark ? "text-red-300" : "text-red-600"}`}>{emailAuthError}</p>
+                  ) : null}
+                  {emailAuthMessage ? (
+                    <p className={`text-sm ${isDark ? "text-emerald-300" : "text-emerald-700"}`}>{emailAuthMessage}</p>
+                  ) : null}
+                  <Button type="button" onClick={() => void handleEmailSubmit()} disabled={submitting || !email.trim() || !password.trim()}>
+                    {submitting && selectedAction === `email-${emailMode}` ? t("auth.redirecting") : emailMode === "login" ? t("auth.submitLogin") : t("auth.submitRegister")}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
             {capabilities && !capabilities.oidc_configured ? (
               <div className={`mt-4 flex items-start gap-3 rounded-2xl border p-4 ${isDark ? "border-red-900/40 bg-red-950/20" : "border-red-200 bg-red-50"}`}>
                 <AlertCircle className={`mt-0.5 h-5 w-5 shrink-0 ${isDark ? "text-red-300" : "text-red-600"}`} />
                 <div>
-                  <p className={`text-sm ${isDark ? "text-red-300" : "text-red-600"}`}>{t("auth.oidcMissingConfig")}</p>
+                  <p className={`text-sm ${isDark ? "text-red-300" : "text-red-600"}`}>{useSupabaseEmailAuth ? t("auth.oidcOptionalNotice") : t("auth.oidcMissingConfig")}</p>
                   {missingSettings.length ? (
                     <p className={`mt-2 text-xs ${isDark ? "text-red-200" : "text-red-700"}`}>
                       {t("auth.oidcMissingConfigListPrefix")} {missingSettings.join(", ")}
+                    </p>
+                  ) : null}
+                  {!useSupabaseEmailAuth && missingSupabaseSettings.length ? (
+                    <p className={`mt-2 text-xs ${isDark ? "text-red-200" : "text-red-700"}`}>
+                      {t("auth.supabaseMissingConfigListPrefix")} {missingSupabaseSettings.join(", ")}
                     </p>
                   ) : null}
                 </div>
