@@ -46,12 +46,51 @@ export function redirectToAuthEntry() {
   window.location.href = '/auth';
 }
 
+function getErrorDetail(data: unknown): string | null {
+  if (!data || typeof data !== 'object') {
+    return null;
+  }
+
+  const detail = 'detail' in data ? data.detail : null;
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail.trim();
+  }
+
+  const message = 'message' in data ? data.message : null;
+  if (typeof message === 'string' && message.trim()) {
+    return message.trim();
+  }
+
+  return null;
+}
+
+function normalizeAuthError(error: unknown, fallbackMessage: string): Error {
+  if (axios.isAxiosError(error)) {
+    const detail = getErrorDetail(error.response?.data);
+    if (detail) {
+      return new Error(detail);
+    }
+
+    if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
+      return new Error('Unable to reach the authentication service. Please try again in a moment.');
+    }
+  }
+
+  if (error instanceof Error) {
+    if (/network/i.test(error.message)) {
+      return new Error('Unable to reach the authentication service. Please try again in a moment.');
+    }
+    return error;
+  }
+
+  return new Error(fallbackMessage);
+}
+
 class RPApi {
   private client: AxiosInstance;
 
   constructor() {
     this.client = axios.create({
-      withCredentials: true,
       headers: {
         'Content-Type': 'application/json',
       },
@@ -80,9 +119,7 @@ class RPApi {
       if (error.response?.status === 401) {
         return null;
       }
-      throw new Error(
-        error.response?.data?.detail || 'Failed to get user info'
-      );
+      throw normalizeAuthError(error, 'Failed to get user info');
     }
   }
 
@@ -96,12 +133,16 @@ class RPApi {
   }
 
   private async exchangeSupabaseAccessToken(accessToken: string) {
-    const response = await this.client.post<TokenExchangeResponse>(
-      `${this.getBaseURL()}/api/v1/auth/supabase/exchange`,
-      { access_token: accessToken }
-    );
-    localStorage.setItem('auth_token', response.data.token);
-    return response.data.token;
+    try {
+      const response = await this.client.post<TokenExchangeResponse>(
+        `${this.getBaseURL()}/api/v1/auth/supabase/exchange`,
+        { access_token: accessToken }
+      );
+      localStorage.setItem('auth_token', response.data.token);
+      return response.data.token;
+    } catch (error) {
+      throw normalizeAuthError(error, 'Failed to complete sign in');
+    }
   }
 
   async restoreSession() {
@@ -124,15 +165,19 @@ class RPApi {
       throw new Error('Supabase auth is not configured in the frontend environment');
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      throw new Error(error.message);
-    }
-    if (!data.session?.access_token) {
-      throw new Error('Supabase did not return an authenticated session');
-    }
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        throw error;
+      }
+      if (!data.session?.access_token) {
+        throw new Error('Supabase did not return an authenticated session');
+      }
 
-    await this.exchangeSupabaseAccessToken(data.session.access_token);
+      await this.exchangeSupabaseAccessToken(data.session.access_token);
+    } catch (error) {
+      throw normalizeAuthError(error, 'Failed to sign in with email');
+    }
   }
 
   async signUpWithEmail(email: string, password: string): Promise<EmailAuthResult> {
@@ -141,24 +186,28 @@ class RPApi {
       throw new Error('Supabase auth is not configured in the frontend environment');
     }
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth`,
-      },
-    });
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth`,
+        },
+      });
 
-    if (error) {
-      throw new Error(error.message);
+      if (error) {
+        throw error;
+      }
+
+      if (!data.session?.access_token) {
+        return { requiresEmailConfirmation: true };
+      }
+
+      await this.exchangeSupabaseAccessToken(data.session.access_token);
+      return { requiresEmailConfirmation: false };
+    } catch (error) {
+      throw normalizeAuthError(error, 'Failed to sign up with email');
     }
-
-    if (!data.session?.access_token) {
-      return { requiresEmailConfirmation: true };
-    }
-
-    await this.exchangeSupabaseAccessToken(data.session.access_token);
-    return { requiresEmailConfirmation: false };
   }
 
   async startOidcLogin(options?: StartOidcLoginOptions) {
@@ -232,7 +281,7 @@ class RPApi {
       localStorage.removeItem('auth_token');
       window.location.href = response.data.redirect_url;
     } catch (error) {
-      throw new Error(error.response?.data?.detail || 'Failed to logout from all devices');
+      throw normalizeAuthError(error, 'Failed to logout from all devices');
     }
   }
 }

@@ -5,6 +5,10 @@
   "outputDirectory": "app/frontend/dist",
   "rewrites": [
     {
+      "source": "/api/config",
+      "destination": "https://ua-hub-api-production.up.railway.app/api/config"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

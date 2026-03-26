@@ -211,6 +211,7 @@ export default function AuthPage() {
   const showProviderSpecificActions = Boolean(capabilities) && !capabilitiesError && !useSupabaseEmailAuth;
   const showFallbackActions =
     !useSupabaseEmailAuth && (Boolean(capabilitiesError) || Boolean(capabilities?.oidc_configured && !hasEnabledProviderActions));
+  const showHostedProviderHint = showProviderSpecificActions || showFallbackActions;
 
   const handleEmailSubmit = async () => {
     setEmailAuthError(null);
@@ -237,7 +238,8 @@ export default function AuthPage() {
         window.location.replace("/onboarding");
       }
     } catch (error) {
-      setEmailAuthError(error instanceof Error ? error.message : t("auth.emailAuthFailed"));
+      const message = error instanceof Error ? error.message : t("auth.emailAuthFailed");
+      setEmailAuthError(/unable to reach the authentication service/i.test(message) ? t("auth.emailAuthNetworkError") : message);
     } finally {
       setSubmitting(false);
       setSelectedAction(null);
@@ -347,22 +349,31 @@ export default function AuthPage() {
               </div>
             ) : null}
             {capabilities && !capabilities.oidc_configured ? (
-              <div className={`mt-4 flex items-start gap-3 rounded-2xl border p-4 ${isDark ? "border-red-900/40 bg-red-950/20" : "border-red-200 bg-red-50"}`}>
-                <AlertCircle className={`mt-0.5 h-5 w-5 shrink-0 ${isDark ? "text-red-300" : "text-red-600"}`} />
-                <div>
-                  <p className={`text-sm ${isDark ? "text-red-300" : "text-red-600"}`}>{useSupabaseEmailAuth ? t("auth.oidcOptionalNotice") : t("auth.oidcMissingConfig")}</p>
-                  {missingSettings.length ? (
-                    <p className={`mt-2 text-xs ${isDark ? "text-red-200" : "text-red-700"}`}>
-                      {t("auth.oidcMissingConfigListPrefix")} {missingSettings.join(", ")}
-                    </p>
-                  ) : null}
-                  {!useSupabaseEmailAuth && missingSupabaseSettings.length ? (
-                    <p className={`mt-2 text-xs ${isDark ? "text-red-200" : "text-red-700"}`}>
-                      {t("auth.supabaseMissingConfigListPrefix")} {missingSupabaseSettings.join(", ")}
-                    </p>
-                  ) : null}
+              useSupabaseEmailAuth ? (
+                <div className={`mt-4 flex items-start gap-3 rounded-2xl border p-4 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-blue-200 bg-blue-50"}`}>
+                  <Mail className={`mt-0.5 h-5 w-5 shrink-0 ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`} />
+                  <div>
+                    <p className={`text-sm ${isDark ? "text-slate-200" : "text-slate-700"}`}>{t("auth.emailAuthActiveNotice")}</p>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className={`mt-4 flex items-start gap-3 rounded-2xl border p-4 ${isDark ? "border-red-900/40 bg-red-950/20" : "border-red-200 bg-red-50"}`}>
+                  <AlertCircle className={`mt-0.5 h-5 w-5 shrink-0 ${isDark ? "text-red-300" : "text-red-600"}`} />
+                  <div>
+                    <p className={`text-sm ${isDark ? "text-red-300" : "text-red-600"}`}>{t("auth.oidcMissingConfig")}</p>
+                    {missingSettings.length ? (
+                      <p className={`mt-2 text-xs ${isDark ? "text-red-200" : "text-red-700"}`}>
+                        {t("auth.oidcMissingConfigListPrefix")} {missingSettings.join(", ")}
+                      </p>
+                    ) : null}
+                    {missingSupabaseSettings.length ? (
+                      <p className={`mt-2 text-xs ${isDark ? "text-red-200" : "text-red-700"}`}>
+                        {t("auth.supabaseMissingConfigListPrefix")} {missingSupabaseSettings.join(", ")}
+                      </p>
+                    ) : null}
+                  </div>
+                </div>
+              )
             ) : null}
             {showFallbackActions ? (
               <div className="grid gap-3 md:grid-cols-2">
@@ -390,13 +401,15 @@ export default function AuthPage() {
                 })}
               </div>
             ) : null}
-            <p className={`mt-3 text-xs ${isDark ? "text-slate-500" : "text-slate-400"}`}>
-              {locale === "ua"
-                ? "Фактичний вибір провайдера виконується на захищеній hosted-сторінці автентифікації."
-                : locale === "es"
-                  ? "La selección real del proveedor se realiza en la página segura alojada de autenticación."
-                  : "The actual provider selection happens on the secure hosted authentication page."}
-            </p>
+            {showHostedProviderHint ? (
+              <p className={`mt-3 text-xs ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                {locale === "ua"
+                  ? "Фактичний вибір провайдера виконується на захищеній hosted-сторінці автентифікації."
+                  : locale === "es"
+                    ? "La selección real del proveedor se realiza en la página segura alojada de autenticación."
+                    : "The actual provider selection happens on the secure hosted authentication page."}
+              </p>
+            ) : null}
             {capabilities?.email_confirmation_required ? (
               <div className={`mt-4 flex items-start gap-3 rounded-2xl border p-3 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
                 <Mail className={`mt-0.5 h-4 w-4 shrink-0 ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`} />
