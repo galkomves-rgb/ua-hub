@@ -5,6 +5,7 @@ import pkgutil
 import traceback
 from contextlib import asynccontextmanager
 from datetime import datetime
+from urllib.parse import urlparse
 
 from core.config import settings
 from fastapi import FastAPI, HTTPException, Request, status
@@ -190,6 +191,64 @@ async def general_exception_handler(request: Request, exc: Exception):
 @app.get("/")
 def root():
     return {"message": "FastAPI Modular Template is running"}
+
+
+def _public_supabase_key() -> str:
+    for env_name in ("VITE_PUBLIC_SUPABASE_ANON_KEY", "SUPABASE_ANON_KEY", "SUPABASE_PUBLISHABLE_KEY"):
+        value = (os.getenv(env_name) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _public_supabase_url() -> str:
+    configured = (os.getenv("VITE_PUBLIC_SUPABASE_URL") or getattr(settings, "supabase_url", "") or "").strip()
+    if configured:
+        return configured.rstrip("/")
+
+    database_url = str(getattr(settings, "database_url", "") or "").strip()
+    if not database_url:
+        return ""
+
+    try:
+        parsed = urlparse(database_url)
+        username = parsed.username or ""
+        if username.startswith("postgres."):
+            project_ref = username.split(".", 1)[1]
+            return f"https://{project_ref}.supabase.co"
+    except Exception:
+        return ""
+
+    return ""
+
+
+@app.get("/api/config")
+def api_config():
+    app_env = (os.getenv("APP_ENV") or os.getenv("ENVIRONMENT") or "production").strip().lower()
+    if app_env not in {"local", "preview", "staging", "production"}:
+        app_env = "production"
+
+    api_base_url = (
+        os.getenv("BACKEND_PUBLIC_URL")
+        or os.getenv("PYTHON_BACKEND_URL")
+        or str(getattr(settings, "backend_url", "") or "").strip()
+        or "http://127.0.0.1:8000"
+    )
+    site_url = (
+        os.getenv("FRONTEND_PUBLIC_URL")
+        or os.getenv("FRONTEND_URL")
+        or os.getenv("PYTHON_FRONTEND_URL")
+        or str(getattr(settings, "frontend_url", "") or "").strip()
+        or "http://localhost:3000"
+    )
+
+    return {
+        "APP_ENV": app_env,
+        "API_BASE_URL": api_base_url.rstrip("/"),
+        "SITE_URL": site_url.rstrip("/"),
+        "SUPABASE_URL": _public_supabase_url(),
+        "SUPABASE_ANON_KEY": _public_supabase_key(),
+    }
 
 
 @app.get("/health")

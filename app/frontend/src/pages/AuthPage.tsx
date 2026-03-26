@@ -410,7 +410,7 @@ export default function AuthPage() {
                     : "The actual provider selection happens on the secure hosted authentication page."}
               </p>
             ) : null}
-            {capabilities?.email_confirmation_required ? (
+            {capabilities?.email_confirmation_required && emailMode === "register" ? (
               <div className={`mt-4 flex items-start gap-3 rounded-2xl border p-3 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
                 <Mail className={`mt-0.5 h-4 w-4 shrink-0 ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`} />
                 <p className={`text-xs leading-6 ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t("auth.emailConfirmationRequired")}</p>
