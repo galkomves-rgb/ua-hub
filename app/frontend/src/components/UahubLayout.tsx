@@ -2,8 +2,11 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ChevronDown, LogOut, Menu, MessageSquare, Search, Shield, User, X } from "lucide-react";
 import { createClient } from "@metagptx/web-sdk";
+import { useQuery } from "@tanstack/react-query";
 import ThemeToggle from "@/components/ThemeToggle";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
+import { fetchUserProfile } from "@/lib/account-api";
 import { useTheme } from "@/lib/ThemeContext";
 import { LOCALES, useI18n } from "@/lib/i18n";
 import { useGlobalCity } from "@/lib/global-preferences";
@@ -31,6 +34,14 @@ export default function UahubLayout({ children, hideModuleNav }: LayoutProps) {
   const [showSearchSuggestions, setShowSearchSuggestions] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const searchRef = useRef<HTMLDivElement | null>(null);
+  const userProfileQuery = useQuery({
+    queryKey: ["header-user-profile", user?.id],
+    queryFn: fetchUserProfile,
+    enabled: Boolean(user),
+    retry: false,
+  });
+  const avatarUrl = userProfileQuery.data?.avatar_url || null;
+  const avatarFallback = (user?.name || user?.email || "U").trim().charAt(0).toUpperCase();
 
   type SearchSuggestion = {
     id: string;
@@ -485,7 +496,16 @@ export default function UahubLayout({ children, hideModuleNav }: LayoutProps) {
                     isDark ? "border-[#22416b] bg-[#11203a] text-slate-100" : "border-slate-200 bg-white text-slate-700"
                   }`}
                 >
-                  <User className="h-4 w-4" />
+                  {avatarUrl ? (
+                    <Avatar className="h-6 w-6">
+                      <AvatarImage src={avatarUrl} alt={user.name ?? user.email} className="object-cover" />
+                      <AvatarFallback className={isDark ? "bg-[#1a2d4c] text-slate-100" : "bg-slate-100 text-slate-700"}>
+                        {avatarFallback}
+                      </AvatarFallback>
+                    </Avatar>
+                  ) : (
+                    <User className="h-4 w-4" />
+                  )}
                   <span>{user.name ?? user.email}</span>
                 </button>
                 {showAccountMenu ? (

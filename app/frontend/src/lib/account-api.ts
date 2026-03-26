@@ -479,9 +479,7 @@ async function accountFetch<T>(
     let detail = "Request failed";
     try {
       const data = await response.json();
-      if (typeof data?.detail === "string") {
-        detail = data.detail;
-      }
+      detail = extractApiErrorMessage(data, detail);
     } catch {
       // Keep generic message
     }
@@ -489,6 +487,31 @@ async function accountFetch<T>(
   }
 
   return response.json() as Promise<T>;
+}
+
+function extractApiErrorMessage(data: unknown, fallback = "Request failed") {
+  if (!data || typeof data !== "object") {
+    return fallback;
+  }
+
+  const detail = "detail" in data ? data.detail : null;
+  if (typeof detail === "string" && detail.trim()) {
+    return detail.trim();
+  }
+
+  if (detail && typeof detail === "object") {
+    const nestedMessage = "message" in detail ? detail.message : null;
+    if (typeof nestedMessage === "string" && nestedMessage.trim()) {
+      return nestedMessage.trim();
+    }
+  }
+
+  const message = "message" in data ? data.message : null;
+  if (typeof message === "string" && message.trim()) {
+    return message.trim();
+  }
+
+  return fallback;
 }
 
 export function fetchAccountDashboard() {
@@ -680,7 +703,7 @@ export async function createMonetizedListing(payload: MonetizedListingCreatePayl
   }
 
   if (!response.ok) {
-    throw new Error(parsed?.detail || `Request failed with status ${response.status}`);
+    throw new Error(extractApiErrorMessage(parsed, `Request failed with status ${response.status}`));
   }
 
   return parsed as { listing: { id: number }; payment_required: boolean; required_product_code: string | null; message: string | null };
@@ -755,7 +778,7 @@ export async function submitListing(listingId: number) {
   }
 
   if (!response.ok) {
-    throw new Error(parsed?.detail || `Request failed with status ${response.status}`);
+    throw new Error(extractApiErrorMessage(parsed, `Request failed with status ${response.status}`));
   }
 
   return parsed as { id: number; status: ListingManagementStatus };
