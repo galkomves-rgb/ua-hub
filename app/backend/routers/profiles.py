@@ -7,7 +7,11 @@ from schemas.profiles import (
     BusinessProfileCreate,
     BusinessProfileListResponse,
     BusinessProfileResponse,
+    BusinessSubscriptionRequest,
     BusinessProfileUpdate,
+    BusinessVerificationRequest,
+    OnboardingCompleteRequest,
+    OnboardingStatusResponse,
     UserProfileCreate,
     UserProfileResponse,
     UserProfileUpdate,
@@ -40,7 +44,9 @@ async def create_user_profile(
         city=profile_data.city,
         bio=profile_data.bio,
         preferred_language=profile_data.preferred_language,
+        account_type=profile_data.account_type,
         avatar_url=profile_data.avatar_url,
+        onboarding_completed=profile_data.onboarding_completed if hasattr(profile_data, "onboarding_completed") else False,
         is_public_profile=profile_data.is_public_profile,
         show_as_public_author=profile_data.show_as_public_author,
         allow_marketing_emails=profile_data.allow_marketing_emails,
@@ -77,7 +83,9 @@ async def update_user_profile(
         city=profile_data.city,
         bio=profile_data.bio,
         preferred_language=profile_data.preferred_language,
+        account_type=profile_data.account_type,
         avatar_url=profile_data.avatar_url,
+        onboarding_completed=profile_data.onboarding_completed,
         is_public_profile=profile_data.is_public_profile,
         show_as_public_author=profile_data.show_as_public_author,
         allow_marketing_emails=profile_data.allow_marketing_emails,
@@ -102,6 +110,54 @@ async def delete_user_profile(
         raise HTTPException(status_code=404, detail="User profile not found")
 
     return {"message": "User profile deleted successfully"}
+
+
+@router.get("/onboarding/status", response_model=OnboardingStatusResponse)
+async def get_onboarding_status(
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db_session),
+):
+    service = ProfileService(db)
+    return await service.get_onboarding_status(user_id)
+
+
+@router.post("/onboarding/complete", response_model=UserProfileResponse)
+async def complete_onboarding(
+    payload: OnboardingCompleteRequest,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db_session),
+):
+    service = ProfileService(db)
+    existing = await service.get_user_profile(user_id)
+    if existing:
+        profile = await service.update_user_profile(
+            user_id=user_id,
+            name=payload.name,
+            city=payload.city,
+            bio=payload.bio,
+            preferred_language=payload.preferred_language,
+            account_type=payload.account_type,
+            avatar_url=payload.avatar_url,
+            onboarding_completed=True,
+            is_public_profile=payload.is_public_profile,
+            show_as_public_author=payload.show_as_public_author,
+            allow_marketing_emails=payload.allow_marketing_emails,
+        )
+    else:
+        profile = await service.create_user_profile(
+            user_id=user_id,
+            name=payload.name,
+            city=payload.city,
+            bio=payload.bio,
+            preferred_language=payload.preferred_language,
+            account_type=payload.account_type,
+            avatar_url=payload.avatar_url,
+            onboarding_completed=True,
+            is_public_profile=payload.is_public_profile,
+            show_as_public_author=payload.show_as_public_author,
+            allow_marketing_emails=payload.allow_marketing_emails,
+        )
+    return profile
 
 
 # ============ Business Profile Endpoints ============
@@ -137,7 +193,7 @@ async def create_business_profile(
         social_links_json=profile_data.social_links_json,
         service_areas_json=profile_data.service_areas_json,
     )
-    return profile
+    return await service.serialize_business_profile(profile)
 
 
 @router.get("/business/{slug}", response_model=BusinessProfileResponse)
@@ -152,7 +208,7 @@ async def get_business_profile(
     if not profile:
         raise HTTPException(status_code=404, detail="Business profile not found")
 
-    return profile
+    return await service.serialize_business_profile(profile)
 
 
 @router.get("/business", response_model=BusinessProfileListResponse)
@@ -174,8 +230,10 @@ async def list_business_profiles(
         offset=offset,
     )
 
+    items = await service.serialize_business_profiles(profiles)
+
     return BusinessProfileListResponse(
-        total=len(profiles), limit=limit, offset=offset, items=profiles
+        total=len(items), limit=limit, offset=offset, items=items
     )
 
 
@@ -187,7 +245,7 @@ async def get_my_business_profiles(
     """Get all business profiles owned by authenticated user."""
     service = ProfileService(db)
     profiles = await service.get_business_profiles_by_owner(user_id)
-    return profiles
+    return await service.serialize_business_profiles(profiles)
 
 
 @router.put("/business/{slug}", response_model=BusinessProfileResponse)
@@ -224,7 +282,47 @@ async def update_business_profile(
         service_areas_json=profile_data.service_areas_json,
     )
 
-    return updated_profile
+    return await service.serialize_business_profile(updated_profile)
+
+
+@router.post("/business/{slug}/verify-request", response_model=BusinessProfileResponse)
+async def request_business_verification(
+    slug: str,
+    payload: BusinessVerificationRequest,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Submit a business verification request for review."""
+    service = ProfileService(db)
+    try:
+        profile = await service.request_business_verification(slug, user_id, message=payload.message)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if not profile:
+        raise HTTPException(status_code=404, detail="Business profile not found")
+
+    return await service.serialize_business_profile(profile)
+
+
+@router.post("/business/{slug}/subscription-request", response_model=BusinessProfileResponse)
+async def request_business_subscription_change(
+    slug: str,
+    payload: BusinessSubscriptionRequest,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Submit a business subscription change request."""
+    service = ProfileService(db)
+    try:
+        profile = await service.request_business_subscription_change(slug, user_id, requested_plan=payload.plan)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    if not profile:
+        raise HTTPException(status_code=404, detail="Business profile not found")
+
+    return await service.serialize_business_profile(profile)
 
 
 @router.delete("/business/{slug}")

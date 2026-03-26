@@ -27,6 +27,7 @@ class Listings(Base):
     is_featured = Column(Boolean, default=False)
     is_promoted = Column(Boolean, default=False)
     is_verified = Column(Boolean, default=False)
+    moderation_reason = Column(Text, nullable=True)
     meta_json = Column(String, nullable=True)  # JSON object with module-specific metadata
     views_count = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), nullable=False)

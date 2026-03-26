@@ -74,3 +74,17 @@ class SearchAlertResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class SearchHistoryCreate(BaseModel):
+    query: str = Field(..., min_length=1, max_length=255)
+
+
+class SearchHistoryResponse(BaseModel):
+    id: int
+    user_id: str
+    query: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

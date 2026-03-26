@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Menu } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import UahubLayout from "@/components/UahubLayout";
-import { AccountBusinessPanel } from "@/components/account/AccountBusinessPanel";
+import { AccountBillingPanel } from "@/components/account/AccountBillingPanel";
+import { AccountBusinessPanel } from "../components/account/AccountBusinessPanel";
 import { AccountDashboard } from "@/components/account/AccountDashboard";
-import { AccountListingsPanel } from "@/components/account/AccountListingsPanel";
+import { AccountListingsPanel } from "../components/account/AccountListingsPanel";
 import { AccountMessagesPanel } from "@/components/account/AccountMessagesPanel";
-import { AccountPlaceholderPanel } from "@/components/account/AccountPlaceholderPanel";
 import { AccountProfilePanel } from "@/components/account/AccountProfilePanel";
 import { AccountSavedPanel } from "@/components/account/AccountSavedPanel";
 import { AccountSettingsPanel } from "@/components/account/AccountSettingsPanel";
@@ -14,6 +14,7 @@ import { AccountSidebar, type AccountTab } from "@/components/account/AccountSid
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
+import { fetchOnboardingStatus } from "@/lib/account-api";
 
 const ACCOUNT_TABS: AccountTab[] = [
   "dashboard",
@@ -31,6 +32,7 @@ export default function AccountPage() {
   const { theme } = useTheme();
   const { t } = useI18n();
   const isDark = theme === "dark";
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -47,6 +49,23 @@ export default function AccountPage() {
       setSearchParams({ tab: "dashboard" }, { replace: true });
     }
   }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+    const guardOnboarding = async () => {
+      try {
+        const status = await fetchOnboardingStatus();
+        if (!status.completed) {
+          navigate("/onboarding", { replace: true });
+        }
+      } catch {
+        // keep current page if onboarding status cannot be loaded
+      }
+    };
+    void guardOnboarding();
+  }, [navigate, user]);
 
   const setActiveTab = (tab: AccountTab) => {
     setSearchParams({ tab });
@@ -70,7 +89,7 @@ export default function AccountPage() {
       case "settings":
         return <AccountSettingsPanel />;
       case "billing":
-        return <AccountPlaceholderPanel tab={activeTab} />;
+        return <AccountBillingPanel />;
       default:
         return <AccountDashboard />;
     }

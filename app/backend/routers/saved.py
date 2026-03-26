@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from dependencies.auth import get_current_user_id
@@ -10,9 +10,12 @@ from schemas.saved import (
     SavedListingResponse,
     SearchAlertCreate,
     SearchAlertResponse,
+    SearchHistoryCreate,
+    SearchHistoryResponse,
     SearchAlertUpdate,
 )
 from services.saved_service import SavedService, SavedTargetNotFoundError
+from services.search_histories import Search_historiesService
 
 router = APIRouter(prefix="/api/v1/saved", tags=["saved"])
 
@@ -146,3 +149,49 @@ async def delete_search_alert(
     if not deleted:
         raise HTTPException(status_code=404, detail="Search alert not found")
     return {"message": "Search alert removed successfully"}
+
+
+@router.get("/search-history", response_model=list[SearchHistoryResponse])
+async def list_search_history(
+    limit: int = Query(8, ge=1, le=50),
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db_session),
+):
+    service = Search_historiesService(db)
+    return await service.list_recent(user_id=user_id, limit=limit)
+
+
+@router.post("/search-history", response_model=SearchHistoryResponse, status_code=status.HTTP_201_CREATED)
+async def create_search_history_entry(
+    payload: SearchHistoryCreate,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db_session),
+):
+    service = Search_historiesService(db)
+    try:
+        return await service.create_or_replace_recent(user_id=user_id, query=payload.query)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/search-history/{history_id}")
+async def delete_search_history_entry(
+    history_id: int,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db_session),
+):
+    service = Search_historiesService(db)
+    deleted = await service.delete(history_id, user_id=user_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Search history entry not found")
+    return {"message": "Search history entry removed successfully"}
+
+
+@router.delete("/search-history")
+async def clear_search_history(
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db_session),
+):
+    service = Search_historiesService(db)
+    deleted_count = await service.clear_user_history(user_id=user_id)
+    return {"deleted_count": deleted_count}

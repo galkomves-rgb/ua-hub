@@ -24,6 +24,7 @@ import SearchPage from "./pages/SearchPage";
 import AuthPage from "./pages/AuthPage";
 import AuthCallback from "./pages/AuthCallback";
 import AuthError from "./pages/AuthError";
+import OnboardingPage from "./pages/OnboardingPage";
 
 const queryClient = new QueryClient();
 
@@ -86,6 +87,7 @@ const App = () => (
                 <Route path="/messages" element={<MessagesPage />} />
                 <Route path="/search" element={<SearchPage />} />
                 <Route path="/auth" element={<AuthPage />} />
+                <Route path="/onboarding" element={<OnboardingPage />} />
                 {/* Platform pages */}
                 <Route path="/pricing" element={<PricingPage />} />
                 <Route path="/about" element={<AboutPage />} />

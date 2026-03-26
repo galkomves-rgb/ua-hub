@@ -1,34 +1,26 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
-  ArrowLeft, Send, MessageSquare, Inbox, Clock, ChevronRight, User,
+  ArrowLeft, Send, MessageSquare, Inbox, User,
 } from "lucide-react";
 import Layout from "@/components/Layout";
+import { ConversationActions } from "@/components/messaging/ConversationActions";
 import { authApi, redirectToAuthEntry } from "@/lib/auth";
-import { getAPIBaseURL } from "@/lib/config";
+import {
+  blockMessagingUser,
+  fetchMessagingConversation,
+  fetchMessagingConversationState,
+  fetchMessagingInbox,
+  markMessagesRead,
+  reportMessagingUser,
+  sendMessage as sendMessagingMessage,
+  type MessagingConversationState,
+  type MessagingConversationSummary,
+  type MessagingMessage,
+  unblockMessagingUser,
+} from "@/lib/account-api";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
-
-interface ConversationSummary {
-  other_user_id: string;
-  listing_id: string | null;
-  listing_title: string | null;
-  last_message: string;
-  last_message_at: string;
-  unread_count: number;
-  is_sender: boolean;
-}
-
-interface Message {
-  id: number;
-  user_id: string;
-  recipient_id: string;
-  listing_id: string | null;
-  listing_title: string | null;
-  content: string;
-  is_read: boolean;
-  created_at: string;
-}
 
 export default function MessagesPage() {
   const { theme } = useTheme();
@@ -38,13 +30,17 @@ export default function MessagesPage() {
 
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [currentUserId, setCurrentUserId] = useState("");
-  const [conversations, setConversations] = useState<ConversationSummary[]>([]);
+  const [conversations, setConversations] = useState<MessagingConversationSummary[]>([]);
   const [totalUnread, setTotalUnread] = useState(0);
-  const [selectedConv, setSelectedConv] = useState<ConversationSummary | null>(null);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [selectedConv, setSelectedConv] = useState<MessagingConversationSummary | null>(null);
+  const [messages, setMessages] = useState<MessagingMessage[]>([]);
+  const [conversationState, setConversationState] = useState<MessagingConversationState | null>(null);
   const [newMessage, setNewMessage] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [actionSuccess, setActionSuccess] = useState("");
+  const [actionPending, setActionPending] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Check auth
@@ -76,10 +72,19 @@ export default function MessagesPage() {
         other_user_id: recipientId,
         listing_id: listingId,
         listing_title: listingTitle,
+        linked_listing_url: null,
         last_message: "",
         last_message_at: new Date().toISOString(),
         unread_count: 0,
         is_sender: true,
+        participant: {
+          user_id: recipientId,
+          display_name: recipientId,
+          avatar_url: null,
+          participant_type: "user",
+          business_name: null,
+          business_slug: null,
+        },
       });
     }
   }, [searchParams, isLoggedIn]);
@@ -87,9 +92,34 @@ export default function MessagesPage() {
   // Load conversation when selected
   useEffect(() => {
     if (selectedConv && isLoggedIn) {
-      loadConversation(selectedConv.other_user_id, selectedConv.listing_id);
+      setConversationState(null);
+      void Promise.all([
+        loadConversation(selectedConv.other_user_id, selectedConv.listing_id),
+        loadConversationState(selectedConv.other_user_id, selectedConv.listing_id),
+      ]);
+    } else {
+      setConversationState(null);
+      setMessages([]);
     }
   }, [selectedConv, isLoggedIn]);
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      void loadInbox();
+      if (selectedConv) {
+        void Promise.all([
+          loadConversation(selectedConv.other_user_id, selectedConv.listing_id),
+          loadConversationState(selectedConv.other_user_id, selectedConv.listing_id),
+        ]);
+      }
+    }, 30000);
+
+    return () => window.clearInterval(intervalId);
+  }, [isLoggedIn, selectedConv]);
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -98,15 +128,19 @@ export default function MessagesPage() {
 
   const loadInbox = async () => {
     try {
-      const token = localStorage.getItem("auth_token");
-      const res = await fetch(`${getAPIBaseURL()}/api/v1/messaging/inbox`, {
-        method: "GET",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setConversations(data.conversations || []);
-        setTotalUnread(data.total_unread || 0);
+      const data = await fetchMessagingInbox();
+      setConversations(data.conversations || []);
+      setTotalUnread(data.total_unread || 0);
+
+      if (selectedConv) {
+        const refreshed = (data.conversations || []).find(
+          (conversation) =>
+            conversation.other_user_id === selectedConv.other_user_id &&
+            conversation.listing_id === selectedConv.listing_id,
+        );
+        if (refreshed) {
+          setSelectedConv(refreshed);
+        }
       }
     } catch (err) {
       console.error("Failed to load inbox:", err);
@@ -115,42 +149,35 @@ export default function MessagesPage() {
 
   const loadConversation = async (otherUserId: string, listingId: string | null) => {
     try {
-      const token = localStorage.getItem("auth_token");
-      let url = `/api/v1/messaging/conversation?other_user_id=${otherUserId}`;
-      if (listingId) url += `&listing_id=${listingId}`;
-      const res = await fetch(`${getAPIBaseURL()}${url}`, {
-        method: "GET",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setMessages(Array.isArray(data) ? data : []);
-        // Mark unread messages as read
-        const unreadIds = (Array.isArray(data) ? data : [])
-          .filter((m: Message) => m.recipient_id === currentUserId && !m.is_read)
-          .map((m: Message) => m.id);
-        if (unreadIds.length > 0) {
-          await fetch(`${getAPIBaseURL()}/api/v1/messaging/mark-read`, {
-            method: "POST",
-            body: JSON.stringify({ message_ids: unreadIds }),
-            headers: {
-              "Content-Type": "application/json",
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            },
-          });
-          await loadInbox();
-        }
+      const data = await fetchMessagingConversation(otherUserId, listingId);
+      setMessages(Array.isArray(data) ? data : []);
+      const unreadIds = (Array.isArray(data) ? data : [])
+        .filter((message) => message.recipient_id === currentUserId && !message.is_read)
+        .map((message) => message.id);
+      if (unreadIds.length > 0) {
+        await markMessagesRead(unreadIds);
+        await loadInbox();
       }
     } catch (err) {
       console.error("Failed to load conversation:", err);
     }
   };
 
+  const loadConversationState = async (otherUserId: string, listingId: string | null) => {
+    try {
+      const data = await fetchMessagingConversationState(otherUserId, listingId);
+      setConversationState(data);
+    } catch (err) {
+      console.error("Failed to load conversation state:", err);
+      setConversationState(null);
+    }
+  };
+
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedConv || sending) return;
     setSending(true);
+    setActionError("");
     try {
-      const token = localStorage.getItem("auth_token");
       const body: Record<string, string> = {
         recipient_id: selectedConv.other_user_id,
         content: newMessage.trim(),
@@ -158,21 +185,63 @@ export default function MessagesPage() {
       if (selectedConv.listing_id) body.listing_id = selectedConv.listing_id;
       if (selectedConv.listing_title) body.listing_title = selectedConv.listing_title;
 
-      await fetch(`${getAPIBaseURL()}/api/v1/messaging/send`, {
-        method: "POST",
-        body: JSON.stringify(body),
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-      });
+      await sendMessagingMessage(body);
       setNewMessage("");
-      await loadConversation(selectedConv.other_user_id, selectedConv.listing_id);
-      await loadInbox();
+      await Promise.all([
+        loadConversation(selectedConv.other_user_id, selectedConv.listing_id),
+        loadConversationState(selectedConv.other_user_id, selectedConv.listing_id),
+        loadInbox(),
+      ]);
     } catch (err) {
       console.error("Failed to send message:", err);
+      setActionError(err instanceof Error ? err.message : t("account.loadError"));
     } finally {
       setSending(false);
+    }
+  };
+
+  const toggleBlock = async () => {
+    if (!selectedConv) {
+      return;
+    }
+    setActionPending(true);
+    setActionError("");
+    setActionSuccess("");
+    try {
+      if (conversationState?.blocked_by_current_user) {
+        await unblockMessagingUser(selectedConv.other_user_id);
+      } else {
+        await blockMessagingUser(selectedConv.other_user_id);
+      }
+      await loadConversationState(selectedConv.other_user_id, selectedConv.listing_id);
+      setActionSuccess("");
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : t("account.loadError"));
+    } finally {
+      setActionPending(false);
+    }
+  };
+
+  const submitReport = async (reason: string, details: string) => {
+    if (!selectedConv) {
+      return;
+    }
+    setActionPending(true);
+    setActionError("");
+    setActionSuccess("");
+    try {
+      await reportMessagingUser({
+        other_user_id: selectedConv.other_user_id,
+        listing_id: selectedConv.listing_id || undefined,
+        reason,
+        details: details || undefined,
+      });
+      await loadConversationState(selectedConv.other_user_id, selectedConv.listing_id);
+      setActionSuccess(t("msg.reportSubmitted"));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : t("account.loadError"));
+    } finally {
+      setActionPending(false);
     }
   };
 
@@ -272,12 +341,16 @@ export default function MessagesPage() {
                   >
                     <div className="flex items-start gap-3">
                       <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${isDark ? "bg-[#1a2a40]" : "bg-gray-100"}`}>
-                        <User className={`w-4 h-4 ${isDark ? "text-gray-400" : "text-gray-500"}`} />
+                        {conv.participant.avatar_url ? (
+                          <img src={conv.participant.avatar_url} alt={conv.participant.display_name} className="h-9 w-9 rounded-full object-cover" />
+                        ) : (
+                          <User className={`w-4 h-4 ${isDark ? "text-gray-400" : "text-gray-500"}`} />
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between gap-2">
                           <span className={`text-xs font-bold truncate ${isDark ? "text-gray-200" : "text-gray-800"}`}>
-                            {conv.other_user_id.slice(0, 8)}...
+                            {conv.participant.display_name}
                           </span>
                           <span className={`text-[10px] shrink-0 ${isDark ? "text-gray-600" : "text-gray-400"}`}>
                             {formatTime(conv.last_message_at)}
@@ -319,11 +392,19 @@ export default function MessagesPage() {
                     <ArrowLeft className="w-4 h-4" />
                   </button>
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isDark ? "bg-[#1a2a40]" : "bg-gray-100"}`}>
-                    <User className={`w-4 h-4 ${isDark ? "text-gray-400" : "text-gray-500"}`} />
+                    {(conversationState?.participant.avatar_url || selectedConv.participant.avatar_url) ? (
+                      <img
+                        src={conversationState?.participant.avatar_url || selectedConv.participant.avatar_url || ""}
+                        alt={conversationState?.participant.display_name || selectedConv.participant.display_name}
+                        className="h-8 w-8 rounded-full object-cover"
+                      />
+                    ) : (
+                      <User className={`w-4 h-4 ${isDark ? "text-gray-400" : "text-gray-500"}`} />
+                    )}
                   </div>
                   <div className="min-w-0">
                     <p className={`text-sm font-bold truncate ${isDark ? "text-gray-200" : "text-gray-800"}`}>
-                      {selectedConv.other_user_id.slice(0, 12)}...
+                      {conversationState?.participant.display_name || selectedConv.participant.display_name || selectedConv.other_user_id}
                     </p>
                     {selectedConv.listing_title && (
                       <p className={`text-[11px] truncate ${isDark ? "text-[#4a9eff]" : "text-[#0057B8]"}`}>
@@ -332,6 +413,16 @@ export default function MessagesPage() {
                     )}
                   </div>
                 </div>
+
+                <ConversationActions
+                  state={conversationState}
+                  isDark={isDark}
+                  t={t}
+                  blockPending={actionPending}
+                  reportPending={actionPending}
+                  onToggleBlock={toggleBlock}
+                  onSubmitReport={submitReport}
+                />
 
                 {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -362,6 +453,14 @@ export default function MessagesPage() {
                     );
                   })}
                   <div ref={messagesEndRef} />
+
+                  {actionError ? (
+                    <p className={`text-sm ${isDark ? "text-red-300" : "text-red-600"}`}>{actionError}</p>
+                  ) : null}
+
+                  {actionSuccess ? (
+                    <p className={`text-sm ${isDark ? "text-emerald-300" : "text-emerald-700"}`}>{actionSuccess}</p>
+                  ) : null}
                 </div>
 
                 {/* Input */}
@@ -372,7 +471,8 @@ export default function MessagesPage() {
                       value={newMessage}
                       onChange={(e) => setNewMessage(e.target.value)}
                       onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-                      placeholder={t("msg.placeholder")}
+                      placeholder={conversationState?.can_send === false ? t("msg.sendBlocked") : t("msg.placeholder")}
+                      disabled={conversationState?.can_send === false}
                       className={`flex-1 h-10 px-4 text-sm rounded-xl border focus:outline-none transition-all ${
                         isDark
                           ? "bg-[#0d1a2e] border-[#1a3050] text-gray-200 placeholder:text-gray-600 focus:border-[#4a9eff]"
@@ -381,7 +481,7 @@ export default function MessagesPage() {
                     />
                     <button
                       onClick={sendMessage}
-                      disabled={!newMessage.trim() || sending}
+                      disabled={!newMessage.trim() || sending || conversationState?.can_send === false}
                       className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all active:scale-95 disabled:opacity-40 ${
                         isDark
                           ? "bg-gradient-to-r from-[#FFD700] to-[#e6c200] text-[#0d1a2e]"

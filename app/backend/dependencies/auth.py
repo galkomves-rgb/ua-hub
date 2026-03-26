@@ -1,12 +1,15 @@
 import hashlib
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from core.auth import AccessTokenError, decode_access_token
+from core.database import get_db
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from schemas.auth import UserResponse
+from services.auth import AuthService
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +27,18 @@ async def get_bearer_token(
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication credentials were not provided")
 
 
-async def get_current_user(token: str = Depends(get_bearer_token)) -> UserResponse:
+def _parse_token_iat(raw_value: object) -> Optional[datetime]:
+    if isinstance(raw_value, (int, float)):
+        return datetime.fromtimestamp(raw_value, tz=timezone.utc)
+    if isinstance(raw_value, str):
+        try:
+            return datetime.fromisoformat(raw_value)
+        except ValueError:
+            return None
+    return None
+
+
+async def get_current_user(token: str = Depends(get_bearer_token), db: AsyncSession = Depends(get_db)) -> UserResponse:
     """Dependency to get current authenticated user via JWT token."""
     try:
         payload = decode_access_token(token)
@@ -37,22 +51,29 @@ async def get_current_user(token: str = Depends(get_bearer_token)) -> UserRespon
     if not user_id:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid authentication token")
 
-    last_login_raw = payload.get("last_login")
-    last_login = None
-    if isinstance(last_login_raw, str):
-        try:
-            last_login = datetime.fromisoformat(last_login_raw)
-        except ValueError:
-            # Log user hash instead of actual user ID to avoid exposing sensitive information
-            user_hash = hashlib.sha256(str(user_id).encode()).hexdigest()[:8] if user_id else "unknown"
-            logger.debug("Failed to parse last_login for user hash: %s", user_hash)
+    token_version = payload.get("token_version")
+    session_id = payload.get("sid")
+    issued_at = _parse_token_iat(payload.get("iat"))
+
+    auth_service = AuthService(db)
+    try:
+        user = await auth_service.validate_access_context(
+            user_id=str(user_id),
+            session_id=str(session_id) if session_id else None,
+            token_version=int(token_version) if token_version is not None else None,
+            issued_at=issued_at,
+        )
+    except AccessTokenError as exc:
+        user_hash = hashlib.sha256(str(user_id).encode()).hexdigest()[:8] if user_id else "unknown"
+        logger.warning("Session validation failed for user hash %s: %s", user_hash, exc.message)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=exc.message)
 
     return UserResponse(
-        id=user_id,
-        email=payload.get("email", ""),
-        name=payload.get("name"),
-        role=payload.get("role", "user"),
-        last_login=last_login,
+        id=str(user.id),
+        email=user.email,
+        name=user.name,
+        role=user.role,
+        last_login=user.last_login,
     )
 
 

@@ -1,9 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, CheckCircle2, Globe, Save, ShieldCheck, Sparkles } from "lucide-react";
+import {
+  BarChart3,
+  Building2,
+  CheckCircle2,
+  ExternalLink,
+  Eye,
+  Globe,
+  Save,
+  ShieldCheck,
+  Sparkles,
+  Star,
+} from "lucide-react";
 import {
   createBusinessProfile,
   fetchMyBusinessProfiles,
+  requestBusinessSubscription,
+  requestBusinessVerification,
   updateBusinessProfile,
   type BusinessProfilePayload,
   type BusinessProfileResponse,
@@ -27,6 +40,10 @@ type BusinessFormState = {
   service_areas_json: string;
 };
 
+const PLAN_OPTIONS = ["basic", "premium", "business"] as const;
+
+type PlanOption = (typeof PLAN_OPTIONS)[number];
+
 function buildBusinessForm(profile: BusinessProfileResponse | null): BusinessFormState {
   return {
     slug: profile?.slug || "",
@@ -45,6 +62,48 @@ function buildBusinessForm(profile: BusinessProfileResponse | null): BusinessFor
   };
 }
 
+function formatDate(value: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
+}
+
+function VerificationBadge({ status }: { status: string }) {
+  const { theme } = useTheme();
+  const { t } = useI18n();
+  const isDark = theme === "dark";
+
+  const palette =
+    status === "verified"
+      ? isDark
+        ? "bg-emerald-950/30 text-emerald-300"
+        : "bg-emerald-50 text-emerald-700"
+      : status === "pending"
+        ? isDark
+          ? "bg-amber-950/30 text-amber-300"
+          : "bg-amber-50 text-amber-700"
+        : status === "rejected"
+          ? isDark
+            ? "bg-red-950/30 text-red-300"
+            : "bg-red-50 text-red-700"
+          : isDark
+            ? "bg-slate-800 text-slate-300"
+            : "bg-slate-100 text-slate-700";
+
+  return (
+    <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${palette}`}>
+      {t(`account.business.status.${status}`)}
+    </span>
+  );
+}
+
 export function AccountBusinessPanel() {
   const { theme } = useTheme();
   const { t } = useI18n();
@@ -58,11 +117,29 @@ export function AccountBusinessPanel() {
 
   const profiles = businessQuery.data ?? [];
   const activeProfile = profiles[0] ?? null;
+  const previewUrl = activeProfile?.public_preview_url ?? null;
+  const renewalDate = formatDate(activeProfile?.subscription_renewal_date ?? null);
+  const requestedAt = formatDate(activeProfile?.subscription_requested_at ?? null);
+  const verificationRequestedAt = formatDate(activeProfile?.verification_requested_at ?? null);
 
   const [form, setForm] = useState<BusinessFormState>(() => buildBusinessForm(null));
+  const [verificationNote, setVerificationNote] = useState("");
+  const [targetPlan, setTargetPlan] = useState<PlanOption>("business");
 
   useEffect(() => {
     setForm(buildBusinessForm(activeProfile));
+    setVerificationNote(activeProfile?.verification_notes || "");
+    const requestedPlan = activeProfile?.subscription_requested_plan;
+    const currentPlan = activeProfile?.subscription_plan;
+    if (requestedPlan && PLAN_OPTIONS.includes(requestedPlan as PlanOption)) {
+      setTargetPlan(requestedPlan as PlanOption);
+      return;
+    }
+    if (currentPlan && PLAN_OPTIONS.includes(currentPlan as PlanOption)) {
+      setTargetPlan(currentPlan as PlanOption);
+      return;
+    }
+    setTargetPlan("business");
   }, [activeProfile]);
 
   const saveMutation = useMutation({
@@ -78,6 +155,30 @@ export function AccountBusinessPanel() {
     },
   });
 
+  const verifyMutation = useMutation({
+    mutationFn: async () => {
+      if (!activeProfile) {
+        throw new Error(t("account.business.empty"));
+      }
+      return requestBusinessVerification(activeProfile.slug, { message: verificationNote.trim() || null });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["account-business-profiles"] });
+    },
+  });
+
+  const subscriptionMutation = useMutation({
+    mutationFn: async () => {
+      if (!activeProfile) {
+        throw new Error(t("account.business.empty"));
+      }
+      return requestBusinessSubscription(activeProfile.slug, { plan: targetPlan });
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["account-business-profiles"] });
+    },
+  });
+
   const canSubmit = useMemo(() => {
     return (
       form.slug.trim().length > 0 &&
@@ -86,6 +187,16 @@ export function AccountBusinessPanel() {
       form.description.trim().length > 0
     );
   }, [form.category, form.description, form.name, form.slug]);
+
+  const canRequestVerification = Boolean(
+    activeProfile && activeProfile.verification_status !== "pending" && activeProfile.verification_status !== "verified",
+  );
+  const canRequestPlanChange = Boolean(
+    activeProfile &&
+      targetPlan &&
+      activeProfile.subscription_plan !== targetPlan &&
+      !(activeProfile.subscription_request_status === "pending" && activeProfile.subscription_requested_plan === targetPlan),
+  );
 
   const handleSave = () => {
     if (!canSubmit) {
@@ -109,6 +220,51 @@ export function AccountBusinessPanel() {
     });
   };
 
+  const planLabel = (plan: string | null | undefined) => {
+    if (!plan) {
+      return t("account.business.noPlan");
+    }
+    if (plan === "basic") {
+      return t("pricing.basic");
+    }
+    if (plan === "premium") {
+      return t("pricing.premium");
+    }
+    if (plan === "business") {
+      return t("pricing.business");
+    }
+    return plan;
+  };
+
+  const analyticsCards = activeProfile
+    ? [
+        {
+          key: "active-listings",
+          icon: Globe,
+          title: t("account.business.activeListings"),
+          value: activeProfile.active_listings_count,
+        },
+        {
+          key: "views",
+          icon: Eye,
+          title: t("account.business.totalViews"),
+          value: activeProfile.total_views_count,
+        },
+        {
+          key: "saved",
+          icon: Star,
+          title: t("account.business.savedByUsers"),
+          value: activeProfile.saved_by_users_count,
+        },
+        {
+          key: "completeness",
+          icon: BarChart3,
+          title: t("account.business.completeness"),
+          value: `${activeProfile.profile_completeness}%`,
+        },
+      ]
+    : [];
+
   return (
     <section className="space-y-6">
       <div
@@ -117,7 +273,11 @@ export function AccountBusinessPanel() {
         }`}
       >
         <div className="mb-6 flex items-start gap-4">
-          <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${isDark ? "bg-[#1a2d4c] text-[#FFD700]" : "bg-blue-50 text-[#0057B8]"}`}>
+          <div
+            className={`flex h-14 w-14 items-center justify-center rounded-2xl ${
+              isDark ? "bg-[#1a2d4c] text-[#FFD700]" : "bg-blue-50 text-[#0057B8]"
+            }`}
+          >
             <Building2 className="h-7 w-7" />
           </div>
           <div>
@@ -131,11 +291,19 @@ export function AccountBusinessPanel() {
         </div>
 
         {businessQuery.isLoading ? (
-          <div className={`rounded-2xl border p-6 text-sm ${isDark ? "border-[#22416b] text-slate-400" : "border-slate-200 text-slate-500"}`}>
+          <div
+            className={`rounded-2xl border p-6 text-sm ${
+              isDark ? "border-[#22416b] text-slate-400" : "border-slate-200 text-slate-500"
+            }`}
+          >
             {t("common.loading")}
           </div>
         ) : businessQuery.isError ? (
-          <div className={`rounded-2xl border p-6 ${isDark ? "border-red-900/40 bg-red-950/20" : "border-red-200 bg-red-50"}`}>
+          <div
+            className={`rounded-2xl border p-6 ${
+              isDark ? "border-red-900/40 bg-red-950/20" : "border-red-200 bg-red-50"
+            }`}
+          >
             <p className={isDark ? "text-red-300" : "text-red-600"}>
               {businessQuery.error instanceof Error ? businessQuery.error.message : t("account.loadError")}
             </p>
@@ -152,73 +320,281 @@ export function AccountBusinessPanel() {
         ) : (
           <div className="space-y-6">
             {!activeProfile ? (
-              <div className={`rounded-2xl border border-dashed p-4 text-sm ${isDark ? "border-[#22416b] text-slate-400" : "border-slate-200 text-slate-500"}`}>
+              <div
+                className={`rounded-2xl border border-dashed p-4 text-sm ${
+                  isDark ? "border-[#22416b] text-slate-400" : "border-slate-200 text-slate-500"
+                }`}
+              >
                 {t("account.business.empty")}
               </div>
             ) : null}
 
             {saveMutation.isError ? (
-              <div className={`rounded-2xl border p-4 text-sm ${isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-600"}`}>
+              <div
+                className={`rounded-2xl border p-4 text-sm ${
+                  isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-600"
+                }`}
+              >
                 {saveMutation.error instanceof Error ? saveMutation.error.message : t("account.business.saveError")}
               </div>
             ) : null}
 
             {saveMutation.isSuccess ? (
-              <div className={`rounded-2xl border p-4 text-sm ${isDark ? "border-emerald-900/40 bg-emerald-950/20 text-emerald-300" : "border-emerald-200 bg-emerald-50 text-emerald-700"}`}>
+              <div
+                className={`rounded-2xl border p-4 text-sm ${
+                  isDark
+                    ? "border-emerald-900/40 bg-emerald-950/20 text-emerald-300"
+                    : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                }`}
+              >
                 {t("account.business.saveSuccess")}
               </div>
             ) : null}
 
             {activeProfile ? (
-              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <div className={`rounded-2xl border p-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className={`h-4 w-4 ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`} />
-                    <p className={`text-sm font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-                      {t("account.business.verificationStatus")}
+              <>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  <div
+                    className={`rounded-2xl border p-4 ${
+                      isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className={`h-4 w-4 ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`} />
+                      <p className={`text-sm font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                        {t("account.business.verificationStatus")}
+                      </p>
+                    </div>
+                    <div className="mt-3 flex items-center gap-3">
+                      <VerificationBadge status={activeProfile.verification_status} />
+                    </div>
+                    {verificationRequestedAt ? (
+                      <p className={`mt-3 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                        {verificationRequestedAt}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div
+                    className={`rounded-2xl border p-4 ${
+                      isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Sparkles className={`h-4 w-4 ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`} />
+                      <p className={`text-sm font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                        {t("account.business.currentPlan")}
+                      </p>
+                    </div>
+                    <p className={`mt-3 text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+                      {planLabel(activeProfile.subscription_plan)}
+                    </p>
+                    {renewalDate ? (
+                      <p className={`mt-3 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                        {t("account.business.subscriptionRenewal")}: {renewalDate}
+                      </p>
+                    ) : null}
+                  </div>
+
+                  <div
+                    className={`rounded-2xl border p-4 ${
+                      isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className={`h-4 w-4 ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`} />
+                      <p className={`text-sm font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                        {t("account.business.listingQuota")}
+                      </p>
+                    </div>
+                    <p className={`mt-3 text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+                      {activeProfile.listing_quota ?? t("account.business.notSet")}
                     </p>
                   </div>
-                  <p className={`mt-3 text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-                    {activeProfile.verification_status}
-                  </p>
+
+                  <div
+                    className={`rounded-2xl border p-4 ${
+                      isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <BarChart3 className={`h-4 w-4 ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`} />
+                      <p className={`text-sm font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                        {t("account.business.completeness")}
+                      </p>
+                    </div>
+                    <p className={`mt-3 text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+                      {activeProfile.profile_completeness}%
+                    </p>
+                    <div className={`mt-3 h-2 rounded-full ${isDark ? "bg-[#1a2d4c]" : "bg-slate-200"}`}>
+                      <div
+                        className={`h-2 rounded-full ${isDark ? "bg-[#FFD700]" : "bg-[#0057B8]"}`}
+                        style={{ width: `${Math.max(6, activeProfile.profile_completeness)}%` }}
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                <div className={`rounded-2xl border p-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
-                  <div className="flex items-center gap-2">
-                    <Sparkles className={`h-4 w-4 ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`} />
-                    <p className={`text-sm font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-                      {t("account.business.plan")}
-                    </p>
-                  </div>
-                  <p className={`mt-3 text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-                    {activeProfile.subscription_plan || t("account.business.noPlan")}
-                  </p>
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  {analyticsCards.map((card) => {
+                    const Icon = card.icon;
+                    return (
+                      <div
+                        key={card.key}
+                        className={`rounded-2xl border p-4 ${
+                          isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Icon className={`h-4 w-4 ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`} />
+                          <p className={`text-sm font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                            {card.title}
+                          </p>
+                        </div>
+                        <p className={`mt-3 text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                          {card.value}
+                        </p>
+                      </div>
+                    );
+                  })}
                 </div>
 
-                <div className={`rounded-2xl border p-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className={`h-4 w-4 ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`} />
-                    <p className={`text-sm font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-                      {t("account.business.verified")}
-                    </p>
+                <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                  <div
+                    className={`rounded-2xl border p-5 ${
+                      isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                          {t("account.business.preview")}
+                        </p>
+                        <p className={`mt-1 text-xs leading-6 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                          {previewUrl || t("account.business.notSet")}
+                        </p>
+                      </div>
+                      {previewUrl ? (
+                        <a
+                          href={previewUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold ${
+                            isDark ? "bg-[#1a2d4c] text-slate-100 hover:bg-[#22416b]" : "bg-white text-slate-700 hover:bg-slate-100"
+                          }`}
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          {t("account.business.openPreview")}
+                        </a>
+                      ) : null}
+                    </div>
                   </div>
-                  <p className={`mt-3 text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-                    {activeProfile.is_verified ? t("account.business.yes") : t("account.business.no")}
-                  </p>
+
+                  <div
+                    className={`rounded-2xl border p-5 ${
+                      isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"
+                    }`}
+                  >
+                    <p className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                      {t("account.business.subscriptionRequest")}
+                    </p>
+                    <p className={`mt-1 text-xs leading-6 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                      {t("account.business.subscriptionRequestHint")}
+                    </p>
+                    <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                      <select
+                        value={targetPlan}
+                        onChange={(event) => setTargetPlan(event.target.value as PlanOption)}
+                        className={`w-full rounded-2xl border px-4 py-3 text-sm ${
+                          isDark ? "border-[#22416b] bg-[#11203a] text-slate-100" : "border-slate-300 bg-white text-slate-900"
+                        }`}
+                      >
+                        {PLAN_OPTIONS.map((plan) => (
+                          <option key={plan} value={plan}>
+                            {planLabel(plan)}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        onClick={() => subscriptionMutation.mutate()}
+                        disabled={subscriptionMutation.isPending || !canRequestPlanChange}
+                        className={`inline-flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold ${
+                          subscriptionMutation.isPending || !canRequestPlanChange ? "cursor-not-allowed opacity-60" : ""
+                        } ${isDark ? "bg-[#FFD700] text-[#0d1a2e]" : "bg-[#0057B8] text-white"}`}
+                      >
+                        <Sparkles className="h-4 w-4" />
+                        {subscriptionMutation.isPending
+                          ? t("account.business.requestingPlan")
+                          : t("account.business.requestPlan")}
+                      </button>
+                    </div>
+                    <p className={`mt-3 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                      {t("account.business.pendingRequest")}: {activeProfile.subscription_request_status || t("account.business.none")}
+                      {requestedAt ? ` · ${requestedAt}` : ""}
+                    </p>
+                    {subscriptionMutation.isError ? (
+                      <p className={`mt-3 text-sm ${isDark ? "text-red-300" : "text-red-600"}`}>
+                        {subscriptionMutation.error instanceof Error
+                          ? subscriptionMutation.error.message
+                          : t("account.business.saveError")}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
 
-                <div className={`rounded-2xl border p-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
-                  <div className="flex items-center gap-2">
-                    <Globe className={`h-4 w-4 ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`} />
-                    <p className={`text-sm font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-                      {t("account.business.listingQuota")}
-                    </p>
-                  </div>
-                  <p className={`mt-3 text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-                    {activeProfile.listing_quota ?? t("account.business.notSet")}
+                <div
+                  className={`rounded-2xl border p-5 ${
+                    isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"
+                  }`}
+                >
+                  <p className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                    {t("account.business.verificationRequest")}
                   </p>
+                  <p className={`mt-1 text-xs leading-6 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                    {t("account.business.verificationRequestHint")}
+                  </p>
+                  <textarea
+                    value={verificationNote}
+                    onChange={(event) => setVerificationNote(event.target.value)}
+                    rows={3}
+                    disabled={!activeProfile}
+                    placeholder={t("account.business.verificationNote")}
+                    className={`mt-4 w-full rounded-2xl border px-4 py-3 text-sm ${
+                      isDark ? "border-[#22416b] bg-[#11203a] text-slate-100" : "border-slate-300 bg-white text-slate-900"
+                    }`}
+                  />
+                  <div className="mt-4 flex items-center justify-between gap-4">
+                    <p className={`text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                      {activeProfile.verification_status === "pending" && verificationRequestedAt
+                        ? `${t("account.business.status.pending")} · ${verificationRequestedAt}`
+                        : activeProfile.verification_status === "verified"
+                          ? t("account.business.status.verified")
+                          : t("account.business.status.unverified")}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => verifyMutation.mutate()}
+                      disabled={verifyMutation.isPending || !canRequestVerification}
+                      className={`inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold ${
+                        verifyMutation.isPending || !canRequestVerification ? "cursor-not-allowed opacity-60" : ""
+                      } ${isDark ? "bg-[#FFD700] text-[#0d1a2e]" : "bg-[#0057B8] text-white"}`}
+                    >
+                      <ShieldCheck className="h-4 w-4" />
+                      {verifyMutation.isPending
+                        ? t("account.business.requestingVerification")
+                        : t("account.business.requestVerification")}
+                    </button>
+                  </div>
+                  {verifyMutation.isError ? (
+                    <p className={`mt-3 text-sm ${isDark ? "text-red-300" : "text-red-600"}`}>
+                      {verifyMutation.error instanceof Error
+                        ? verifyMutation.error.message
+                        : t("account.business.saveError")}
+                    </p>
+                  ) : null}
                 </div>
-              </div>
+              </>
             ) : null}
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">

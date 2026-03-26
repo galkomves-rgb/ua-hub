@@ -22,6 +22,7 @@ class ListingBase(BaseModel):
     region: str | None = Field(None, max_length=100)
     owner_type: str = Field(..., pattern="^(private_user|business_profile|organization)$")
     owner_id: str = Field(..., max_length=255)
+    badges: str | None = Field(None, max_length=1000)
     images_json: str = Field("[]", max_length=5000)
     meta_json: str = Field("{}", max_length=2000)
 
@@ -42,6 +43,7 @@ class ListingUpdate(BaseModel):
     category: str | None = Field(None, min_length=1, max_length=100)
     subcategory: str | None = Field(None, max_length=100)
     region: str | None = Field(None, max_length=100)
+    badges: str | None = Field(None, max_length=1000)
     images_json: str | None = Field(None, max_length=5000)
     meta_json: str | None = Field(None, max_length=2000)
 
@@ -63,9 +65,13 @@ class ListingSummaryResponse(BaseModel):
     created_at: datetime
     expires_at: datetime | None = None
     views_count: int
+    unread_messages_count: int = 0
+    saved_count: int = 0
     is_featured: bool
     is_promoted: bool
     is_verified: bool
+    moderation_reason: str | None = None
+    badges: str | None = None
 
     class Config:
         from_attributes = True
@@ -80,6 +86,7 @@ class ListingResponse(ListingBase):
     is_featured: bool
     is_promoted: bool
     is_verified: bool
+    moderation_reason: str | None = None
     views_count: int
     created_at: datetime
     updated_at: datetime

@@ -60,7 +60,12 @@ export default function UahubLayout({ children, hideModuleNav }: LayoutProps) {
       }
     };
 
-    loadUnread();
+    void loadUnread();
+    const intervalId = window.setInterval(() => {
+      void loadUnread();
+    }, 30000);
+
+    return () => window.clearInterval(intervalId);
   }, [user]);
 
   useEffect(() => {

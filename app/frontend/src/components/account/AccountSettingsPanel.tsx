@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, Globe2, Save, Shield, ToggleLeft } from "lucide-react";
+import { AlertCircle, Globe2, LogOut, Save, Shield, ToggleLeft } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   createUserProfile,
@@ -9,6 +9,7 @@ import {
   type UserProfilePayload,
   type UserProfileResponse,
 } from "@/lib/account-api";
+import { authApi } from "@/lib/auth";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
 
@@ -92,6 +93,16 @@ export function AccountSettingsPanel() {
   const profileMissing = profileQuery.error instanceof Error && profileQuery.error.message === "PROFILE_NOT_FOUND";
 
   const [form, setForm] = useState<SettingsFormState>(() => buildSettingsForm(null));
+  const [logoutAllError, setLogoutAllError] = useState<string | null>(null);
+
+  const logoutAllMutation = useMutation({
+    mutationFn: async () => {
+      await authApi.logoutAllDevices();
+    },
+    onError: (error: unknown) => {
+      setLogoutAllError(error instanceof Error ? error.message : t("account.settings.logoutAllError"));
+    },
+  });
 
   useEffect(() => {
     setForm(buildSettingsForm(profile));
@@ -250,6 +261,40 @@ export function AccountSettingsPanel() {
               title={t("account.settings.marketingEmails")}
               description={t("account.settings.marketingEmailsDescription")}
             />
+
+            <div
+              className={`rounded-2xl border p-4 ${
+                isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                    {t("account.settings.logoutAllTitle")}
+                  </p>
+                  <p className={`mt-1 text-xs leading-6 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                    {t("account.settings.logoutAllDescription")}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLogoutAllError(null);
+                    logoutAllMutation.mutate();
+                  }}
+                  disabled={logoutAllMutation.isPending}
+                  className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold ${
+                    logoutAllMutation.isPending ? "cursor-not-allowed opacity-60" : ""
+                  } ${isDark ? "bg-red-950/30 text-red-300 hover:bg-red-950/50" : "bg-red-50 text-red-700 hover:bg-red-100"}`}
+                >
+                  <LogOut className="h-4 w-4" />
+                  {logoutAllMutation.isPending ? t("account.settings.loggingOutAll") : t("account.settings.logoutAll")}
+                </button>
+              </div>
+              {logoutAllError ? (
+                <p className={`mt-3 text-sm ${isDark ? "text-red-300" : "text-red-600"}`}>{logoutAllError}</p>
+              ) : null}
+            </div>
           </div>
 
           <div className="flex justify-end">

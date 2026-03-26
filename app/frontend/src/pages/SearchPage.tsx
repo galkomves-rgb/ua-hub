@@ -1,8 +1,15 @@
-import { useState, useMemo, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Search, X, ArrowLeft, Clock, TrendingUp } from "lucide-react";
 import Layout from "@/components/Layout";
 import { ListingCard, BusinessCard } from "@/components/Cards";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  clearSearchHistory,
+  deleteSearchHistory,
+  fetchSearchHistory,
+  saveSearchHistory,
+} from "@/lib/account-api";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
 import { useGlobalCity } from "@/lib/global-preferences";
@@ -11,6 +18,12 @@ import type { Listing, BusinessProfile } from "@/lib/platform";
 
 const RECENT_SEARCHES_KEY = "uahab-recent-searches";
 const MAX_RECENT = 8;
+
+interface RecentSearchItem {
+  id?: number;
+  query: string;
+  created_at?: string;
+}
 
 function normalizeCityFilter(value: string): string {
   return value === "All Spain" ? "all" : value;
@@ -25,21 +38,58 @@ export default function SearchPage() {
   const initialQuery = searchParams.get("q") || "";
   const [query, setQuery] = useState(initialQuery);
   const [selectedModule, setSelectedModule] = useState("all");
-  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [recentSearches, setRecentSearches] = useState<RecentSearchItem[]>([]);
   const { city: globalCity } = useGlobalCity();
+  const { user } = useAuth();
   const normalizedGlobalCity = normalizeCityFilter(globalCity);
+  const isLoggedIn = Boolean(user);
 
   useEffect(() => {
-    const saved = localStorage.getItem(RECENT_SEARCHES_KEY);
-    if (saved) {
-      try { setRecentSearches(JSON.parse(saved)); } catch { /* ignore */ }
-    }
-  }, []);
+    const loadRecent = async () => {
+      if (isLoggedIn) {
+        try {
+          const items = await fetchSearchHistory(MAX_RECENT);
+          setRecentSearches(items.map((item) => ({ id: item.id, query: item.query, created_at: item.created_at })));
+          return;
+        } catch {
+          // fall back to local storage below
+        }
+      }
 
-  const saveSearch = (q: string) => {
-    if (!q.trim()) return;
-    const updated = [q, ...recentSearches.filter((s) => s !== q)].slice(0, MAX_RECENT);
-    setRecentSearches(updated);
+      const saved = localStorage.getItem(RECENT_SEARCHES_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved) as string[];
+          setRecentSearches(parsed.map((item) => ({ query: item })));
+          return;
+        } catch {
+          // ignore broken local state
+        }
+      }
+      setRecentSearches([]);
+    };
+
+    void loadRecent();
+  }, [isLoggedIn]);
+
+  const saveSearch = async (q: string) => {
+    const trimmed = q.trim();
+    if (!trimmed) return;
+
+    if (isLoggedIn) {
+      try {
+        await saveSearchHistory(trimmed);
+        const items = await fetchSearchHistory(MAX_RECENT);
+        setRecentSearches(items.map((item) => ({ id: item.id, query: item.query, created_at: item.created_at })));
+        return;
+      } catch {
+        // fall back to local storage below
+      }
+    }
+
+    const existing = recentSearches.map((item) => item.query);
+    const updated = [trimmed, ...existing.filter((item) => item !== trimmed)].slice(0, MAX_RECENT);
+    setRecentSearches(updated.map((item) => ({ query: item })));
     localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
   };
 
@@ -47,16 +97,48 @@ export default function SearchPage() {
     setQuery(q);
     if (q.trim()) {
       setSearchParams({ q: q.trim() });
-      saveSearch(q.trim());
+      void saveSearch(q.trim());
     } else {
       setSearchParams({});
     }
   };
 
-  const clearRecent = () => {
+  const clearRecent = async () => {
+    if (isLoggedIn) {
+      try {
+        await clearSearchHistory();
+      } catch {
+        // ignore and still clear local cache
+      }
+    }
     setRecentSearches([]);
     localStorage.removeItem(RECENT_SEARCHES_KEY);
   };
+
+  const deleteRecent = async (item: RecentSearchItem) => {
+    if (isLoggedIn && item.id) {
+      try {
+        await deleteSearchHistory(item.id);
+        const items = await fetchSearchHistory(MAX_RECENT);
+        setRecentSearches(items.map((entry) => ({ id: entry.id, query: entry.query, created_at: entry.created_at })));
+        return;
+      } catch {
+        // continue with local delete
+      }
+    }
+
+    const updated = recentSearches.filter((entry) => entry.query !== item.query);
+    setRecentSearches(updated);
+    localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated.map((entry) => entry.query)));
+  };
+
+  useEffect(() => {
+    const queryFromUrl = searchParams.get("q")?.trim();
+    if (!queryFromUrl) {
+      return;
+    }
+    void saveSearch(queryFromUrl);
+  }, [searchParams, isLoggedIn]);
 
   const filteredListings = useMemo(() => {
     if (!query.trim()) return [];
@@ -176,16 +258,30 @@ export default function SearchPage() {
               </button>
             </div>
             <div className="flex flex-wrap gap-2">
-              {recentSearches.map((s, i) => (
-                <button
-                  key={i}
-                  onClick={() => handleSearch(s)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                    isDark ? "bg-[#1a2a40] text-gray-300 hover:bg-[#253d5c]" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              {recentSearches.map((item) => (
+                <div
+                  key={`${item.id ?? "local"}-${item.query}`}
+                  className={`inline-flex items-center gap-1 rounded-lg ${
+                    isDark ? "bg-[#1a2a40]" : "bg-gray-100"
                   }`}
                 >
-                  {s}
-                </button>
+                  <button
+                    onClick={() => handleSearch(item.query)}
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                      isDark ? "text-gray-300 hover:bg-[#253d5c]" : "text-gray-600 hover:bg-gray-200"
+                    }`}
+                  >
+                    {item.query}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void deleteRecent(item)}
+                    className={`pr-2 ${isDark ? "text-gray-500 hover:text-red-300" : "text-gray-400 hover:text-red-500"}`}
+                    aria-label={t("account.saved.deleteHistory")}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               ))}
             </div>
           </div>

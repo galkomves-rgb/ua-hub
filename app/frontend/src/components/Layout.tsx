@@ -55,24 +55,13 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const token = localStorage.getItem("auth_token");
         const user = await authApi.getCurrentUser();
         if (user) {
           setIsLoggedIn(true);
-          try {
-            const res = await fetch(`${getAPIBaseURL()}/api/v1/messaging/unread-count`, {
-              method: "GET",
-              headers: token ? { Authorization: `Bearer ${token}` } : {},
-            });
-            if (!res.ok) {
-              throw new Error("Unread count request failed");
-            }
-            const data = await res.json();
-            setUnreadCount(data?.count ?? 0);
-          } catch {
-            setUnreadCount(0);
-          }
+          return;
         }
+        setIsLoggedIn(false);
+        setUnreadCount(0);
       } catch {
         setIsLoggedIn(false);
         setUnreadCount(0);
@@ -80,6 +69,37 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
     };
     checkAuth();
   }, []);
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setUnreadCount(0);
+      return;
+    }
+
+    const loadUnread = async () => {
+      try {
+        const token = localStorage.getItem("auth_token");
+        const res = await fetch(`${getAPIBaseURL()}/api/v1/messaging/unread-count`, {
+          method: "GET",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!res.ok) {
+          throw new Error("Unread count request failed");
+        }
+        const data = await res.json();
+        setUnreadCount(data?.count ?? 0);
+      } catch {
+        setUnreadCount(0);
+      }
+    };
+
+    void loadUnread();
+    const intervalId = window.setInterval(() => {
+      void loadUnread();
+    }, 30000);
+
+    return () => window.clearInterval(intervalId);
+  }, [isLoggedIn]);
 
   useEffect(() => {
     setShowMobileMenu(false);

@@ -14,6 +14,11 @@ export interface AuthCapabilities {
   email_confirmation_required: boolean;
 }
 
+export interface LogoutResponse {
+  redirect_url: string;
+  revoked_sessions: number;
+}
+
 export interface StartOidcLoginOptions {
   captchaToken?: string;
   method?: AuthMethod;
@@ -89,14 +94,43 @@ class RPApi {
 
   async logout() {
     try {
-      const response = await this.client.get(
-        `${this.getBaseURL()}/api/v1/auth/logout`
+      const token = localStorage.getItem('auth_token');
+      const response = await this.client.get<LogoutResponse>(
+        `${this.getBaseURL()}/api/v1/auth/logout`,
+        token
+          ? {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          : undefined
       );
       localStorage.removeItem('auth_token');
       // The backend will redirect to OIDC provider logout
       window.location.href = response.data.redirect_url;
     } catch (error) {
       throw new Error(error.response?.data?.detail || 'Failed to logout');
+    }
+  }
+
+  async logoutAllDevices() {
+    try {
+      const token = localStorage.getItem('auth_token');
+      const response = await this.client.post<LogoutResponse>(
+        `${this.getBaseURL()}/api/v1/auth/logout/all`,
+        {},
+        token
+          ? {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          : undefined
+      );
+      localStorage.removeItem('auth_token');
+      window.location.href = response.data.redirect_url;
+    } catch (error) {
+      throw new Error(error.response?.data?.detail || 'Failed to logout from all devices');
     }
   }
 }

@@ -1,7 +1,8 @@
 import logging
+from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.search_histories import Search_histories
@@ -169,4 +170,84 @@ class Search_historiesService:
             return result.scalars().all()
         except Exception as e:
             logger.error(f"Error fetching search_historiess by {field_name}: {str(e)}")
+            raise
+
+    async def list_recent(self, user_id: str, limit: int = 8) -> List[Search_histories]:
+        try:
+            result = await self.db.execute(
+                select(Search_histories)
+                .where(Search_histories.user_id == user_id)
+                .order_by(Search_histories.created_at.desc(), Search_histories.id.desc())
+                .limit(limit)
+            )
+            return result.scalars().all()
+        except Exception as e:
+            logger.error(f"Error fetching recent search_histories for {user_id}: {str(e)}")
+            raise
+
+    async def create_or_replace_recent(
+        self,
+        user_id: str,
+        query: str,
+        max_items: int = 8,
+    ) -> Search_histories:
+        normalized_query = query.strip()
+        if not normalized_query:
+            raise ValueError("Query is required")
+
+        try:
+            now = datetime.now(timezone.utc)
+            existing_result = await self.db.execute(
+                select(Search_histories).where(
+                    Search_histories.user_id == user_id,
+                    func.lower(Search_histories.query) == normalized_query.lower(),
+                )
+            )
+            existing = existing_result.scalar_one_or_none()
+
+            if existing:
+                existing.query = normalized_query
+                existing.created_at = now
+                record = existing
+            else:
+                record = Search_histories(
+                    user_id=user_id,
+                    query=normalized_query,
+                    created_at=now,
+                )
+                self.db.add(record)
+
+            await self.db.flush()
+
+            overflow_result = await self.db.execute(
+                select(Search_histories)
+                .where(Search_histories.user_id == user_id)
+                .order_by(Search_histories.created_at.desc(), Search_histories.id.desc())
+            )
+            overflow_items = overflow_result.scalars().all()[max_items:]
+            for item in overflow_items:
+                await self.db.delete(item)
+
+            await self.db.commit()
+            await self.db.refresh(record)
+            return record
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Error upserting recent search_histories for {user_id}: {str(e)}")
+            raise
+
+    async def clear_user_history(self, user_id: str) -> int:
+        try:
+            result = await self.db.execute(
+                select(Search_histories).where(Search_histories.user_id == user_id)
+            )
+            items = result.scalars().all()
+            deleted_count = len(items)
+            for item in items:
+                await self.db.delete(item)
+            await self.db.commit()
+            return deleted_count
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Error clearing search_histories for {user_id}: {str(e)}")
             raise

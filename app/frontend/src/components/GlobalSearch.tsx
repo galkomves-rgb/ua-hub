@@ -1,12 +1,15 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Search, X, Clock, Trash2 } from "lucide-react";
-import { createClient } from "@metagptx/web-sdk";
 import { searchItems } from "@/lib/searchData";
 import type { SearchItem } from "@/lib/searchData";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  deleteSearchHistory,
+  fetchSearchHistory,
+  saveSearchHistory,
+} from "@/lib/account-api";
 import { useTheme } from "@/lib/ThemeContext";
-
-const client = createClient();
 
 const RECENT_SEARCHES_KEY = "uahab_recent_searches";
 const MAX_RECENT = 5;
@@ -35,42 +38,23 @@ export default function GlobalSearch() {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState(-1);
   const [recentSearches, setRecentSearches] = useState<RecentSearch[]>([]);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loadingRecent, setLoadingRecent] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { user } = useAuth();
   const isDark = theme === "dark";
-
-  // Check auth status on mount
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        const user = await client.auth.me();
-        if (user?.data) {
-          setIsLoggedIn(true);
-        }
-      } catch {
-        setIsLoggedIn(false);
-      }
-    };
-    checkAuth();
-  }, []);
+  const isLoggedIn = Boolean(user);
 
   // Load recent searches
   const loadRecentSearches = useCallback(async () => {
     setLoadingRecent(true);
     try {
       if (isLoggedIn) {
-        const response = await client.entities.search_histories.query({
-          query: {},
-          sort: "-created_at",
-          limit: MAX_RECENT,
-        });
-        const items = response?.data?.items || [];
+        const items = await fetchSearchHistory(MAX_RECENT);
         setRecentSearches(
-          items.map((item: any) => ({
+          items.map((item) => ({
             id: item.id,
             query: item.query,
             created_at: item.created_at,
@@ -94,24 +78,7 @@ export default function GlobalSearch() {
 
       try {
         if (isLoggedIn) {
-          const existing = recentSearches.find(
-            (s) => s.query.toLowerCase() === trimmed.toLowerCase()
-          );
-          if (existing?.id) {
-            await client.entities.search_histories.delete({ id: String(existing.id) });
-          }
-          await client.entities.search_histories.create({
-            data: {
-              query: trimmed,
-              created_at: new Date().toISOString(),
-            },
-          });
-          if (!existing && recentSearches.length >= MAX_RECENT) {
-            const oldest = recentSearches[recentSearches.length - 1];
-            if (oldest?.id) {
-              await client.entities.search_histories.delete({ id: String(oldest.id) });
-            }
-          }
+          await saveSearchHistory(trimmed);
           await loadRecentSearches();
         } else {
           const current = getLocalRecent();
@@ -147,7 +114,7 @@ export default function GlobalSearch() {
       e.stopPropagation();
       try {
         if (isLoggedIn && search.id) {
-          await client.entities.search_histories.delete({ id: String(search.id) });
+          await deleteSearchHistory(search.id);
           await loadRecentSearches();
         } else {
           const current = getLocalRecent();

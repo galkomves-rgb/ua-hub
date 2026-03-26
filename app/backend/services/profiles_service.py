@@ -1,7 +1,10 @@
 from datetime import datetime, timezone
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from core.config import settings
+from models.listings import Listings
 from models.profiles import UserProfile, BusinessProfile
+from models.saved import SavedBusiness
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 class ProfileService:
@@ -9,6 +12,84 @@ class ProfileService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _calculate_business_profile_completeness(profile: BusinessProfile) -> int:
+        checks = [
+            bool(profile.slug),
+            bool(profile.name),
+            bool(profile.category),
+            bool(profile.city),
+            bool(profile.description),
+            bool(profile.logo_url),
+            bool(profile.cover_url),
+            bool(profile.website),
+            bool(profile.contacts_json and profile.contacts_json not in {"", "{}"}),
+            bool(profile.tags_json and profile.tags_json not in {"", "[]"}),
+            bool(profile.service_areas_json and profile.service_areas_json not in {"", "[]"}),
+            bool(profile.social_links_json and profile.social_links_json not in {"", "[]"}),
+        ]
+        completed = sum(1 for item in checks if item)
+        return round(completed / len(checks) * 100)
+
+    async def serialize_business_profile(self, profile: BusinessProfile) -> dict:
+        active_statuses = ["active", "published"]
+        active_listings_count = await self.db.scalar(
+            select(func.count(Listings.id)).where(
+                Listings.owner_type == "business_profile",
+                Listings.owner_id == profile.slug,
+                Listings.status.in_(active_statuses),
+            )
+        )
+        total_views_count = await self.db.scalar(
+            select(func.coalesce(func.sum(Listings.views_count), 0)).where(
+                Listings.owner_type == "business_profile",
+                Listings.owner_id == profile.slug,
+            )
+        )
+        saved_by_users_count = await self.db.scalar(
+            select(func.count(SavedBusiness.id)).where(SavedBusiness.business_profile_id == profile.id)
+        )
+        frontend_base = (getattr(settings, "frontend_url", "") or "").rstrip("/")
+        preview_url = f"{frontend_base}/business/{profile.slug}" if frontend_base else f"/business/{profile.slug}"
+
+        return {
+            "owner_user_id": profile.owner_user_id,
+            "slug": profile.slug,
+            "name": profile.name,
+            "category": profile.category,
+            "city": profile.city,
+            "description": profile.description,
+            "logo_url": profile.logo_url,
+            "cover_url": profile.cover_url,
+            "contacts_json": profile.contacts_json or "{}",
+            "tags_json": profile.tags_json or "[]",
+            "rating": profile.rating or "0",
+            "website": profile.website,
+            "social_links_json": profile.social_links_json or "[]",
+            "service_areas_json": profile.service_areas_json or "[]",
+            "is_verified": bool(profile.is_verified),
+            "is_premium": bool(profile.is_premium),
+            "verification_status": profile.verification_status,
+            "verification_requested_at": profile.verification_requested_at,
+            "verification_notes": profile.verification_notes,
+            "subscription_plan": profile.subscription_plan,
+            "subscription_request_status": profile.subscription_request_status,
+            "subscription_requested_plan": profile.subscription_requested_plan,
+            "subscription_requested_at": profile.subscription_requested_at,
+            "subscription_renewal_date": profile.subscription_renewal_date,
+            "listing_quota": profile.listing_quota,
+            "active_listings_count": int(active_listings_count or 0),
+            "total_views_count": int(total_views_count or 0),
+            "saved_by_users_count": int(saved_by_users_count or 0),
+            "profile_completeness": self._calculate_business_profile_completeness(profile),
+            "public_preview_url": preview_url,
+            "created_at": profile.created_at,
+            "updated_at": profile.updated_at,
+        }
+
+    async def serialize_business_profiles(self, profiles: list[BusinessProfile]) -> list[dict]:
+        return [await self.serialize_business_profile(profile) for profile in profiles]
 
     # ============ UserProfile Operations ============
 
@@ -19,7 +100,9 @@ class ProfileService:
         city: str = "",
         bio: str = "",
         preferred_language: str = "ua",
+        account_type: str = "private",
         avatar_url: str = None,
+        onboarding_completed: bool = False,
         is_public_profile: bool = False,
         show_as_public_author: bool = False,
         allow_marketing_emails: bool = False,
@@ -33,8 +116,10 @@ class ProfileService:
             city=city,
             bio=bio,
             preferred_language=preferred_language,
+            account_type=account_type,
             created_at=now,
             updated_at=now,
+            onboarding_completed=onboarding_completed,
             is_public_profile=is_public_profile,
             show_as_public_author=show_as_public_author,
             allow_marketing_emails=allow_marketing_emails,
@@ -58,7 +143,9 @@ class ProfileService:
         city: str = None,
         bio: str = None,
         preferred_language: str = None,
+        account_type: str = None,
         avatar_url: str = None,
+        onboarding_completed: bool = None,
         is_public_profile: bool = None,
         show_as_public_author: bool = None,
         allow_marketing_emails: bool = None,
@@ -76,8 +163,12 @@ class ProfileService:
             profile.bio = bio
         if preferred_language is not None:
             profile.preferred_language = preferred_language
+        if account_type is not None:
+            profile.account_type = account_type
         if avatar_url is not None:
             profile.avatar_url = avatar_url
+        if onboarding_completed is not None:
+            profile.onboarding_completed = onboarding_completed
         if is_public_profile is not None:
             profile.is_public_profile = is_public_profile
         if show_as_public_author is not None:
@@ -166,6 +257,21 @@ class ProfileService:
         )
         return result.scalars().all()
 
+    async def get_onboarding_status(self, user_id: str) -> dict:
+        profile = await self.get_user_profile(user_id)
+        business_profiles = await self.get_business_profiles_by_owner(user_id)
+        has_user_profile = profile is not None
+        has_business_profile = len(business_profiles) > 0
+        completed = bool(profile and profile.onboarding_completed)
+        next_step = "done" if completed else "user_profile"
+        return {
+            "completed": completed,
+            "has_user_profile": has_user_profile,
+            "has_business_profile": has_business_profile,
+            "account_type": profile.account_type if profile else None,
+            "next_step": next_step,
+        }
+
     async def update_business_profile(
         self,
         slug: str,
@@ -212,6 +318,49 @@ class ProfileService:
         if service_areas_json is not None:
             profile.service_areas_json = service_areas_json
 
+        profile.updated_at = datetime.now(timezone.utc)
+        await self.db.commit()
+        await self.db.refresh(profile)
+        return profile
+
+    async def request_business_verification(
+        self,
+        slug: str,
+        owner_user_id: str,
+        message: str | None = None,
+    ) -> BusinessProfile | None:
+        profile = await self.get_business_profile(slug)
+        if not profile or profile.owner_user_id != owner_user_id:
+            return None
+        if profile.verification_status in {"pending", "verified"}:
+            raise ValueError("Business verification request is already active")
+
+        profile.verification_status = "pending"
+        profile.is_verified = False
+        profile.verification_requested_at = datetime.now(timezone.utc)
+        profile.verification_notes = message
+        profile.updated_at = datetime.now(timezone.utc)
+        await self.db.commit()
+        await self.db.refresh(profile)
+        return profile
+
+    async def request_business_subscription_change(
+        self,
+        slug: str,
+        owner_user_id: str,
+        requested_plan: str,
+    ) -> BusinessProfile | None:
+        profile = await self.get_business_profile(slug)
+        if not profile or profile.owner_user_id != owner_user_id:
+            return None
+        if profile.subscription_request_status == "pending" and profile.subscription_requested_plan == requested_plan:
+            raise ValueError("A subscription change request for this plan is already pending")
+        if profile.subscription_plan == requested_plan:
+            raise ValueError("Business profile is already on this subscription plan")
+
+        profile.subscription_request_status = "pending"
+        profile.subscription_requested_plan = requested_plan
+        profile.subscription_requested_at = datetime.now(timezone.utc)
         profile.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
         await self.db.refresh(profile)

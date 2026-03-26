@@ -11,6 +11,7 @@ class UserProfileBase(BaseModel):
     city: str = Field("", max_length=100)
     bio: str = Field("", max_length=500)
     preferred_language: str = Field("ua", pattern="^(ua|es|en)$")
+    account_type: str = Field("private", pattern="^(private|business)$")
     avatar_url: str | None = Field(None, max_length=1024)
     is_public_profile: bool = Field(False)
     show_as_public_author: bool = Field(False)
@@ -40,6 +41,7 @@ class UserProfileResponse(UserProfileBase):
     """Schema for user profile response."""
 
     user_id: str
+    onboarding_completed: bool = False
     is_verified: bool = False
     created_at: datetime
     updated_at: datetime
@@ -99,8 +101,19 @@ class BusinessProfileResponse(BusinessProfileBase):
     is_verified: bool = False
     is_premium: bool = False
     verification_status: str = "unverified"
+    verification_requested_at: datetime | None = None
+    verification_notes: str | None = None
     subscription_plan: str | None = None
+    subscription_request_status: str | None = None
+    subscription_requested_plan: str | None = None
+    subscription_requested_at: datetime | None = None
+    subscription_renewal_date: datetime | None = None
     listing_quota: int | None = None
+    active_listings_count: int = 0
+    total_views_count: int = 0
+    saved_by_users_count: int = 0
+    profile_completeness: int = 0
+    public_preview_url: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -115,3 +128,31 @@ class BusinessProfileListResponse(BaseModel):
     limit: int
     offset: int
     items: list[BusinessProfileResponse]
+
+
+class OnboardingStatusResponse(BaseModel):
+    completed: bool
+    has_user_profile: bool
+    has_business_profile: bool
+    account_type: str | None = None
+    next_step: str
+
+
+class OnboardingCompleteRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    city: str = Field("", max_length=100)
+    bio: str = Field("", max_length=500)
+    preferred_language: str = Field("ua", pattern="^(ua|es|en)$")
+    avatar_url: str | None = Field(None, max_length=1024)
+    account_type: str = Field(..., pattern="^(private|business)$")
+    is_public_profile: bool = Field(False)
+    show_as_public_author: bool = Field(False)
+    allow_marketing_emails: bool = Field(False)
+
+
+class BusinessVerificationRequest(BaseModel):
+    message: str | None = Field(None, max_length=1000)
+
+
+class BusinessSubscriptionRequest(BaseModel):
+    plan: str = Field(..., pattern="^(basic|premium|business)$")

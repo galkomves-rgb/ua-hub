@@ -7,7 +7,7 @@ export default function AuthCallback() {
 
     if (token) {
       localStorage.setItem('auth_token', token);
-      window.location.replace('/');
+      window.location.replace('/onboarding');
       return;
     }
 

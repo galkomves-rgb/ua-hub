@@ -35,3 +35,8 @@ class AuthCapabilitiesResponse(BaseModel):
     phone: bool
     turnstile_enabled: bool
     email_confirmation_required: bool
+
+
+class LogoutResponse(BaseModel):
+    redirect_url: str
+    revoked_sessions: int = 0

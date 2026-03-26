@@ -38,6 +38,7 @@ async def create_listing(
         region=listing_data.region,
         owner_type=listing_data.owner_type,
         owner_id=listing_data.owner_id,
+        badges=listing_data.badges,
         images_json=listing_data.images_json,
         meta_json=listing_data.meta_json,
     )
@@ -75,6 +76,9 @@ async def list_listings(
 @router.get("/search/my", response_model=list[ListingSummaryResponse])
 async def get_my_listings(
     status: str | None = Query(None),
+    module: str | None = Query(None),
+    q: str | None = Query(None),
+    sort: str = Query("newest", pattern="^(newest|oldest|views_desc|expires_soon)$"),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     user_id: str = Depends(get_current_user_id),
@@ -85,6 +89,9 @@ async def get_my_listings(
     listings = await service.list_user_listings(
         user_id=user_id,
         status=status,
+        module=module,
+        query_text=q,
+        sort=sort,
         limit=limit,
         offset=offset,
     )
@@ -172,6 +179,7 @@ async def get_business_listings(
 @router.get("/{listing_id}", response_model=ListingDetailResponse)
 async def get_listing(
     listing_id: int,
+    record_view: bool = Query(True),
     db: AsyncSession = Depends(get_db_session),
 ):
     """Get listing by ID. Records a view."""
@@ -181,7 +189,8 @@ async def get_listing(
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
 
-    await service.record_view(listing_id)
+    if record_view:
+        await service.record_view(listing_id)
     return listing
 
 
@@ -211,6 +220,7 @@ async def update_listing(
         category=listing_data.category,
         subcategory=listing_data.subcategory,
         region=listing_data.region,
+        badges=listing_data.badges,
         images_json=listing_data.images_json,
         meta_json=listing_data.meta_json,
     )
@@ -285,6 +295,52 @@ async def renew_listing(
         raise HTTPException(status_code=400, detail="Listing cannot be renewed in its current state")
 
     return updated_listing
+
+
+@router.post("/{listing_id}/boost", response_model=ListingActionResponse)
+async def boost_listing(
+    listing_id: int,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Boost an active listing."""
+    service = ListingsService(db)
+    listing = await service.get_listing(listing_id)
+
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    if listing.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to boost this listing")
+
+    updated_listing = await service.boost_listing(listing_id)
+    if not updated_listing:
+        raise HTTPException(status_code=400, detail="Listing cannot be boosted in its current state")
+
+    return updated_listing
+
+
+@router.post("/{listing_id}/duplicate", response_model=ListingResponse)
+async def duplicate_listing(
+    listing_id: int,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Duplicate a listing into a new draft."""
+    service = ListingsService(db)
+    listing = await service.get_listing(listing_id)
+
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+
+    if listing.user_id != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to duplicate this listing")
+
+    duplicated_listing = await service.duplicate_listing(listing_id)
+    if not duplicated_listing:
+        raise HTTPException(status_code=400, detail="Listing cannot be duplicated")
+
+    return duplicated_listing
 
 
 @router.delete("/{listing_id}")

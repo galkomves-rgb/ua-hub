@@ -1,8 +1,10 @@
 from datetime import datetime, timezone
-from sqlalchemy import and_, desc, or_, select
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.listings import Listings
+from models.messages import Messages
+from models.saved import SavedListing
 
 
 LISTING_STATUS_DRAFT = "draft"
@@ -33,6 +35,7 @@ class ListingsService:
         currency: str = "EUR",
         subcategory: str = None,
         region: str = None,
+        badges: str = None,
         images_json: str = "[]",
         meta_json: str = "{}",
     ) -> Listings:
@@ -51,11 +54,13 @@ class ListingsService:
             region=region,
             owner_type=owner_type,
             owner_id=owner_id,
+            badges=badges,
             images_json=images_json,
             status=LISTING_STATUS_DRAFT,
             is_featured=False,
             is_promoted=False,
             is_verified=False,
+            moderation_reason=None,
             meta_json=meta_json,
             views_count=0,
             created_at=now,
@@ -112,18 +117,90 @@ class ListingsService:
         self,
         user_id: str,
         status: str = None,
+        module: str = None,
+        query_text: str = None,
+        sort: str = "newest",
         limit: int = 50,
         offset: int = 0,
-    ) -> list[Listings]:
+    ) -> list[dict]:
         """List all listings created by a user."""
         query = select(Listings).where(Listings.user_id == user_id)
 
         if status:
             query = query.where(Listings.status == status)
 
-        query = query.order_by(desc(Listings.created_at)).limit(limit).offset(offset)
+        if module:
+            query = query.where(Listings.module == module)
+
+        if query_text:
+            search_term = f"%{query_text}%"
+            query = query.where(
+                or_(
+                    Listings.title.ilike(search_term),
+                    Listings.description.ilike(search_term),
+                    Listings.category.ilike(search_term),
+                )
+            )
+
+        if sort == "oldest":
+            query = query.order_by(Listings.created_at.asc())
+        elif sort == "views_desc":
+            query = query.order_by(Listings.views_count.desc(), Listings.created_at.desc())
+        elif sort == "expires_soon":
+            query = query.order_by(Listings.expiry_date.asc().nulls_last(), Listings.created_at.desc())
+        else:
+            query = query.order_by(desc(Listings.created_at))
+
+        query = query.limit(limit).offset(offset)
         result = await self.db.execute(query)
-        return result.scalars().all()
+        listings = result.scalars().all()
+        if not listings:
+            return []
+
+        listing_ids = [listing.id for listing in listings]
+        listing_id_strings = [str(listing_id) for listing_id in listing_ids]
+
+        unread_counts_result = await self.db.execute(
+            select(Messages.listing_id, func.count(Messages.id))
+            .where(
+                Messages.listing_id.in_(listing_id_strings),
+                Messages.recipient_id == user_id,
+                Messages.is_read.is_(False),
+            )
+            .group_by(Messages.listing_id)
+        )
+        unread_counts = {int(listing_id): count for listing_id, count in unread_counts_result.all() if listing_id is not None}
+
+        saved_counts_result = await self.db.execute(
+            select(SavedListing.listing_id, func.count(SavedListing.id))
+            .where(SavedListing.listing_id.in_(listing_ids))
+            .group_by(SavedListing.listing_id)
+        )
+        saved_counts = {listing_id: count for listing_id, count in saved_counts_result.all()}
+
+        items: list[dict] = []
+        for listing in listings:
+            items.append(
+                {
+                    "id": listing.id,
+                    "title": listing.title,
+                    "module": listing.module,
+                    "category": listing.category,
+                    "status": listing.status,
+                    "created_at": listing.created_at,
+                    "expires_at": listing.expires_at,
+                    "views_count": listing.views_count or 0,
+                    "unread_messages_count": int(unread_counts.get(listing.id, 0)),
+                    "saved_count": int(saved_counts.get(listing.id, 0)),
+                    "is_featured": bool(listing.is_featured),
+                    "is_promoted": bool(listing.is_promoted),
+                    "is_verified": bool(listing.is_verified),
+                    "moderation_reason": listing.moderation_reason,
+                    "badges": listing.badges,
+                }
+            )
+
+        return items
 
     async def search_listings(
         self,
@@ -163,6 +240,7 @@ class ListingsService:
         category: str = None,
         subcategory: str = None,
         region: str = None,
+        badges: str = None,
         images_json: str = None,
         meta_json: str = None,
     ) -> Listings | None:
@@ -185,6 +263,8 @@ class ListingsService:
             listing.subcategory = subcategory
         if region is not None:
             listing.region = region
+        if badges is not None:
+            listing.badges = badges
         if images_json is not None:
             listing.images_json = images_json
         if meta_json is not None:
@@ -257,6 +337,7 @@ class ListingsService:
             return None
 
         listing.status = LISTING_STATUS_MODERATION_PENDING
+        listing.moderation_reason = None
         listing.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
         await self.db.refresh(listing)
@@ -281,7 +362,58 @@ class ListingsService:
             return None
 
         listing.status = LISTING_STATUS_DRAFT
+        listing.moderation_reason = None
         listing.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
         await self.db.refresh(listing)
         return listing
+
+    async def boost_listing(self, listing_id: int) -> Listings | None:
+        """Promote an active listing."""
+        listing = await self.get_listing(listing_id)
+        if not listing or listing.status not in {LISTING_STATUS_PUBLISHED, "active"}:
+            return None
+
+        listing.is_promoted = True
+        listing.updated_at = datetime.now(timezone.utc)
+        await self.db.commit()
+        await self.db.refresh(listing)
+        return listing
+
+    async def duplicate_listing(self, listing_id: int) -> Listings | None:
+        """Create a draft copy of an existing listing."""
+        source = await self.get_listing(listing_id)
+        if not source:
+            return None
+
+        now = datetime.now(timezone.utc)
+        duplicate = Listings(
+            user_id=source.user_id,
+            module=source.module,
+            category=source.category,
+            subcategory=source.subcategory,
+            title=f"{source.title} (copy)",
+            description=source.description,
+            price=source.price,
+            currency=source.currency,
+            city=source.city,
+            region=source.region,
+            owner_type=source.owner_type,
+            owner_id=source.owner_id,
+            badges=source.badges,
+            images_json=source.images_json,
+            expiry_date=None,
+            status=LISTING_STATUS_DRAFT,
+            is_featured=source.is_featured,
+            is_promoted=False,
+            is_verified=source.is_verified,
+            moderation_reason=None,
+            meta_json=source.meta_json,
+            views_count=0,
+            created_at=now,
+            updated_at=now,
+        )
+        self.db.add(duplicate)
+        await self.db.commit()
+        await self.db.refresh(duplicate)
+        return duplicate

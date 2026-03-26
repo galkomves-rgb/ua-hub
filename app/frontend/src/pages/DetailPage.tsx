@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useLocation, Link, useNavigate } from "react-router-dom";
+import { useParams, useLocation, Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   ArrowLeft, MapPin, Clock, User, Briefcase, Share2, Flag, Heart,
   CheckCircle, Star, Calendar, Phone, Mail, Globe, ChevronRight,
@@ -368,10 +368,13 @@ function CreateListingPage() {
   const { user } = useAuth();
   const isDark = theme === "dark";
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const editingId = searchParams.get("edit");
   const [step, setStep] = useState(0);
   const [selectedModule, setSelectedModule] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
   const [selectedLabels, setSelectedLabels] = useState<string[]>([]);
+  const [loadedListingStatus, setLoadedListingStatus] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -401,6 +404,95 @@ function CreateListingPage() {
     setSelectedLabels((current) => current.filter((label) => allowedLabels.includes(label as never)));
   }, [allowedLabels, selectedModule]);
 
+  useEffect(() => {
+    if (!editingId) {
+      setLoadedListingStatus(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadListing = async () => {
+      try {
+        const response = await fetch(
+          `${import.meta.env.VITE_API_URL || "http://localhost:8000"}/api/v1/listings/${editingId}?record_view=false`,
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+            },
+          },
+        );
+
+        if (!response.ok) {
+          throw new Error("Failed to load listing");
+        }
+
+        const listing = await response.json();
+        if (cancelled) {
+          return;
+        }
+
+        let parsedImages: string[] = [];
+        try {
+          const rawImages = JSON.parse(listing.images_json || "[]");
+          parsedImages = Array.isArray(rawImages) ? rawImages : [];
+        } catch {
+          parsedImages = [];
+        }
+
+        let parsedBadges: string[] = [];
+        try {
+          const rawBadges = JSON.parse(listing.badges || "[]");
+          parsedBadges = Array.isArray(rawBadges) ? rawBadges : [];
+        } catch {
+          parsedBadges = [];
+        }
+
+        if (listing.is_featured && !parsedBadges.includes("featured")) {
+          parsedBadges.push("featured");
+        }
+        if (listing.is_promoted && !parsedBadges.includes("premium")) {
+          parsedBadges.push("premium");
+        }
+        if (listing.is_verified && !parsedBadges.includes("verified")) {
+          parsedBadges.push("verified");
+        }
+
+        let contact = "";
+        try {
+          const meta = JSON.parse(listing.meta_json || "{}");
+          contact = typeof meta?.contact === "string" ? meta.contact : "";
+        } catch {
+          contact = "";
+        }
+
+        setSelectedModule(listing.module || "");
+        setSelectedCategory(listing.category || "");
+        setSelectedLabels(parsedBadges);
+        setLoadedListingStatus(listing.status || null);
+        setFormData({
+          title: listing.title || "",
+          description: listing.description || "",
+          price: listing.price || "",
+          city: listing.city || "",
+          contact,
+          images: parsedImages,
+          ownerType: listing.owner_type || "private_user",
+          currency: listing.currency || "EUR",
+        });
+        setStep(2);
+      } catch (error) {
+        console.error("Error loading listing for editing:", error);
+      }
+    };
+
+    void loadListing();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editingId]);
+
   const getLabelDisplayName = (label: string) => {
     if (label === "verified") return t("card.verified");
     if (label === "premium") return t("card.premium");
@@ -428,12 +520,7 @@ function CreateListingPage() {
     }
 
     try {
-      const shouldBeFeatured = selectedLabels.includes("featured");
-      const shouldBePromoted = selectedLabels.includes("premium");
-      const shouldBeVerified = selectedLabels.includes("verified");
-
       const listingPayload = {
-        user_id: user.id,
         module: selectedModule,
         category: selectedCategory,
         title: formData.title,
@@ -443,31 +530,71 @@ function CreateListingPage() {
         city: formData.city,
         owner_type: formData.ownerType,
         owner_id: user.id,
-        status: "active",
-        is_featured: shouldBeFeatured,
-        is_promoted: shouldBePromoted,
-        is_verified: shouldBeVerified,
+        badges: JSON.stringify(selectedLabels),
         images_json: JSON.stringify(formData.images),
+        meta_json: JSON.stringify({ contact: formData.contact }),
       };
 
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL || "http://localhost:8000"}/api/v1/listings`,
-        {
-          method: "POST",
+      const apiBase = import.meta.env.VITE_API_URL || "http://localhost:8000";
+      const token = localStorage.getItem("auth_token");
+
+      if (editingId) {
+        const updateResponse = await fetch(`${apiBase}/api/v1/listings/${editingId}`, {
+          method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("auth_token")}`,
+            Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify(listingPayload),
+        });
+
+        if (!updateResponse.ok) {
+          throw new Error("Failed to update listing");
         }
-      );
+
+        if (loadedListingStatus === "draft" || loadedListingStatus === "rejected") {
+          const submitResponse = await fetch(`${apiBase}/api/v1/listings/${editingId}/submit`, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+
+          if (!submitResponse.ok) {
+            throw new Error("Failed to submit listing for moderation");
+          }
+        }
+
+        navigate("/account?tab=listings");
+        return;
+      }
+
+      const response = await fetch(`${apiBase}/api/v1/listings`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(listingPayload),
+      });
 
       if (!response.ok) {
         throw new Error("Failed to create listing");
       }
 
       const createdListing = await response.json();
-      navigate(`/${selectedModule}/${createdListing.id}`);
+      const submitResponse = await fetch(`${apiBase}/api/v1/listings/${createdListing.id}/submit`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!submitResponse.ok) {
+        throw new Error("Failed to submit listing for moderation");
+      }
+
+      navigate("/account?tab=listings");
     } catch (error) {
       console.error("Error publishing listing:", error);
       alert("Помилка при створенні оголошення");
@@ -478,7 +605,7 @@ function CreateListingPage() {
     <Layout>
       <div className="max-w-3xl mx-auto px-4 py-8">
         <h1 className={`text-xl font-bold mb-6 ${isDark ? "text-gray-100" : "text-gray-900"}`}>
-          {t("create.title")}
+          {editingId ? t("account.listings.edit") : t("create.title")}
         </h1>
 
         {/* Steps indicator */}

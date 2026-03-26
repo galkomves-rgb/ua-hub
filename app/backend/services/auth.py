@@ -1,14 +1,15 @@
 import logging
 import os
+import secrets
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional, Tuple
 
-from core.auth import create_access_token
+from core.auth import AccessTokenError, create_access_token
 from core.config import settings
 from core.database import db_manager
-from models.auth import OIDCState, User
-from sqlalchemy import delete, select
+from models.auth import AuthSession, OIDCState, User
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,30 @@ logger = logging.getLogger(__name__)
 class AuthService:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    async def _persist_user(self, user: User) -> User:
+        result = await self.db.execute(select(User).where(User.id == user.id))
+        existing_user = result.scalar_one_or_none()
+        last_login = user.last_login or datetime.now(timezone.utc)
+
+        if existing_user:
+            existing_user.email = user.email
+            existing_user.name = user.name
+            existing_user.role = user.role or existing_user.role
+            existing_user.last_login = last_login
+            await self.db.flush()
+            return existing_user
+
+        persisted_user = User(
+            id=user.id,
+            email=user.email,
+            name=user.name,
+            role=user.role or "user",
+            last_login=last_login,
+        )
+        self.db.add(persisted_user)
+        await self.db.flush()
+        return persisted_user
 
     async def get_or_create_user(self, platform_sub: str, email: str, name: Optional[str] = None) -> User:
         """Get existing user or create new one."""
@@ -47,19 +72,38 @@ class AuthService:
     async def issue_app_token(
         self,
         user: User,
+        user_agent: Optional[str] = None,
+        ip_address: Optional[str] = None,
     ) -> Tuple[str, datetime, Dict[str, Any]]:
         """Generate application JWT token for the authenticated user."""
+        user = await self._persist_user(user)
+
         try:
             expires_minutes = int(getattr(settings, "jwt_expire_minutes", 60))
         except (TypeError, ValueError):
             logger.warning("Invalid JWT_EXPIRE_MINUTES value; fallback to 60 minutes")
             expires_minutes = 60
-        expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
+        now = datetime.now(timezone.utc)
+        expires_at = now + timedelta(minutes=expires_minutes)
+        session_id = secrets.token_urlsafe(32)
+
+        self.db.add(
+            AuthSession(
+                session_id=session_id,
+                user_id=user.id,
+                user_agent=(user_agent or "")[:512] or None,
+                ip_address=(ip_address or "")[:128] or None,
+                expires_at=expires_at,
+                last_seen_at=now,
+            )
+        )
 
         claims: Dict[str, Any] = {
             "sub": user.id,
             "email": user.email,
             "role": user.role,
+            "sid": session_id,
+            "token_version": user.token_version,
         }
 
         if user.name:
@@ -68,7 +112,78 @@ class AuthService:
             claims["last_login"] = user.last_login.isoformat()
         token = create_access_token(claims, expires_minutes=expires_minutes)
 
+        await self.db.commit()
+
         return token, expires_at, claims
+
+    async def validate_access_context(
+        self,
+        user_id: str,
+        session_id: Optional[str],
+        token_version: Optional[int],
+        issued_at: Optional[datetime],
+    ) -> User:
+        result = await self.db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user:
+            raise AccessTokenError("Authentication session is no longer valid")
+
+        if session_id is None:
+            raise AccessTokenError("Authentication session must be refreshed")
+
+        if token_version is None or token_version != user.token_version:
+            raise AccessTokenError("Authentication session has been invalidated")
+
+        if user.tokens_valid_after and issued_at and issued_at <= user.tokens_valid_after:
+            raise AccessTokenError("Authentication session has expired")
+
+        result = await self.db.execute(
+            select(AuthSession).where(AuthSession.session_id == session_id, AuthSession.user_id == user_id)
+        )
+        session = result.scalar_one_or_none()
+        if not session:
+            raise AccessTokenError("Authentication session is no longer available")
+
+        now = datetime.now(timezone.utc)
+        if session.revoked_at is not None:
+            raise AccessTokenError("Authentication session has been revoked")
+        if session.expires_at <= now:
+            raise AccessTokenError("Authentication session has expired")
+
+        if not session.last_seen_at or (now - session.last_seen_at) >= timedelta(minutes=5):
+            session.last_seen_at = now
+            await self.db.commit()
+
+        return user
+
+    async def revoke_session(self, user_id: str, session_id: str, reason: str = "logout") -> int:
+        now = datetime.now(timezone.utc)
+        result = await self.db.execute(
+            update(AuthSession)
+            .where(
+                AuthSession.user_id == user_id,
+                AuthSession.session_id == session_id,
+                AuthSession.revoked_at.is_(None),
+            )
+            .values(revoked_at=now, revoke_reason=reason, last_seen_at=now)
+        )
+        await self.db.commit()
+        return result.rowcount or 0
+
+    async def revoke_all_user_sessions(self, user_id: str, reason: str = "logout_all") -> int:
+        now = datetime.now(timezone.utc)
+        revoke_result = await self.db.execute(
+            update(AuthSession)
+            .where(AuthSession.user_id == user_id, AuthSession.revoked_at.is_(None))
+            .values(revoked_at=now, revoke_reason=reason, last_seen_at=now)
+        )
+        await self.db.execute(
+            update(User)
+            .where(User.id == user_id)
+            .values(token_version=User.token_version + 1, tokens_valid_after=now)
+        )
+        await self.db.commit()
+        return revoke_result.rowcount or 0
 
     async def store_oidc_state(
         self,
@@ -161,3 +276,27 @@ async def initialize_admin_user():
             db.add(admin_user)
             await db.commit()
             logger.debug(f"Created admin user: {admin_user_id} with email: {admin_user_email}")
+
+
+async def initialize_auth_schema():
+    """Backfill auth-related columns for existing databases."""
+    if not db_manager.engine:
+        return
+
+    async with db_manager.engine.begin() as conn:
+        def get_existing_user_columns(sync_conn):
+            from sqlalchemy import inspect
+
+            inspector = inspect(sync_conn)
+            if "users" not in inspector.get_table_names():
+                return set()
+            return {column["name"] for column in inspector.get_columns("users")}
+
+        user_columns = await conn.run_sync(get_existing_user_columns)
+        if not user_columns:
+            return
+
+        if "token_version" not in user_columns:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0"))
+        if "tokens_valid_after" not in user_columns:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN tokens_valid_after TIMESTAMP NULL"))

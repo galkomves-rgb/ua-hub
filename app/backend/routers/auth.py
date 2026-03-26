@@ -1,13 +1,16 @@
 import logging
 import os
+import time
 from typing import Optional
 from urllib.parse import urlencode
 
 import httpx
 from core.auth import (
+    AccessTokenError,
     IDTokenValidationError,
     build_authorization_url,
     build_logout_url,
+    decode_access_token,
     generate_code_challenge,
     generate_code_verifier,
     generate_nonce,
@@ -16,12 +19,13 @@ from core.auth import (
 )
 from core.config import settings
 from core.database import get_db
-from dependencies.auth import get_current_user
+from dependencies.auth import get_bearer_token, get_current_user
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from models.auth import User
 from schemas.auth import (
     AuthCapabilitiesResponse,
+    LogoutResponse,
     PlatformTokenExchangeRequest,
     TokenExchangeResponse,
     UserResponse,
@@ -34,6 +38,14 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_AUTH_METHODS = {"google", "apple", "email", "phone"}
 SUPPORTED_AUTH_MODES = {"login", "register"}
+AUTH_RATE_LIMITS: dict[str, tuple[int, int]] = {
+    "login": (5, 300),
+    "callback": (20, 300),
+    "token_exchange": (10, 300),
+    "logout": (20, 300),
+    "logout_all": (10, 300),
+}
+_auth_rate_limit_state: dict[str, list[float]] = {}
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -95,6 +107,33 @@ def build_auth_provider_params(method: Optional[str], mode: Optional[str]) -> di
             params[screen_hint_param] = getattr(settings, "oidc_login_hint_value", "login")
 
     return params
+
+
+def _get_request_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    if forwarded_for:
+        return forwarded_for.split(",", 1)[0].strip()
+    client_host = request.client.host if request.client else "unknown"
+    return client_host or "unknown"
+
+
+def _enforce_auth_rate_limit(request: Request, bucket: str) -> None:
+    limit, window_seconds = AUTH_RATE_LIMITS[bucket]
+    now = time.time()
+    key = f"{bucket}:{_get_request_ip(request)}"
+    attempts = _auth_rate_limit_state.get(key, [])
+    attempts = [attempt for attempt in attempts if now - attempt < window_seconds]
+
+    if len(attempts) >= limit:
+        retry_after = max(1, int(window_seconds - (now - attempts[0])))
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many authentication attempts. Please retry later.",
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    attempts.append(now)
+    _auth_rate_limit_state[key] = attempts
 
 
 @router.get("/capabilities", response_model=AuthCapabilitiesResponse)
@@ -178,6 +217,8 @@ async def login(
     db: AsyncSession = Depends(get_db),
 ):
     """Start OIDC login flow with PKCE."""
+    _enforce_auth_rate_limit(request, "login")
+
     if method and method not in SUPPORTED_AUTH_METHODS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported auth method")
     if mode and mode not in SUPPORTED_AUTH_MODES:
@@ -185,8 +226,7 @@ async def login(
 
     turnstile_enabled = bool(getattr(settings, "turnstile_secret_key", ""))
     if turnstile_enabled:
-        forwarded_for = request.headers.get("x-forwarded-for", "")
-        remote_ip = forwarded_for.split(",", 1)[0].strip() if forwarded_for else None
+        remote_ip = _get_request_ip(request)
         is_human = await verify_turnstile_token(captcha_token or "", remote_ip=remote_ip)
         if not is_human:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Human verification failed")
@@ -229,6 +269,7 @@ async def callback(
     db: AsyncSession = Depends(get_db),
 ):
     """Handle OIDC callback."""
+    _enforce_auth_rate_limit(request, "callback")
     backend_url = get_dynamic_backend_url(request)
 
     def redirect_with_error(message: str) -> RedirectResponse:
@@ -324,7 +365,11 @@ async def callback(
         user = await auth_service.get_or_create_user(platform_sub=id_claims["sub"], email=email, name=name)
 
         # Issue application JWT token encapsulating user information
-        app_token, expires_at, _ = await auth_service.issue_app_token(user=user)
+        app_token, expires_at, _ = await auth_service.issue_app_token(
+            user=user,
+            user_agent=request.headers.get("user-agent"),
+            ip_address=_get_request_ip(request),
+        )
 
         fragment = urlencode(
             {
@@ -357,10 +402,12 @@ async def callback(
 
 @router.post("/token/exchange", response_model=TokenExchangeResponse)
 async def exchange_platform_token(
+    request: Request,
     payload: PlatformTokenExchangeRequest,
     db: AsyncSession = Depends(get_db),
 ):
     """Exchange Platform token for app token, restricted to admin user."""
+    _enforce_auth_rate_limit(request, "token_exchange")
     logger.info("[token/exchange] Received platform token exchange request")
 
     verify_url = f"{settings.oidc_issuer_url}/platform/tokens/verify"
@@ -435,7 +482,11 @@ async def exchange_platform_token(
         f"[token/exchange] Admin user object for token issuance: id={user.id}, email={user.email}, role={user.role}"
     )
 
-    app_token, expires_at, _ = await auth_service.issue_app_token(user=user)
+    app_token, expires_at, _ = await auth_service.issue_app_token(
+        user=user,
+        user_agent=request.headers.get("user-agent"),
+        ip_address=_get_request_ip(request),
+    )
     logger.info(f"[token/exchange] Token issued successfully for user_id={user.id}, expires_at={expires_at}")
 
     return TokenExchangeResponse(
@@ -449,8 +500,40 @@ async def get_current_user_info(current_user: UserResponse = Depends(get_current
     return current_user
 
 
-@router.get("/logout")
-async def logout():
+@router.get("/logout", response_model=LogoutResponse)
+async def logout(
+    request: Request,
+    current_user: UserResponse = Depends(get_current_user),
+    token: str = Depends(get_bearer_token),
+    db: AsyncSession = Depends(get_db),
+):
     """Logout user."""
+    _enforce_auth_rate_limit(request, "logout")
+    auth_service = AuthService(db)
+    revoked_sessions = 0
+
+    try:
+        payload = decode_access_token(token)
+        session_id = payload.get("sid")
+        if session_id:
+            revoked_sessions = await auth_service.revoke_session(str(current_user.id), str(session_id), reason="logout")
+        else:
+            revoked_sessions = await auth_service.revoke_all_user_sessions(str(current_user.id), reason="legacy_logout")
+    except AccessTokenError:
+        revoked_sessions = await auth_service.revoke_all_user_sessions(str(current_user.id), reason="fallback_logout")
+
     logout_url = build_logout_url()
-    return {"redirect_url": logout_url}
+    return LogoutResponse(redirect_url=logout_url, revoked_sessions=revoked_sessions)
+
+
+@router.post("/logout/all", response_model=LogoutResponse)
+async def logout_all_devices(
+    request: Request,
+    current_user: UserResponse = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Logout user from all devices and revoke all active sessions."""
+    _enforce_auth_rate_limit(request, "logout_all")
+    auth_service = AuthService(db)
+    revoked_sessions = await auth_service.revoke_all_user_sessions(str(current_user.id), reason="logout_all")
+    return LogoutResponse(redirect_url=build_logout_url(), revoked_sessions=revoked_sessions)
