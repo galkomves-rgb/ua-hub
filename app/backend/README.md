@@ -1,5 +1,36 @@
 # Backend Development Guide
 
+## Railway Staging Deploy
+
+The backend Docker image can build successfully and still fail healthchecks if the runtime variables are missing.
+For this project, `app/backend/.env.staging` is gitignored, so Railway Variables must be populated manually.
+
+Minimum backend variables for the current staging deployment:
+
+```env
+APP_ENV=staging
+DEBUG=false
+DATABASE_URL=postgresql+asyncpg://postgres.PROJECT_REF:PASSWORD@aws-1-eu-west-1.pooler.supabase.com:5432/postgres
+JWT_SECRET_KEY=<generate-a-random-secret-and-store-it-only-in-Railway>
+JWT_ALGORITHM=HS256
+JWT_EXPIRE_MINUTES=1440
+BACKEND_PUBLIC_URL=https://ua-hub-api-production.up.railway.app
+FRONTEND_PUBLIC_URL=https://ua-hub.vercel.app
+ALLOWED_DOMAINS=ua-hub.vercel.app,ua-hub-api-production.up.railway.app
+DEV_AUTH_ENABLED=false
+MGX_LOAD_MOCK_DATA=false
+```
+
+Expected frontend staging values:
+
+```env
+VITE_PUBLIC_APP_ENV=staging
+VITE_API_BASE_URL=https://ua-hub-api-production.up.railway.app
+VITE_PUBLIC_SITE_URL=https://ua-hub.vercel.app
+```
+
+If Railway startup logs show `DATABASE_URL environment variable is required`, the service is failing before FastAPI can answer `/health` or `/docs`.
+
 Atoms Cloud is enabled, use it as the backend service (provides Auth, Database, File Storage, Edge Functions, AI Capabilities).
 
 ## CRITICAL: DATABASE SETUP MUST BE COMPLETED BEFORE ANY CODE IMPLEMENTATION OR MODIFICATION
