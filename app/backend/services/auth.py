@@ -285,15 +285,40 @@ async def initialize_auth_schema():
         return
 
     async with db_manager.engine.begin() as conn:
-        def get_existing_user_columns(sync_conn):
+        def get_existing_schema(sync_conn):
             from sqlalchemy import inspect
+            from models.auth import AuthSession
 
             inspector = inspect(sync_conn)
-            if "users" not in inspector.get_table_names():
-                return set()
-            return {column["name"] for column in inspector.get_columns("users")}
+            table_names = set(inspector.get_table_names())
 
-        user_columns = await conn.run_sync(get_existing_user_columns)
+            user_columns = {column["name"] for column in inspector.get_columns("users")} if "users" in table_names else set()
+            auth_session_columns = (
+                {column["name"] for column in inspector.get_columns("auth_sessions")}
+                if "auth_sessions" in table_names
+                else set()
+            )
+            auth_session_indexes = (
+                {index["name"] for index in inspector.get_indexes("auth_sessions")}
+                if "auth_sessions" in table_names
+                else set()
+            )
+
+            if "auth_sessions" not in table_names:
+                AuthSession.__table__.create(bind=sync_conn, checkfirst=True)
+                table_names.add("auth_sessions")
+                auth_session_columns = {column["name"] for column in inspector.get_columns("auth_sessions")}
+                auth_session_indexes = {index["name"] for index in inspector.get_indexes("auth_sessions")}
+
+            return {
+                "table_names": table_names,
+                "user_columns": user_columns,
+                "auth_session_columns": auth_session_columns,
+                "auth_session_indexes": auth_session_indexes,
+            }
+
+        schema = await conn.run_sync(get_existing_schema)
+        user_columns = schema["user_columns"]
         if not user_columns:
             return
 
@@ -301,3 +326,25 @@ async def initialize_auth_schema():
             await conn.execute(text("ALTER TABLE users ADD COLUMN token_version INTEGER NOT NULL DEFAULT 0"))
         if "tokens_valid_after" not in user_columns:
             await conn.execute(text("ALTER TABLE users ADD COLUMN tokens_valid_after TIMESTAMP NULL"))
+
+        auth_session_columns = schema["auth_session_columns"]
+        if "user_agent" not in auth_session_columns:
+            await conn.execute(text("ALTER TABLE auth_sessions ADD COLUMN user_agent VARCHAR(512) NULL"))
+        if "ip_address" not in auth_session_columns:
+            await conn.execute(text("ALTER TABLE auth_sessions ADD COLUMN ip_address VARCHAR(128) NULL"))
+        if "expires_at" not in auth_session_columns:
+            await conn.execute(text("ALTER TABLE auth_sessions ADD COLUMN expires_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"))
+        if "last_seen_at" not in auth_session_columns:
+            await conn.execute(text("ALTER TABLE auth_sessions ADD COLUMN last_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"))
+        if "revoked_at" not in auth_session_columns:
+            await conn.execute(text("ALTER TABLE auth_sessions ADD COLUMN revoked_at TIMESTAMP NULL"))
+        if "revoke_reason" not in auth_session_columns:
+            await conn.execute(text("ALTER TABLE auth_sessions ADD COLUMN revoke_reason VARCHAR(100) NULL"))
+        if "created_at" not in auth_session_columns:
+            await conn.execute(text("ALTER TABLE auth_sessions ADD COLUMN created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP"))
+
+        auth_session_indexes = schema["auth_session_indexes"]
+        if "ix_auth_sessions_session_id" not in auth_session_indexes:
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_sessions_session_id ON auth_sessions (session_id)"))
+        if "ix_auth_sessions_user_id" not in auth_session_indexes:
+            await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_auth_sessions_user_id ON auth_sessions (user_id)"))
