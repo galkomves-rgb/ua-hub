@@ -134,6 +134,8 @@ def get_missing_supabase_settings() -> list[str]:
         missing_settings.append("SUPABASE_URL")
     if not get_supabase_public_key():
         missing_settings.append("SUPABASE_ANON_KEY or SUPABASE_PUBLISHABLE_KEY")
+    if not str(getattr(settings, "jwt_secret_key", "") or "").strip():
+        missing_settings.append("JWT_SECRET_KEY")
     return missing_settings
 
 
@@ -336,11 +338,24 @@ async def exchange_supabase_token(
     resolved_role = "admin" if user_id == admin_user_id or (admin_user_email and email == admin_user_email) else "user"
 
     auth_service = AuthService(db)
-    token, _expires_at, _claims = await auth_service.issue_app_token(
-        user=User(id=user_id, email=email, name=name, role=resolved_role),
-        user_agent=request.headers.get("user-agent"),
-        ip_address=_get_request_ip(request),
-    )
+    try:
+        token, _expires_at, _claims = await auth_service.issue_app_token(
+            user=User(id=user_id, email=email, name=name, role=resolved_role),
+            user_agent=request.headers.get("user-agent"),
+            ip_address=_get_request_ip(request),
+        )
+    except ValueError as exc:
+        logger.error("Supabase token exchange failed due to backend auth configuration: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service is not configured completely. Please try again later.",
+        ) from exc
+    except Exception as exc:
+        logger.exception("Supabase token exchange failed while issuing app token")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Authentication service is temporarily unavailable. Please try again later.",
+        ) from exc
     return TokenExchangeResponse(token=token)
 
 
