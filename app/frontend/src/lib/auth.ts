@@ -13,6 +13,8 @@ export interface AuthCapabilities {
   turnstile_enabled: boolean;
   email_confirmation_required: boolean;
   dev_auth_enabled: boolean;
+  oidc_configured: boolean;
+  missing_settings: string[];
 }
 
 export interface DevLoginOptions {

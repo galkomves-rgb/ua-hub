@@ -39,6 +39,12 @@ logger = logging.getLogger(__name__)
 
 SUPPORTED_AUTH_METHODS = {"google", "apple", "email", "phone"}
 SUPPORTED_AUTH_MODES = {"login", "register"}
+REQUIRED_OIDC_SETTINGS = {
+    "oidc_issuer_url": "OIDC_ISSUER_URL",
+    "oidc_client_id": "OIDC_CLIENT_ID",
+    "oidc_client_secret": "OIDC_CLIENT_SECRET",
+    "oidc_scope": "OIDC_SCOPE",
+}
 AUTH_RATE_LIMITS: dict[str, tuple[int, int]] = {
     "login": (5, 300),
     "callback": (20, 300),
@@ -65,7 +71,30 @@ def _dev_auth_enabled() -> bool:
     return environment in {"local", "dev"} and _env_flag("DEV_AUTH_ENABLED")
 
 
+def get_missing_oidc_settings() -> list[str]:
+    missing_settings: list[str] = []
+    for attr_name, env_name in REQUIRED_OIDC_SETTINGS.items():
+        value = getattr(settings, attr_name, "")
+        if not str(value or "").strip():
+            missing_settings.append(env_name)
+    return missing_settings
+
+
+def ensure_oidc_is_configured() -> None:
+    missing_settings = get_missing_oidc_settings()
+    if missing_settings:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "OIDC authentication is not configured. Missing settings: "
+                + ", ".join(missing_settings)
+            ),
+        )
+
+
 def get_auth_capabilities() -> AuthCapabilitiesResponse:
+    missing_settings = get_missing_oidc_settings()
+    oidc_configured = not missing_settings
     google_enabled = _env_flag("OIDC_ENABLE_GOOGLE_AUTH") or bool(getattr(settings, "oidc_google_connection", ""))
     apple_enabled = _env_flag("OIDC_ENABLE_APPLE_AUTH") or bool(getattr(settings, "oidc_apple_connection", ""))
     email_enabled = _env_flag("OIDC_ENABLE_EMAIL_AUTH") or bool(getattr(settings, "oidc_email_connection", ""))
@@ -73,14 +102,16 @@ def get_auth_capabilities() -> AuthCapabilitiesResponse:
     turnstile_enabled = bool(getattr(settings, "turnstile_secret_key", ""))
     email_confirmation_required = _env_flag("OIDC_REQUIRE_VERIFIED_EMAIL", default=True)
     return AuthCapabilitiesResponse(
-        google=google_enabled,
-        apple=apple_enabled,
-        email_login=email_enabled,
-        email_signup=email_enabled,
-        phone=phone_enabled,
+        google=oidc_configured and google_enabled,
+        apple=oidc_configured and apple_enabled,
+        email_login=oidc_configured and email_enabled,
+        email_signup=oidc_configured and email_enabled,
+        phone=oidc_configured and phone_enabled,
         turnstile_enabled=turnstile_enabled,
         email_confirmation_required=email_confirmation_required,
         dev_auth_enabled=_dev_auth_enabled(),
+        oidc_configured=oidc_configured,
+        missing_settings=missing_settings,
     )
 
 
@@ -265,6 +296,7 @@ async def login(
 ):
     """Start OIDC login flow with PKCE."""
     _enforce_auth_rate_limit(request, "login")
+    ensure_oidc_is_configured()
 
     if method and method not in SUPPORTED_AUTH_METHODS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported auth method")

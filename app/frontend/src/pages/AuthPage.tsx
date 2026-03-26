@@ -172,6 +172,9 @@ export default function AuthPage() {
     },
   ];
 
+  const hasEnabledProviderActions = authActions.some((action) => action.enabled);
+  const missingSettings = capabilities?.missing_settings ?? [];
+
   const handleStart = async (
     mode: "login" | "register",
     actionKey: string,
@@ -195,7 +198,7 @@ export default function AuthPage() {
   };
 
   const showProviderSpecificActions = Boolean(capabilities) && !capabilitiesError;
-  const showFallbackActions = Boolean(capabilitiesError);
+  const showFallbackActions = Boolean(capabilitiesError) || Boolean(capabilities?.oidc_configured && !hasEnabledProviderActions);
 
   const handleDevLogin = async (role: "user" | "admin") => {
     setSubmitting(true);
@@ -262,10 +265,27 @@ export default function AuthPage() {
                 })}
               </div>
             ) : null}
+            {capabilities && !capabilities.oidc_configured ? (
+              <div className={`mt-4 flex items-start gap-3 rounded-2xl border p-4 ${isDark ? "border-red-900/40 bg-red-950/20" : "border-red-200 bg-red-50"}`}>
+                <AlertCircle className={`mt-0.5 h-5 w-5 shrink-0 ${isDark ? "text-red-300" : "text-red-600"}`} />
+                <div>
+                  <p className={`text-sm ${isDark ? "text-red-300" : "text-red-600"}`}>{t("auth.oidcMissingConfig")}</p>
+                  {missingSettings.length ? (
+                    <p className={`mt-2 text-xs ${isDark ? "text-red-200" : "text-red-700"}`}>
+                      {t("auth.oidcMissingConfigListPrefix")} {missingSettings.join(", ")}
+                    </p>
+                  ) : null}
+                </div>
+              </div>
+            ) : null}
             {showFallbackActions ? (
               <div className="grid gap-3 md:grid-cols-2">
                 {fallbackActions.map((action) => {
-                  const disabled = submitting || turnstileMisconfigured || (requiresCaptcha && !captchaToken);
+                  const disabled =
+                    submitting ||
+                    turnstileMisconfigured ||
+                    (requiresCaptcha && !captchaToken) ||
+                    Boolean(capabilities && !capabilities.oidc_configured);
                   return (
                     <button
                       key={action.key}

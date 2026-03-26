@@ -43,6 +43,8 @@ class AuthCapabilitiesResponse(BaseModel):
     turnstile_enabled: bool
     email_confirmation_required: bool
     dev_auth_enabled: bool = False
+    oidc_configured: bool = False
+    missing_settings: list[str] = []
 
 
 class LogoutResponse(BaseModel):
