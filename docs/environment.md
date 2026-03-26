@@ -100,5 +100,3 @@ python -m tools.run_expirations --as-of 2026-03-26T09:00:00+00:00
 ```
 
 The command uses the same expiration service as the admin API, logs affected listings and subscriptions, and prints a JSON summary with the impacted IDs.
-*** Add File: d:\Personal for DELETE\web proj\Ukrainians in Spain Platform_v7\app\backend\tools\__init__.py
-"""Backend operational commands."""
