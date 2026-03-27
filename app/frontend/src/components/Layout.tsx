@@ -273,10 +273,9 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
         <div className="max-w-6xl mx-auto px-4">
           <div className="h-14 flex items-center justify-between gap-3">
             {/* Logo */}
-            <Link to="/" className="flex items-center gap-2 shrink-0">
-              <span className="text-xl font-extrabold tracking-tight">
-                <span className={isDark ? "text-[#4a9eff]" : "text-[#0057B8]"}>UA</span>
-                <span className="text-[#FFD700]">HAB</span>
+            <Link to="/" className="shrink-0">
+              <span className={`flex items-center rounded-xl px-2 py-1 ${isDark ? "bg-white/95 shadow-sm" : "bg-transparent"}`}>
+                <img src="/uahab-logo.svg" alt="UAHAB" className="h-8 w-auto sm:h-9" />
               </span>
             </Link>
 

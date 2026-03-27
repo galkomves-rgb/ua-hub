@@ -223,9 +223,10 @@ export default function UahubLayout({ children, hideModuleNav }: LayoutProps) {
         }`}
       >
         <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3 lg:px-6">
-          <Link to="/" className="shrink-0 text-2xl font-black tracking-tight">
-            <span className={isDark ? "text-[#4a9eff]" : "text-[#0057B8]"}>UA</span>
-            <span className="text-[#FFD700]">HUB</span>
+          <Link to="/" className="shrink-0">
+            <span className={`flex items-center rounded-xl px-2 py-1 ${isDark ? "bg-white/95 shadow-sm" : "bg-transparent"}`}>
+              <img src="/uahab-logo.svg" alt="UAHAB" className="h-8 w-auto sm:h-9" />
+            </span>
           </Link>
 
           <div className="relative hidden lg:block">

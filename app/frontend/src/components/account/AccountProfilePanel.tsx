@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertCircle, Save, Upload, UserCircle2, X } from "lucide-react";
+import CityPicker from "@/components/CityPicker";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   createUserProfile,
@@ -222,16 +223,16 @@ export function AccountProfilePanel() {
                 <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                   {t("account.profile.city")}
                 </label>
-                <input
-                  type="text"
+                <CityPicker
                   value={form.city}
-                  onChange={(event) => setForm((current) => ({ ...current, city: event.target.value }))}
-                  className={`w-full rounded-2xl border px-4 py-3 text-sm ${
+                  onValueChange={(city) => setForm((current) => ({ ...current, city }))}
+                  buttonClassName={`w-full ${
                     isDark
                       ? "border-[#22416b] bg-[#0d1a2e] text-slate-100"
                       : "border-slate-300 bg-white text-slate-900"
                   }`}
                 />
+                <p className={`mt-2 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t("cityPicker.helper")}</p>
               </div>
 
               <div>

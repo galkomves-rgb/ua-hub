@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Search, SlidersHorizontal, X, ChevronDown, ArrowLeft, Home } from "lucide-react";
+import { Search, SlidersHorizontal, X, ChevronDown, ArrowLeft, Home, Plus } from "lucide-react";
 import Layout from "@/components/Layout";
 import { ListingCard, BusinessCard, SectionHeader } from "@/components/Cards";
 import AdBanner from "@/components/AdBanner";
@@ -175,20 +175,29 @@ export default function ModulePage() {
             : "bg-gradient-to-b from-transparent via-black/10 to-[#F8F9FB]"
         }`} />
         <div className="absolute bottom-0 left-0 right-0 px-4 pb-4">
-          <div className="max-w-6xl mx-auto flex items-end gap-3">
-            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 backdrop-blur-sm ${
-              isDark ? "bg-[#0d1a2e]/80" : "bg-white/80"
-            }`}>
-              <Icon className={`w-6 h-6 ${isDark ? mod.darkColor : mod.lightColor}`} />
+          <div className="max-w-6xl mx-auto flex items-end justify-between gap-3">
+            <div className="flex items-end gap-3">
+              <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 backdrop-blur-sm ${
+                isDark ? "bg-[#0d1a2e]/80" : "bg-white/80"
+              }`}>
+                <Icon className={`w-6 h-6 ${isDark ? mod.darkColor : mod.lightColor}`} />
+              </div>
+              <div>
+                <h1 className={`text-xl sm:text-2xl font-extrabold drop-shadow-sm ${isDark ? "text-white" : "text-white"}`}>
+                  {t(`mod.${moduleId}`)}
+                </h1>
+                <p className={`text-xs drop-shadow-sm ${isDark ? "text-gray-300" : "text-white/80"}`}>
+                  {t(`mod.${moduleId}.desc`)}
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className={`text-xl sm:text-2xl font-extrabold drop-shadow-sm ${isDark ? "text-white" : "text-white"}`}>
-                {t(`mod.${moduleId}`)}
-              </h1>
-              <p className={`text-xs drop-shadow-sm ${isDark ? "text-gray-300" : "text-white/80"}`}>
-                {t(`mod.${moduleId}.desc`)}
-              </p>
-            </div>
+            <Link
+              to="/create"
+              className="inline-flex h-9 items-center gap-2 rounded-xl bg-gradient-to-r from-[#FFD700] to-[#e6c200] px-4 text-xs font-semibold text-[#1a1a00] shadow-lg shadow-yellow-500/20 transition-all hover:shadow-yellow-500/30 active:scale-95"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {t("hero.cta")}
+            </Link>
           </div>
         </div>
       </div>

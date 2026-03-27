@@ -7,6 +7,7 @@ import {
   CheckCircle, Star, Calendar, Phone, Mail, Globe, ChevronRight,
   Plus, Upload, Eye, Check, Shield, Users, TrendingUp, BadgeCheck, X,
 } from "lucide-react";
+import CityPicker from "@/components/CityPicker";
 import Layout from "@/components/Layout";
 import { ListingCard, SectionHeader } from "@/components/Cards";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -1057,14 +1058,14 @@ function CreateListingPage() {
                 </div>
                 <div>
                   <label className={`text-xs font-medium mb-1 block ${isDark ? "text-gray-400" : "text-gray-500"}`}>Місто *</label>
-                  <input
+                  <CityPicker
                     value={formData.city}
-                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                    className={`w-full h-10 px-3 text-sm rounded-lg border focus:outline-none ${
+                    onValueChange={(city) => setFormData({ ...formData, city })}
+                    buttonClassName={`w-full rounded-lg border px-3 py-2 text-sm ${
                       isDark ? "bg-[#0d1a2e] border-[#1a3050] text-gray-200 focus:border-[#4a9eff]" : "bg-gray-50 border-gray-200 text-gray-700 focus:border-blue-400"
                     }`}
-                    placeholder="Місто"
                   />
+                  <p className={`text-xs mt-1 ${isDark ? "text-gray-500" : "text-gray-400"}`}>{t("cityPicker.helper")}</p>
                 </div>
               </div>
               <div>

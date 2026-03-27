@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Navigate, useNavigate } from "react-router-dom";
 import UahubLayout from "@/components/UahubLayout";
+import CityPicker from "@/components/CityPicker";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   completeOnboarding,
@@ -90,7 +91,12 @@ export default function OnboardingPage() {
             </div>
             <div>
               <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>{t("onboarding.city")}</label>
-              <input value={form.city} onChange={(event) => setForm((current) => ({ ...current, city: event.target.value }))} className={`w-full rounded-2xl border px-4 py-3 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`} />
+              <CityPicker
+                value={form.city}
+                onValueChange={(city) => setForm((current) => ({ ...current, city }))}
+                buttonClassName={isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100 hover:bg-[#10213a]" : "border-slate-300 bg-white text-slate-900 hover:bg-slate-50"}
+              />
+              <p className={`mt-2 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t("cityPicker.helper")}</p>
             </div>
             <div>
               <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>{t("onboarding.bio")}</label>

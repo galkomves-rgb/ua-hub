@@ -12,6 +12,7 @@ import {
   Sparkles,
   Star,
 } from "lucide-react";
+import CityPicker from "@/components/CityPicker";
 import {
   createBusinessProfile,
   fetchMyBusinessProfiles,
@@ -32,12 +33,13 @@ type BusinessFormState = {
   description: string;
   logo_url: string;
   cover_url: string;
-  contacts_json: string;
-  tags_json: string;
+  contact_phone: string;
+  contact_email: string;
+  tags_text: string;
   rating: string;
   website: string;
   social_links_json: string;
-  service_areas_json: string;
+  service_areas_text: string;
 };
 
 const PLAN_OPTIONS = ["basic", "premium", "business"] as const;
@@ -45,6 +47,8 @@ const PLAN_OPTIONS = ["basic", "premium", "business"] as const;
 type PlanOption = (typeof PLAN_OPTIONS)[number];
 
 function buildBusinessForm(profile: BusinessProfileResponse | null): BusinessFormState {
+  const contacts = safeParseRecord(profile?.contacts_json);
+
   return {
     slug: profile?.slug || "",
     name: profile?.name || "",
@@ -53,13 +57,53 @@ function buildBusinessForm(profile: BusinessProfileResponse | null): BusinessFor
     description: profile?.description || "",
     logo_url: profile?.logo_url || "",
     cover_url: profile?.cover_url || "",
-    contacts_json: profile?.contacts_json || "{}",
-    tags_json: profile?.tags_json || "[]",
+    contact_phone: stringValue(contacts.phone),
+    contact_email: stringValue(contacts.email),
+    tags_text: safeParseStringArray(profile?.tags_json).join(", "),
     rating: profile?.rating || "0",
     website: profile?.website || "",
     social_links_json: profile?.social_links_json || "[]",
-    service_areas_json: profile?.service_areas_json || "[]",
+    service_areas_text: safeParseStringArray(profile?.service_areas_json).join(", "),
   };
+}
+
+function safeParseRecord(value: string | null | undefined): Record<string, unknown> {
+  if (!value?.trim()) {
+    return {};
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+function safeParseStringArray(value: string | null | undefined): string[] {
+  if (!value?.trim()) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
+}
+
+function serializeStringList(value: string): string {
+  const items = value
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+  return JSON.stringify(Array.from(new Set(items)));
 }
 
 function formatDate(value: string | null) {
@@ -211,12 +255,15 @@ export function AccountBusinessPanel() {
       description: form.description.trim(),
       logo_url: form.logo_url.trim() || null,
       cover_url: form.cover_url.trim() || null,
-      contacts_json: form.contacts_json.trim() || "{}",
-      tags_json: form.tags_json.trim() || "[]",
+      contacts_json: JSON.stringify({
+        ...(form.contact_phone.trim() ? { phone: form.contact_phone.trim() } : {}),
+        ...(form.contact_email.trim() ? { email: form.contact_email.trim() } : {}),
+      }),
+      tags_json: serializeStringList(form.tags_text),
       rating: form.rating.trim() || "0",
       website: form.website.trim() || null,
       social_links_json: form.social_links_json.trim() || "[]",
-      service_areas_json: form.service_areas_json.trim() || "[]",
+      service_areas_json: serializeStringList(form.service_areas_text),
     });
   };
 
@@ -643,14 +690,14 @@ export function AccountBusinessPanel() {
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                     {t("account.business.city")}
                   </label>
-                  <input
-                    type="text"
+                  <CityPicker
                     value={form.city}
-                    onChange={(event) => setForm((current) => ({ ...current, city: event.target.value }))}
-                    className={`w-full rounded-2xl border px-4 py-3 text-sm ${
+                    onValueChange={(city) => setForm((current) => ({ ...current, city }))}
+                    buttonClassName={`w-full ${
                       isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
                     }`}
                   />
+                  <p className={`mt-2 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t("cityPicker.helper")}</p>
                 </div>
                 <div>
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
@@ -676,6 +723,32 @@ export function AccountBusinessPanel() {
                     type="url"
                     value={form.website}
                     onChange={(event) => setForm((current) => ({ ...current, website: event.target.value }))}
+                    className={`w-full rounded-2xl border px-4 py-3 text-sm ${
+                      isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
+                    {t("account.business.phone")}
+                  </label>
+                  <input
+                    type="tel"
+                    value={form.contact_phone}
+                    onChange={(event) => setForm((current) => ({ ...current, contact_phone: event.target.value }))}
+                    className={`w-full rounded-2xl border px-4 py-3 text-sm ${
+                      isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
+                    }`}
+                  />
+                </div>
+                <div>
+                  <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
+                    {t("account.business.email")}
+                  </label>
+                  <input
+                    type="email"
+                    value={form.contact_email}
+                    onChange={(event) => setForm((current) => ({ ...current, contact_email: event.target.value }))}
                     className={`w-full rounded-2xl border px-4 py-3 text-sm ${
                       isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
                     }`}
@@ -709,44 +782,31 @@ export function AccountBusinessPanel() {
                 </div>
                 <div>
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
-                    {t("account.business.contactsJson")}
+                    {t("account.business.tagsJson")}
                   </label>
                   <textarea
-                    value={form.contacts_json}
-                    onChange={(event) => setForm((current) => ({ ...current, contacts_json: event.target.value }))}
+                    value={form.tags_text}
+                    onChange={(event) => setForm((current) => ({ ...current, tags_text: event.target.value }))}
                     rows={3}
-                    className={`w-full rounded-2xl border px-4 py-3 font-mono text-xs ${
+                    placeholder={t("account.business.tagsHint")}
+                    className={`w-full rounded-2xl border px-4 py-3 text-sm ${
                       isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
                     }`}
                   />
                 </div>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div>
-                    <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
-                      {t("account.business.tagsJson")}
-                    </label>
-                    <textarea
-                      value={form.tags_json}
-                      onChange={(event) => setForm((current) => ({ ...current, tags_json: event.target.value }))}
-                      rows={3}
-                      className={`w-full rounded-2xl border px-4 py-3 font-mono text-xs ${
-                        isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
-                      }`}
-                    />
-                  </div>
-                  <div>
-                    <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
-                      {t("account.business.serviceAreasJson")}
-                    </label>
-                    <textarea
-                      value={form.service_areas_json}
-                      onChange={(event) => setForm((current) => ({ ...current, service_areas_json: event.target.value }))}
-                      rows={3}
-                      className={`w-full rounded-2xl border px-4 py-3 font-mono text-xs ${
-                        isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
-                      }`}
-                    />
-                  </div>
+                <div>
+                  <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
+                    {t("account.business.serviceAreasJson")}
+                  </label>
+                  <textarea
+                    value={form.service_areas_text}
+                    onChange={(event) => setForm((current) => ({ ...current, service_areas_text: event.target.value }))}
+                    rows={3}
+                    placeholder={t("account.business.serviceAreasHint")}
+                    className={`w-full rounded-2xl border px-4 py-3 text-sm ${
+                      isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
+                    }`}
+                  />
                 </div>
               </div>
             </div>

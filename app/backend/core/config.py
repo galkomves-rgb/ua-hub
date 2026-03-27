@@ -31,6 +31,9 @@ class Settings(BaseSettings):
     supabase_jwt_secret: str | None = None
     oss_service_url: str | None = None
     oss_api_key: str | None = None
+    geocoding_search_url: str = "https://nominatim.openstreetmap.org/search"
+    geocoding_user_agent: str = "UAHUB/1.0"
+    geocoding_contact_email: str | None = None
     jwt_secret_key: str | None = None
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
