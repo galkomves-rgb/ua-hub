@@ -35,6 +35,7 @@ export default function AccountPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [requiresOnboarding, setRequiresOnboarding] = useState(false);
 
   const activeTab = useMemo<AccountTab>(() => {
     const requestedTab = searchParams.get("tab");
@@ -64,20 +65,20 @@ export default function AccountPage() {
 
   useEffect(() => {
     if (!user) {
+      setRequiresOnboarding(false);
       return;
     }
     const guardOnboarding = async () => {
       try {
         const status = await fetchOnboardingStatus();
-        if (!status.completed) {
-          navigate("/onboarding", { replace: true });
-        }
+        setRequiresOnboarding(!status.completed);
       } catch {
+        setRequiresOnboarding(false);
         // keep current page if onboarding status cannot be loaded
       }
     };
     void guardOnboarding();
-  }, [navigate, user]);
+  }, [user]);
 
   const setActiveTab = (tab: AccountTab) => {
     setSearchParams({ tab });
@@ -152,6 +153,38 @@ export default function AccountPage() {
   return (
     <UahubLayout hideModuleNav>
       <div className="mx-auto max-w-7xl px-4 py-6 lg:px-6">
+        {requiresOnboarding ? (
+          <div
+            className={`mb-6 rounded-3xl border p-4 text-sm ${
+              isDark
+                ? "border-[#22416b] bg-[#11203a] text-slate-200"
+                : "border-slate-200 bg-slate-50 text-slate-700"
+            }`}
+          >
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className={`font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                  {t("onboarding.title")}
+                </p>
+                <p className={`mt-1 ${isDark ? "text-slate-400" : "text-slate-600"}`}>
+                  {t("onboarding.subtitle")}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => navigate("/onboarding")}
+                className={`inline-flex items-center justify-center rounded-2xl px-4 py-2 text-sm font-semibold ${
+                  isDark
+                    ? "bg-[#FFD700] text-[#0d1a2e]"
+                    : "bg-[#0057B8] text-white"
+                }`}
+              >
+                {t("onboarding.submit")}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
             <h1 className={`text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
