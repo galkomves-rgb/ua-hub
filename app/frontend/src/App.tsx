@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/lib/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { I18nContext, t as translate } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import Index from "./pages/Index";
 import ModulePage from "./pages/ModulePage";
 import AccountPage from "./pages/AccountPage";
@@ -102,6 +103,7 @@ const App = () => (
                 <Route path="/logout-callback" element={<LogoutCallbackPage />} />
               </Routes>
             </BrowserRouter>
+            <SpeedInsights />
           </TooltipProvider>
         </I18nProvider>
       </AuthProvider>
