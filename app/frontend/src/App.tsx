@@ -7,6 +7,7 @@ import { ThemeProvider } from "@/lib/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { I18nContext, t as translate } from "@/lib/i18n";
 import type { Locale } from "@/lib/i18n";
+import AppErrorBoundary from "@/components/AppErrorBoundary";
 import Index from "./pages/Index";
 import ModulePage from "./pages/ModulePage";
 import AccountPage from "./pages/AccountPage";
@@ -60,70 +61,64 @@ function I18nProvider({ children }: { children: ReactNode }) {
 }
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider>
-      <AuthProvider>
-        <I18nProvider>
-          <TooltipProvider>
-            <Toaster />
-            <BrowserRouter>
-              <Routes>
-                <Route path="/" element={<Index />} />
-                {/* Module pages */}
-                <Route path="/jobs" element={<ModulePage />} />
-                <Route path="/housing" element={<ModulePage />} />
-                <Route path="/services" element={<ModulePage />} />
-                <Route path="/marketplace" element={<ModulePage />} />
-                <Route path="/events" element={<ModulePage />} />
-                <Route path="/community" element={<ModulePage />} />
-                <Route path="/organizations" element={<ModulePage />} />
-                <Route path="/business" element={<ModulePage />} />
-                {/* Listing detail */}
-                <Route path="/jobs/:listingId" element={<ListingDetail />} />
-                <Route path="/housing/:listingId" element={<ListingDetail />} />
-                <Route path="/services/:listingId" element={<ListingDetail />} />
-                <Route path="/marketplace/:listingId" element={<ListingDetail />} />
-                <Route path="/events/:listingId" element={<ListingDetail />} />
-                <Route path="/community/:listingId" element={<ListingDetail />} />
-                <Route path="/organizations/:listingId" element={<ListingDetail />} />
-                {/* Business profile */}
-                <Route path="/business/:bizId" element={<BusinessProfilePage />} />
-                {/* Account */}
-                <Route path="/account" element={<AccountPage />} />
-                {/* Create listing */}
-                <Route path="/create" element={<CreateListingPage />} />
-                {/* Messages & Search */}
-                <Route path="/messages" element={<MessagesPage />} />
-                <Route path="/search" element={<SearchPage />} />
-                <Route path="/auth" element={<AuthPage />} />
-                <Route path="/onboarding" element={<OnboardingPage />} />
-                <Route path="/admin" element={<AdminCenterLayout />}>
-                  <Route index element={<Navigate to="overview" replace />} />
-                  <Route path="overview" element={<AdminOverviewPage />} />
-                  <Route path="listings" element={<AdminListingsPage />} />
-                  <Route path="listings/moderation" element={<AdminModerationPage />} />
-                  <Route path="reports" element={<AdminReportsPage />} />
-                  <Route path="billing" element={<AdminBillingPage />} />
-                  <Route path="users" element={<AdminUsersPage />} />
-                  <Route path="operations" element={<AdminOperationsPage />} />
-                </Route>
-                <Route path="/admin/moderation" element={<Navigate to="/admin/listings/moderation" replace />} />
-                {/* Platform pages */}
-                <Route path="/pricing" element={<PricingPage />} />
-                <Route path="/about" element={<AboutPage />} />
-                <Route path="/rules" element={<RulesPage />} />
-                <Route path="/contacts" element={<ContactsPage />} />
-                {/* Auth */}
-                <Route path="/auth/callback" element={<AuthCallback />} />
-                <Route path="/auth/error" element={<AuthError />} />
-                <Route path="/logout-callback" element={<LogoutCallbackPage />} />
-              </Routes>
-            </BrowserRouter>
-          </TooltipProvider>
-        </I18nProvider>
-      </AuthProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
+  <AppErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <AuthProvider>
+          <I18nProvider>
+            <TooltipProvider>
+              <Toaster />
+              <BrowserRouter>
+                <Routes>
+                  <Route path="/" element={<Index />} />
+                  <Route path="/jobs" element={<ModulePage />} />
+                  <Route path="/housing" element={<ModulePage />} />
+                  <Route path="/services" element={<ModulePage />} />
+                  <Route path="/marketplace" element={<ModulePage />} />
+                  <Route path="/events" element={<ModulePage />} />
+                  <Route path="/community" element={<ModulePage />} />
+                  <Route path="/organizations" element={<ModulePage />} />
+                  <Route path="/business" element={<ModulePage />} />
+                  <Route path="/jobs/:listingId" element={<ListingDetail />} />
+                  <Route path="/housing/:listingId" element={<ListingDetail />} />
+                  <Route path="/services/:listingId" element={<ListingDetail />} />
+                  <Route path="/marketplace/:listingId" element={<ListingDetail />} />
+                  <Route path="/events/:listingId" element={<ListingDetail />} />
+                  <Route path="/community/:listingId" element={<ListingDetail />} />
+                  <Route path="/organizations/:listingId" element={<ListingDetail />} />
+                  <Route path="/business/:bizId" element={<BusinessProfilePage />} />
+                  <Route path="/account" element={<AccountPage />} />
+                  <Route path="/create" element={<CreateListingPage />} />
+                  <Route path="/messages" element={<MessagesPage />} />
+                  <Route path="/search" element={<SearchPage />} />
+                  <Route path="/auth" element={<AuthPage />} />
+                  <Route path="/onboarding" element={<OnboardingPage />} />
+                  <Route path="/admin" element={<AdminCenterLayout />}>
+                    <Route index element={<Navigate to="overview" replace />} />
+                    <Route path="overview" element={<AdminOverviewPage />} />
+                    <Route path="listings" element={<AdminListingsPage />} />
+                    <Route path="listings/moderation" element={<AdminModerationPage />} />
+                    <Route path="reports" element={<AdminReportsPage />} />
+                    <Route path="billing" element={<AdminBillingPage />} />
+                    <Route path="users" element={<AdminUsersPage />} />
+                    <Route path="operations" element={<AdminOperationsPage />} />
+                  </Route>
+                  <Route path="/admin/moderation" element={<Navigate to="/admin/listings/moderation" replace />} />
+                  <Route path="/pricing" element={<PricingPage />} />
+                  <Route path="/about" element={<AboutPage />} />
+                  <Route path="/rules" element={<RulesPage />} />
+                  <Route path="/contacts" element={<ContactsPage />} />
+                  <Route path="/auth/callback" element={<AuthCallback />} />
+                  <Route path="/auth/error" element={<AuthError />} />
+                  <Route path="/logout-callback" element={<LogoutCallbackPage />} />
+                </Routes>
+              </BrowserRouter>
+            </TooltipProvider>
+          </I18nProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  </AppErrorBoundary>
 );
 
 export default App;

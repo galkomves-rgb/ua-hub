@@ -70,7 +70,30 @@ export default function OnboardingPage() {
   }
 
   if (onboardingQuery.data?.completed) {
-    return <Navigate to="/account" replace />;
+    return (
+      <UahubLayout hideModuleNav>
+        <div className="mx-auto max-w-3xl px-4 py-12 lg:px-6">
+          <section className={`rounded-3xl border p-6 md:p-8 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+            <h1 className={`text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{t("onboarding.title")}</h1>
+            <p className={`mt-2 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+              {t("onboarding.subtitle")}
+            </p>
+            <div className={`mt-6 rounded-2xl border p-4 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-300" : "border-slate-200 bg-slate-50 text-slate-700"}`}>
+              {t("account.subtitle")}
+            </div>
+            <div className="mt-6 flex justify-end">
+              <button
+                type="button"
+                onClick={() => navigate("/account")}
+                className={`rounded-2xl px-5 py-3 text-sm font-semibold ${isDark ? "bg-[#FFD700] text-[#0d1a2e]" : "bg-[#0057B8] text-white"}`}
+              >
+                {t("nav.account")}
+              </button>
+            </div>
+          </section>
+        </div>
+      </UahubLayout>
+    );
   }
 
   const handleSubmit = () => {
