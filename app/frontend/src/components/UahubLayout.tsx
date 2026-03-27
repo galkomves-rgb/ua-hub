@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ChevronDown, LogOut, Menu, MessageSquare, Search, Shield, User, X } from "lucide-react";
-import { createClient } from "@metagptx/web-sdk";
 import { useQuery } from "@tanstack/react-query";
 import ThemeToggle from "@/components/ThemeToggle";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchUserProfile } from "@/lib/account-api";
+import { getAPIBaseURL } from "@/lib/config";
 import { useTheme } from "@/lib/ThemeContext";
 import { LOCALES, useI18n } from "@/lib/i18n";
 import { useGlobalCity } from "@/lib/global-preferences";
@@ -18,7 +18,6 @@ interface LayoutProps {
 }
 
 export default function UahubLayout({ children, hideModuleNav }: LayoutProps) {
-  const client = createClient();
   const { theme } = useTheme();
   const { locale, setLocale } = useI18n();
   const { city, setCity } = useGlobalCity();
@@ -61,11 +60,18 @@ export default function UahubLayout({ children, hideModuleNav }: LayoutProps) {
       }
 
       try {
-        const res = await (client as unknown as { callApi: (url: string, options?: { method?: string }) => Promise<{ data?: { count?: number } }> }).callApi(
-          "/api/v1/messaging/unread-count",
-          { method: "GET" }
-        );
-        setUnreadCount(res?.data?.count ?? 0);
+        const token = localStorage.getItem("auth_token");
+        const response = await fetch(`${getAPIBaseURL()}/api/v1/messaging/unread-count`, {
+          method: "GET",
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+
+        if (!response.ok) {
+          throw new Error("Unread count request failed");
+        }
+
+        const data = await response.json();
+        setUnreadCount(data?.count ?? 0);
       } catch {
         setUnreadCount(0);
       }

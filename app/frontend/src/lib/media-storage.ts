@@ -18,11 +18,11 @@ function normalizeStorageError(message: string, bucketName: string) {
   const normalizedMessage = message.trim();
 
   if (/bucket/i.test(normalizedMessage) && /not found|does not exist/i.test(normalizedMessage)) {
-    return `У Supabase Storage не знайдено bucket \"${bucketName}\". Створіть його в Supabase → Storage.`;
+    return `У Supabase Storage не знайдено bucket "${bucketName}". Створіть його в Supabase → Storage.`;
   }
 
   if (/row level security|policy|unauthorized|permission/i.test(normalizedMessage)) {
-    return `Supabase Storage відхилив завантаження. Перевірте policies для bucket \"${bucketName}\".`;
+    return `Supabase Storage відхилив завантаження. Перевірте policies для bucket "${bucketName}".`;
   }
 
   return normalizedMessage || "Не вдалося завантажити файл у Supabase Storage.";

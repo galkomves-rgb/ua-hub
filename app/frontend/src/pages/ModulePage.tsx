@@ -109,6 +109,26 @@ export default function ModulePage() {
     return items;
   }, [searchQuery, selectedCity, selectedType]);
 
+  const activeCities = useMemo(() => {
+    const citySet = new Set<string>();
+
+    if (isBusiness) {
+      SAMPLE_BUSINESSES.forEach((business) => {
+        if (business.city?.trim()) {
+          citySet.add(business.city.trim());
+        }
+      });
+    } else {
+      (allModuleListingsQuery.data ?? []).forEach((listing) => {
+        if (listing.city?.trim()) {
+          citySet.add(listing.city.trim());
+        }
+      });
+    }
+
+    return Array.from(citySet).sort((a, b) => a.localeCompare(b));
+  }, [allModuleListingsQuery.data, isBusiness]);
+
   if (!mod) {
     return (
       <Layout>
@@ -128,25 +148,6 @@ export default function ModulePage() {
   const banner = mod.banner || IMAGES.hero;
   const categories = mod.categories;
   const activeListings = isBusiness ? filteredBusinesses : filteredListings;
-  const activeCities = useMemo(() => {
-    const citySet = new Set<string>();
-
-    if (isBusiness) {
-      SAMPLE_BUSINESSES.forEach((business) => {
-        if (business.city?.trim()) {
-          citySet.add(business.city.trim());
-        }
-      });
-    } else {
-      (allModuleListingsQuery.data ?? []).forEach((listing) => {
-          if (listing.city?.trim()) {
-            citySet.add(listing.city.trim());
-          }
-        });
-    }
-
-    return Array.from(citySet).sort((a, b) => a.localeCompare(b));
-  }, [allModuleListingsQuery.data, isBusiness, moduleId]);
 
   const clearFilters = () => {
     setSelectedCategory("all");

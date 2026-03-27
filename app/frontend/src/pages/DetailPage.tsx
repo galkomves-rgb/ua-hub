@@ -108,6 +108,13 @@ function ListingDetail() {
   );
 
   const listing = publicListingQuery.data ?? fallbackListing;
+  const listingModule = listing?.module ?? "";
+  const relatedPublicListingsQuery = useQuery({
+    queryKey: ["public-related-listings", listingModule, selectedCity],
+    queryFn: () => fetchPublicListings({ module: listingModule, city: selectedCity === "all" ? undefined : selectedCity, limit: 12 }),
+    enabled: Boolean(listingModule) && Boolean(publicListingQuery.data),
+  });
+
   if (!listing) {
     return (
       <Layout>
@@ -122,12 +129,6 @@ function ListingDetail() {
       </Layout>
     );
   }
-
-  const relatedPublicListingsQuery = useQuery({
-    queryKey: ["public-related-listings", listing.module, selectedCity],
-    queryFn: () => fetchPublicListings({ module: listing.module, city: selectedCity === "all" ? undefined : selectedCity, limit: 12 }),
-    enabled: Boolean(publicListingQuery.data),
-  });
 
   const relatedListings = (publicListingQuery.data ? (relatedPublicListingsQuery.data ?? []) : SAMPLE_LISTINGS)
     .filter((l) => l.module === listing.module && l.id !== listing.id && (selectedCity === "all" || l.city === selectedCity))
