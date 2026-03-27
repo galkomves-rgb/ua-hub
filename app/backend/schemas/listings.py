@@ -97,6 +97,8 @@ class ListingResponse(ListingBase):
 
     id: int
     user_id: str
+    author_name: str | None = None
+    author_avatar_url: str | None = None
     status: str = Field(..., pattern=LISTING_STATUS_PATTERN)
     is_featured: bool
     is_promoted: bool

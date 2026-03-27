@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useParams, useLocation, Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useLocation, Link, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import {
   ArrowLeft, MapPin, Clock, User, Briefcase, Share2, Flag, Heart,
   CheckCircle, Star, Calendar, Phone, Mail, Globe, ChevronRight,
@@ -8,7 +9,9 @@ import {
 } from "lucide-react";
 import Layout from "@/components/Layout";
 import { ListingCard, SectionHeader } from "@/components/Cards";
-import { createMonetizedListing, fetchBillingProducts, fetchMyBusinessProfiles, fetchUserProfile, submitListing, updateListing, type BillingProduct, type BillingProductCode } from "@/lib/account-api";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { createMonetizedListing, fetchBillingProducts, fetchMyBusinessProfiles, fetchUserProfile, reportMessagingUser, saveListing, submitListing, updateListing, type BillingProduct, type BillingProductCode } from "@/lib/account-api";
 import { deriveListingLabels } from "@/lib/label-taxonomy";
 import { fetchPublicListing, fetchPublicListings } from "@/lib/public-listings";
 import { getAPIBaseURL } from "@/lib/config";
@@ -82,8 +85,15 @@ function ListingDetail() {
   const { theme } = useTheme();
   const { t } = useI18n();
   const { city: globalCity } = useGlobalCity();
+  const { user, login } = useAuth();
   const isDark = theme === "dark";
   const selectedCity = normalizeCityFilter(globalCity);
+  const [isSaved, setIsSaved] = useState(false);
+  const [savePending, setSavePending] = useState(false);
+  const [reportPending, setReportPending] = useState(false);
+  const [isReportOpen, setIsReportOpen] = useState(false);
+  const [reportReason, setReportReason] = useState("spam");
+  const [reportDetails, setReportDetails] = useState("");
   const numericListingId = Number(listingId);
   const publicListingQuery = useQuery({
     queryKey: ["public-listing-detail", numericListingId],
@@ -122,7 +132,12 @@ function ListingDetail() {
     .filter((l) => l.module === listing.module && l.id !== listing.id && (selectedCity === "all" || l.city === selectedCity))
     .slice(0, 3);
   const ownerType = listing.ownerType || listing.authorType || "private_user";
-  const ownerLabel = listing.ownerId || listing.authorName || ownerType;
+  const ownerTypeLabel = ownerType === "business_profile"
+    ? t("card.business")
+    : ownerType === "organization"
+      ? "Організація"
+      : t("card.private");
+  const ownerLabel = listing.authorName || ownerTypeLabel;
   const listingBadges = deriveListingLabels({
     module: listing.module,
     badges: listing.badges,
@@ -138,10 +153,163 @@ function ListingDetail() {
   const mod = MODULES[listing.module];
   const listingImages = Array.isArray(listing.images) ? listing.images : [];
   const primaryImage = listing.image || listingImages[0] || mod?.banner || IMAGES.hero;
+  const authorAvatarUrl = listing.authorAvatarUrl;
+  const detailUrl = typeof window !== "undefined" ? window.location.href : `${location.pathname}${location.search}`;
+
+  const handleSave = async () => {
+    if (!Number.isInteger(numericListingId)) {
+      toast.error("Зберегти можна лише опубліковане оголошення з бази даних.");
+      return;
+    }
+    if (!user) {
+      await login();
+      return;
+    }
+    setSavePending(true);
+    try {
+      await saveListing(numericListingId);
+      setIsSaved(true);
+      toast.success("Оголошення збережено.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Не вдалося зберегти оголошення.";
+      if (message.toLowerCase().includes("already saved")) {
+        setIsSaved(true);
+        toast.success("Оголошення вже є в збережених.");
+      } else if (message.toLowerCase().includes("401") || message.toLowerCase().includes("authorized")) {
+        await login();
+      } else {
+        toast.error(message);
+      }
+    } finally {
+      setSavePending(false);
+    }
+  };
+
+  const handleShare = async () => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: listing.title,
+          text: listing.shortDesc || listing.description || listing.title,
+          url: detailUrl,
+        });
+      } else if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(detailUrl);
+        toast.success("Посилання скопійовано.");
+      } else {
+        toast.error("Не вдалося відкрити меню поширення на цьому пристрої.");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Не вдалося поділитися оголошенням.";
+      if (message !== "Share canceled") {
+        toast.error(message);
+      }
+    }
+  };
+
+  const handleReport = async () => {
+    if (!Number.isInteger(numericListingId)) {
+      toast.error("Скарга доступна лише для оголошень з бази даних.");
+      return;
+    }
+    if (!user) {
+      await login();
+      return;
+    }
+
+    setIsReportOpen(true);
+  };
+
+  const submitReport = async () => {
+    if (!Number.isInteger(numericListingId)) {
+      return;
+    }
+
+    setReportPending(true);
+    try {
+      await reportMessagingUser({
+        other_user_id: listing.userId,
+        listing_id: String(numericListingId),
+        reason: reportReason,
+        details: reportDetails.trim() || undefined,
+      });
+      setIsReportOpen(false);
+      setReportDetails("");
+      setReportReason("spam");
+      toast.success(t("msg.reportSubmitted"));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Не вдалося надіслати скаргу.";
+      if (message.toLowerCase().includes("401") || message.toLowerCase().includes("authorized")) {
+        await login();
+      } else {
+        toast.error(message);
+      }
+    } finally {
+      setReportPending(false);
+    }
+  };
 
   return (
     <Layout>
       <div className="max-w-6xl mx-auto px-4 py-6">
+        <Dialog open={isReportOpen} onOpenChange={setIsReportOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>{t("msg.report")}</DialogTitle>
+              <DialogDescription>{t("msg.reportHelp")}</DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  {t("msg.reportReason")}
+                </label>
+                <select
+                  value={reportReason}
+                  onChange={(event) => setReportReason(event.target.value)}
+                  className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700"
+                >
+                  <option value="spam">{t("msg.reportReason.spam")}</option>
+                  <option value="abuse">{t("msg.reportReason.abuse")}</option>
+                  <option value="fraud">{t("msg.reportReason.fraud")}</option>
+                  <option value="unsafe">{t("msg.reportReason.unsafe")}</option>
+                  <option value="other">{t("msg.reportReason.other")}</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-700">
+                  {t("msg.reportDetails")}
+                </label>
+                <Textarea
+                  value={reportDetails}
+                  onChange={(event) => setReportDetails(event.target.value)}
+                  rows={4}
+                  placeholder={listing.title}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsReportOpen(false)}
+                  className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700"
+                >
+                  {t("msg.reportCancel")}
+                </button>
+                <button
+                  type="button"
+                  onClick={submitReport}
+                  disabled={reportPending}
+                  className={`rounded-xl px-4 py-2 text-sm font-semibold text-white ${reportPending ? "cursor-not-allowed bg-blue-300" : "bg-[#0057B8]"}`}
+                >
+                  {t("msg.reportSubmit")}
+                </button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Breadcrumbs */}
         <div className={`flex items-center gap-1.5 text-xs mb-5 flex-wrap ${isDark ? "text-gray-500" : "text-gray-400"}`}>
           <Link to="/" className="hover:underline">{t("nav.home")}</Link>
@@ -240,19 +408,33 @@ function ListingDetail() {
 
               {/* Actions */}
               <div className={`flex items-center gap-3 mt-5 pt-4 border-t ${isDark ? "border-[#1a3050]" : "border-gray-100"}`}>
-                <button className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
-                  isDark ? "text-gray-400 hover:bg-[#1a2a40]" : "text-gray-500 hover:bg-gray-50"
-                }`}>
-                  <Heart className="w-3.5 h-3.5" /> {t("card.save")}
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={savePending}
+                  className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
+                    isDark ? "text-gray-400 hover:bg-[#1a2a40]" : "text-gray-500 hover:bg-gray-50"
+                  } ${savePending ? "opacity-60 cursor-not-allowed" : ""}`}
+                >
+                  <Heart className={`w-3.5 h-3.5 ${isSaved ? "fill-current" : ""}`} /> {isSaved ? "Збережено" : t("card.save")}
                 </button>
-                <button className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
-                  isDark ? "text-gray-400 hover:bg-[#1a2a40]" : "text-gray-500 hover:bg-gray-50"
-                }`}>
+                <button
+                  type="button"
+                  onClick={handleShare}
+                  className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
+                    isDark ? "text-gray-400 hover:bg-[#1a2a40]" : "text-gray-500 hover:bg-gray-50"
+                  }`}
+                >
                   <Share2 className="w-3.5 h-3.5" /> {t("card.share")}
                 </button>
-                <button className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
-                  isDark ? "text-gray-400 hover:bg-[#1a2a40]" : "text-gray-500 hover:bg-gray-50"
-                }`}>
+                <button
+                  type="button"
+                  onClick={handleReport}
+                  disabled={reportPending}
+                  className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
+                    isDark ? "text-gray-400 hover:bg-[#1a2a40]" : "text-gray-500 hover:bg-gray-50"
+                  } ${reportPending ? "opacity-60 cursor-not-allowed" : ""}`}
+                >
                   <Flag className="w-3.5 h-3.5" /> {t("card.report")}
                 </button>
               </div>
@@ -279,25 +461,29 @@ function ListingDetail() {
                 {t("detail.author")}
               </h3>
               <div className="flex items-center gap-3 mb-3">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                  ownerType === "business_profile"
-                    ? isDark ? "bg-indigo-900/40" : "bg-indigo-50"
-                    : isDark ? "bg-[#1a2a40]" : "bg-gray-100"
-                }`}>
-                  {ownerType === "business_profile"
-                    ? <Briefcase className={`w-5 h-5 ${isDark ? "text-indigo-400" : "text-indigo-500"}`} />
-                    : <User className={`w-5 h-5 ${isDark ? "text-gray-400" : "text-gray-500"}`} />
-                  }
-                </div>
+                {authorAvatarUrl ? (
+                  <img src={authorAvatarUrl} alt={ownerLabel} className="w-10 h-10 rounded-full object-cover" />
+                ) : (
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                    ownerType === "business_profile"
+                      ? isDark ? "bg-indigo-900/40" : "bg-indigo-50"
+                      : isDark ? "bg-[#1a2a40]" : "bg-gray-100"
+                  }`}>
+                    {ownerType === "business_profile"
+                      ? <Briefcase className={`w-5 h-5 ${isDark ? "text-indigo-400" : "text-indigo-500"}`} />
+                      : <User className={`w-5 h-5 ${isDark ? "text-gray-400" : "text-gray-500"}`} />
+                    }
+                  </div>
+                )}
                 <div>
                   <p className={`text-sm font-bold ${isDark ? "text-gray-200" : "text-gray-800"}`}>{ownerLabel}</p>
                   <p className={`text-xs ${isDark ? "text-gray-500" : "text-gray-400"}`}>
-                    {ownerType === "business_profile" ? t("card.business") : t("card.private")}
+                    {ownerTypeLabel}
                   </p>
                 </div>
               </div>
               <Link
-                to={`/messages?to=${encodeURIComponent(ownerLabel)}&listing=${listing.id}&title=${encodeURIComponent(listing.title)}`}
+                to={user ? `/messages?to=${encodeURIComponent(listing.userId)}&listing=${listing.id}&title=${encodeURIComponent(listing.title)}` : "/auth"}
                 className={`w-full h-10 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition-all active:scale-[0.98] ${
                   isDark
                     ? "bg-gradient-to-r from-[#FFD700] to-[#e6c200] text-[#0d1a2e] hover:shadow-md hover:shadow-yellow-500/20"

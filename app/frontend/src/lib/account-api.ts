@@ -553,6 +553,12 @@ export function fetchSavedListings() {
   return accountFetch<SavedListingCard[]>("/api/v1/saved/listings");
 }
 
+export function saveListing(listingId: number) {
+  return accountFetch<{ id: number; user_id: string; listing_id: number; created_at: string }>(`/api/v1/saved/listings/${listingId}`, {
+    method: 'POST',
+  });
+}
+
 export function fetchSavedBusinesses() {
   return accountFetch<SavedBusinessCard[]>("/api/v1/saved/businesses");
 }

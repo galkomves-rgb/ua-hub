@@ -203,6 +203,40 @@ async def test_submit_returns_402_for_business_listing_without_subscription(api_
 
 
 @pytest.mark.asyncio
+async def test_get_listing_includes_public_author_metadata(api_client: AsyncClient, db_session: AsyncSession):
+    db_session.add(
+        UserProfile(
+            user_id=TEST_USER_ID,
+            name="Public Author",
+            avatar_url="https://example.com/avatar.jpg",
+            city="Madrid",
+            bio="bio",
+            preferred_language="en",
+            account_type="private",
+            onboarding_completed=True,
+            is_public_profile=True,
+            show_as_public_author=True,
+            allow_marketing_emails=False,
+        )
+    )
+    await db_session.commit()
+
+    listing = await create_listing(
+        db_session,
+        user_id=TEST_USER_ID,
+        owner_type="private_user",
+        owner_id=TEST_USER_ID,
+        status="published",
+    )
+
+    response = await api_client.get(f"/api/v1/listings/{listing.id}?record_view=false")
+
+    assert response.status_code == 200
+    assert response.json()["author_name"] == "Public Author"
+    assert response.json()["author_avatar_url"] == "https://example.com/avatar.jpg"
+
+
+@pytest.mark.asyncio
 async def test_submit_returns_400_when_business_quota_is_exceeded(api_client: AsyncClient, db_session: AsyncSession):
     now = datetime.now(timezone.utc)
     db_session.add(

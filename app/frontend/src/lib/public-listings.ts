@@ -3,6 +3,8 @@ import { getAPIBaseURL } from "@/lib/config";
 export interface PublicListingRecord {
   id: number;
   user_id: string;
+  author_name?: string | null;
+  author_avatar_url?: string | null;
   module: string;
   category: string;
   subcategory: string | null;
@@ -31,6 +33,8 @@ export interface PublicListingCardData {
   id: string;
   rawId: number;
   userId: string;
+  authorName?: string;
+  authorAvatarUrl?: string;
   module: string;
   category: string;
   subcategory?: string;
@@ -110,6 +114,8 @@ export function mapPublicListing(record: PublicListingRecord): PublicListingCard
     id: String(record.id),
     rawId: record.id,
     userId: record.user_id,
+    authorName: record.author_name ?? undefined,
+    authorAvatarUrl: record.author_avatar_url ?? undefined,
     module: record.module,
     category: record.category,
     subcategory: record.subcategory ?? undefined,

@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.listings import Listings
 from models.messages import Messages
+from models.profiles import BusinessProfile, UserProfile
 from models.saved import SavedListing
 from services.monetization import MonetizationService, PaymentRequiredError
 
@@ -49,6 +50,59 @@ class ListingsService:
             if label in MODERATOR_BADGES_ALLOWED and label not in normalized:
                 normalized.append(label)
         return ListingsService._dump_badges(normalized)
+
+    async def _attach_public_author_metadata(self, listings: list[Listings]) -> None:
+        if not listings:
+            return
+
+        public_user_ids = {
+            listing.user_id
+            for listing in listings
+            if listing.owner_type in {"private_user", "organization"}
+        }
+        business_slugs = {
+            listing.owner_id
+            for listing in listings
+            if listing.owner_type == "business_profile" and listing.owner_id
+        }
+
+        public_profiles_by_user_id: dict[str, UserProfile] = {}
+        if public_user_ids:
+            user_profiles_result = await self.db.execute(
+                select(UserProfile).where(UserProfile.user_id.in_(public_user_ids))
+            )
+            public_profiles_by_user_id = {
+                profile.user_id: profile
+                for profile in user_profiles_result.scalars().all()
+                if profile.show_as_public_author and profile.is_public_profile
+            }
+
+        business_profiles_by_slug: dict[str, BusinessProfile] = {}
+        if business_slugs:
+            business_profiles_result = await self.db.execute(
+                select(BusinessProfile).where(BusinessProfile.slug.in_(business_slugs))
+            )
+            business_profiles_by_slug = {
+                profile.slug: profile for profile in business_profiles_result.scalars().all()
+            }
+
+        for listing in listings:
+            author_name = None
+            author_avatar_url = None
+
+            if listing.owner_type == "business_profile":
+                business_profile = business_profiles_by_slug.get(listing.owner_id)
+                if business_profile:
+                    author_name = business_profile.name
+                    author_avatar_url = business_profile.logo_url
+            else:
+                public_profile = public_profiles_by_user_id.get(listing.user_id)
+                if public_profile:
+                    author_name = public_profile.name
+                    author_avatar_url = public_profile.avatar_url
+
+            listing.author_name = author_name
+            listing.author_avatar_url = author_avatar_url
 
     async def create_listing(
         self,
@@ -112,7 +166,10 @@ class ListingsService:
         result = await self.db.execute(
             select(Listings).where(Listings.id == listing_id)
         )
-        return result.scalar_one_or_none()
+        listing = result.scalar_one_or_none()
+        if listing:
+            await self._attach_public_author_metadata([listing])
+        return listing
 
     async def list_listings(
         self,
@@ -147,7 +204,9 @@ class ListingsService:
 
         query = query.order_by(desc(Listings.ranking_score), desc(Listings.created_at)).limit(limit).offset(offset)
         result = await self.db.execute(query)
-        return result.scalars().all()
+        listings = result.scalars().all()
+        await self._attach_public_author_metadata(listings)
+        return listings
 
     async def list_user_listings(
         self,
@@ -269,7 +328,9 @@ class ListingsService:
 
         query = query.order_by(desc(Listings.ranking_score), desc(Listings.created_at)).limit(limit).offset(offset)
         result = await self.db.execute(query)
-        return result.scalars().all()
+        listings = result.scalars().all()
+        await self._attach_public_author_metadata(listings)
+        return listings
 
     async def update_listing(
         self,
@@ -350,7 +411,9 @@ class ListingsService:
 
         query = query.order_by(desc(Listings.ranking_score), desc(Listings.created_at)).limit(limit)
         result = await self.db.execute(query)
-        return result.scalars().all()
+        listings = result.scalars().all()
+        await self._attach_public_author_metadata(listings)
+        return listings
 
     async def get_business_listings(
         self, business_slug: str, limit: int = 50, offset: int = 0
@@ -366,7 +429,9 @@ class ListingsService:
 
         query = query.order_by(desc(Listings.ranking_score), desc(Listings.created_at)).limit(limit).offset(offset)
         result = await self.db.execute(query)
-        return result.scalars().all()
+        listings = result.scalars().all()
+        await self._attach_public_author_metadata(listings)
+        return listings
 
     async def submit_listing(self, listing_id: int) -> Listings | None:
         """Submit a draft or rejected listing for moderation."""
