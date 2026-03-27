@@ -210,10 +210,11 @@ async def test_admin_catalog_filters_listings(api_client: AsyncClient, db_sessio
 
     assert response.status_code == 200
     payload = response.json()
-    assert len(payload) == 1
-    assert payload[0]["id"] == rejected_listing.id
-    assert payload[0]["title"] == rejected_listing.title
-    assert payload[0]["status"] == "rejected"
+    assert payload["total"] == 1
+    assert len(payload["items"]) == 1
+    assert payload["items"][0]["id"] == rejected_listing.id
+    assert payload["items"][0]["title"] == rejected_listing.title
+    assert payload["items"][0]["status"] == "rejected"
     assert published_listing.id != rejected_listing.id
 
 

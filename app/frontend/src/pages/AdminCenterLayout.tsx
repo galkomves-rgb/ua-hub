@@ -1,4 +1,4 @@
-import { Activity, ClipboardList, LayoutDashboard, ShieldCheck } from "lucide-react";
+import { Activity, ClipboardList, CreditCard, LayoutDashboard, MessageSquareWarning, Settings2, ShieldCheck, Users } from "lucide-react";
 import { NavLink, Outlet } from "react-router-dom";
 import ProtectedAdminRoute from "@/components/ProtectedAdminRoute";
 import UahubLayout from "@/components/UahubLayout";
@@ -31,6 +31,30 @@ const ADMIN_NAV_ITEMS: AdminNavItem[] = [
     label: { ua: "Оголошення", es: "Anuncios", en: "Listings" },
     description: { ua: "Повний каталог", es: "Catálogo completo", en: "Full catalog" },
     icon: ClipboardList,
+  },
+  {
+    to: "/admin/reports",
+    label: { ua: "Скарги", es: "Reportes", en: "Reports" },
+    description: { ua: "Кейси та review", es: "Casos y revisión", en: "Cases and review" },
+    icon: MessageSquareWarning,
+  },
+  {
+    to: "/admin/billing",
+    label: { ua: "Billing", es: "Billing", en: "Billing" },
+    description: { ua: "Платежі та override", es: "Pagos y overrides", en: "Payments and overrides" },
+    icon: CreditCard,
+  },
+  {
+    to: "/admin/users",
+    label: { ua: "Користувачі", es: "Usuarios", en: "Users" },
+    description: { ua: "Ролі та профілі", es: "Roles y perfiles", en: "Roles and profiles" },
+    icon: Users,
+  },
+  {
+    to: "/admin/operations",
+    label: { ua: "Операції", es: "Operaciones", en: "Operations" },
+    description: { ua: "Expiration jobs", es: "Expiration jobs", en: "Expiration jobs" },
+    icon: Settings2,
   },
 ];
 

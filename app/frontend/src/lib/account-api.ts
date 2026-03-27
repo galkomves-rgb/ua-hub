@@ -220,6 +220,89 @@ export interface AdminOverviewResponse {
   recent_payment_issues: AdminOverviewPaymentItem[];
 }
 
+export interface AdminPagedResponse<TItem> {
+  total: number;
+  limit: number;
+  offset: number;
+  items: TItem[];
+}
+
+export interface AdminReportItem {
+  id: number;
+  reporter_user_id: string;
+  reported_user_id: string;
+  listing_id: string | null;
+  reason: string;
+  details: string | null;
+  status: string;
+  moderation_note: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+}
+
+export interface AdminReportReviewPayload {
+  status: string;
+  moderation_note?: string | null;
+}
+
+export interface AdminBillingPaymentItem {
+  id: number;
+  user_id: string;
+  listing_id: number | null;
+  business_profile_id: number | null;
+  title: string;
+  product_code: string;
+  product_type: string;
+  target_type: string;
+  target_label: string | null;
+  status: string;
+  entitlement_status: string | null;
+  amount_total: number;
+  currency: string;
+  created_at: string;
+  paid_at: string | null;
+  period_end: string | null;
+  failure_reason: string | null;
+}
+
+export interface AdminBillingPaymentOverridePayload {
+  payment_status: string;
+  entitlement_status?: string | null;
+  note?: string | null;
+}
+
+export interface AdminUserItem {
+  id: string;
+  email: string;
+  name: string | null;
+  role: string;
+  profile_name: string | null;
+  city: string | null;
+  account_type: string | null;
+  is_public_profile: boolean;
+  show_as_public_author: boolean;
+  listings_count: number;
+  business_profiles_count: number;
+  created_at: string | null;
+  last_login: string | null;
+}
+
+export interface AdminUserRoleUpdatePayload {
+  role: string;
+}
+
+export interface AdminExpirationRunResponse {
+  as_of: string;
+  expired_listings: number;
+  expired_listing_ids: number[];
+  expired_promotions: number;
+  expired_promotion_ids: number[];
+  expired_subscriptions: number;
+  expired_subscription_ids: number[];
+  affected_listing_ids: number[];
+  affected_business_profile_ids: number[];
+}
+
 export interface UserProfileResponse {
   user_id: string;
   name: string;
@@ -918,7 +1001,7 @@ export function fetchModerationQueue(filters?: {
     params.set("offset", String(filters.offset));
   }
   const suffix = params.toString();
-  return accountFetch<ListingManagementItem[]>(
+  return accountFetch<AdminPagedResponse<ListingManagementItem>>(
     `/api/v1/admin/listings/moderation-queue${suffix ? `?${suffix}` : ""}`,
   );
 }
@@ -955,7 +1038,7 @@ export function fetchAdminListings(filters?: {
     params.set("offset", String(filters.offset));
   }
   const suffix = params.toString();
-  return accountFetch<ListingManagementItem[]>(`/api/v1/admin/listings/catalog${suffix ? `?${suffix}` : ""}`);
+  return accountFetch<AdminPagedResponse<ListingManagementItem>>(`/api/v1/admin/listings/catalog${suffix ? `?${suffix}` : ""}`);
 }
 
 export function fetchModerationAuditTrail(listingId: number, limit = 20) {
@@ -974,6 +1057,103 @@ export function moderateListing(listingId: number, payload: ListingModerationPay
 
 export function fetchAdminOverview() {
   return accountFetch<AdminOverviewResponse>("/api/v1/admin/overview");
+}
+
+export function fetchAdminReports(filters?: {
+  status?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const params = new URLSearchParams();
+  if (filters?.status && filters.status !== "all") {
+    params.set("status", filters.status);
+  }
+  if (filters?.q) {
+    params.set("q", filters.q);
+  }
+  if (typeof filters?.limit === "number") {
+    params.set("limit", String(filters.limit));
+  }
+  if (typeof filters?.offset === "number") {
+    params.set("offset", String(filters.offset));
+  }
+  const suffix = params.toString();
+  return accountFetch<AdminPagedResponse<AdminReportItem>>(`/api/v1/admin/reports${suffix ? `?${suffix}` : ""}`);
+}
+
+export function reviewAdminReport(reportId: number, payload: AdminReportReviewPayload) {
+  return accountFetch<AdminReportItem>(`/api/v1/admin/reports/${reportId}/review`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchAdminBillingPayments(filters?: {
+  status?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const params = new URLSearchParams();
+  if (filters?.status && filters.status !== "all") {
+    params.set("status", filters.status);
+  }
+  if (filters?.q) {
+    params.set("q", filters.q);
+  }
+  if (typeof filters?.limit === "number") {
+    params.set("limit", String(filters.limit));
+  }
+  if (typeof filters?.offset === "number") {
+    params.set("offset", String(filters.offset));
+  }
+  const suffix = params.toString();
+  return accountFetch<AdminPagedResponse<AdminBillingPaymentItem>>(`/api/v1/admin/billing/payments${suffix ? `?${suffix}` : ""}`);
+}
+
+export function overrideAdminBillingPayment(paymentId: number, payload: AdminBillingPaymentOverridePayload) {
+  return accountFetch<BillingHistoryItem>(`/api/v1/admin/billing/payments/${paymentId}/override`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchAdminUsers(filters?: {
+  role?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const params = new URLSearchParams();
+  if (filters?.role && filters.role !== "all") {
+    params.set("role", filters.role);
+  }
+  if (filters?.q) {
+    params.set("q", filters.q);
+  }
+  if (typeof filters?.limit === "number") {
+    params.set("limit", String(filters.limit));
+  }
+  if (typeof filters?.offset === "number") {
+    params.set("offset", String(filters.offset));
+  }
+  const suffix = params.toString();
+  return accountFetch<AdminPagedResponse<AdminUserItem>>(`/api/v1/admin/users${suffix ? `?${suffix}` : ""}`);
+}
+
+export function updateAdminUserRole(userId: string, payload: AdminUserRoleUpdatePayload) {
+  return accountFetch<AdminUserItem>(`/api/v1/admin/users/${userId}/role`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function runAdminExpirationJobs(asOf?: string) {
+  const suffix = asOf ? `?as_of=${encodeURIComponent(asOf)}` : "";
+  return accountFetch<AdminExpirationRunResponse>(`/api/v1/admin/monetization/run-expirations${suffix}`, {
+    method: "POST",
+  });
 }
 
 export function fetchMessagingInbox() {

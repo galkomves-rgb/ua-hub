@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ClipboardList, Eye, Search, ShieldAlert, Sparkles } from "lucide-react";
 import { Link } from "react-router-dom";
+import AdminPagination from "@/components/admin/AdminPagination";
 import { fetchAdminListings } from "@/lib/account-api";
 import { MODULES } from "@/lib/platform";
 import { useTheme } from "@/lib/ThemeContext";
@@ -10,6 +11,7 @@ import { useI18n } from "@/lib/i18n";
 const STATUS_OPTIONS = ["all", "draft", "moderation_pending", "published", "rejected", "expired", "archived"] as const;
 const MODULE_OPTIONS = ["all", ...MODULES.map((module) => module.id)] as const;
 const OWNER_OPTIONS = ["all", "private_user", "business_profile", "organization"] as const;
+const PAGE_SIZE = 24;
 
 function parseImages(raw: string | null | undefined): string[] {
   if (!raw) return [];
@@ -39,26 +41,34 @@ export default function AdminListingsPage() {
   const [ownerType, setOwnerType] = useState<(typeof OWNER_OPTIONS)[number]>("all");
   const [searchText, setSearchText] = useState("");
   const [sort, setSort] = useState<"newest" | "oldest" | "views_desc" | "expires_soon">("newest");
+  const [offset, setOffset] = useState(0);
+
+  useEffect(() => {
+    setOffset(0);
+  }, [status, module, ownerType, searchText, sort]);
 
   const listingsQuery = useQuery({
-    queryKey: ["admin-listings-catalog", status, module, ownerType, searchText, sort],
+    queryKey: ["admin-listings-catalog", status, module, ownerType, searchText, sort, offset],
     queryFn: () => fetchAdminListings({
       status,
       module: module === "all" ? undefined : module,
       ownerType: ownerType === "all" ? undefined : ownerType,
       q: searchText.trim() || undefined,
       sort,
-      limit: 100,
+      limit: PAGE_SIZE,
+      offset,
     }),
   });
 
-  const items = listingsQuery.data ?? [];
+  const page = listingsQuery.data;
+  const items = page?.items ?? [];
   const stats = useMemo(() => ({
-    total: items.length,
+    total: page?.total ?? 0,
+    pageTotal: items.length,
     pending: items.filter((item) => item.status === "moderation_pending").length,
     published: items.filter((item) => item.status === "published").length,
     promoted: items.filter((item) => item.is_promoted || item.is_featured).length,
-  }), [items]);
+  }), [items, page?.total]);
 
   return (
     <div className="space-y-6">
@@ -79,10 +89,10 @@ export default function AdminListingsPage() {
       </section>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard isDark={isDark} label={locale === "ua" ? "У вибірці" : locale === "es" ? "En la selección" : "In selection"} value={stats.total} icon={ClipboardList} />
+        <StatCard isDark={isDark} label={locale === "ua" ? "Усього у вибірці" : locale === "es" ? "Total filtrado" : "Matched total"} value={stats.total} icon={ClipboardList} />
         <StatCard isDark={isDark} label={locale === "ua" ? "На модерації" : locale === "es" ? "En moderación" : "In moderation"} value={stats.pending} icon={ShieldAlert} />
         <StatCard isDark={isDark} label={locale === "ua" ? "Опубліковані" : locale === "es" ? "Publicados" : "Published"} value={stats.published} icon={Eye} />
-        <StatCard isDark={isDark} label={locale === "ua" ? "Промо/featured" : locale === "es" ? "Promo/destacados" : "Promo/featured"} value={stats.promoted} icon={Sparkles} />
+        <StatCard isDark={isDark} label={locale === "ua" ? "Промо на сторінці" : locale === "es" ? "Promo en página" : "Promo on page"} value={stats.promoted} icon={Sparkles} />
       </section>
 
       <section className={`rounded-3xl border p-5 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
@@ -148,6 +158,16 @@ export default function AdminListingsPage() {
             </div>
           ) : null}
 
+          {!listingsQuery.isLoading && !listingsQuery.isError && items.length > 0 ? (
+            <p className={`text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>
+              {locale === "ua"
+                ? `На цій сторінці ${stats.pageTotal} позицій із ${stats.total} знайдених.`
+                : locale === "es"
+                  ? `Esta página muestra ${stats.pageTotal} elementos de ${stats.total} encontrados.`
+                  : `This page shows ${stats.pageTotal} items out of ${stats.total} matched.`}
+            </p>
+          ) : null}
+
           {items.map((item) => {
             const images = parseImages(item.images_json);
             const needsModeration = item.status === "moderation_pending" || item.status === "rejected";
@@ -189,6 +209,17 @@ export default function AdminListingsPage() {
               </div>
             );
           })}
+        </div>
+
+        <div className="mt-6">
+          <AdminPagination
+            total={page?.total ?? 0}
+            limit={page?.limit ?? PAGE_SIZE}
+            offset={page?.offset ?? offset}
+            isDark={isDark}
+            locale={locale}
+            onPageChange={setOffset}
+          />
         </div>
       </section>
     </div>

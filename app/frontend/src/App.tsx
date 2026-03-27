@@ -30,6 +30,10 @@ import AdminCenterLayout from "./pages/AdminCenterLayout";
 import AdminOverviewPage from "./pages/AdminOverviewPage";
 import AdminListingsPage from "./pages/AdminListingsPage";
 import AdminModerationPage from "./pages/AdminModerationPage";
+import AdminReportsPage from "./pages/AdminReportsPage";
+import AdminBillingPage from "./pages/AdminBillingPage";
+import AdminUsersPage from "./pages/AdminUsersPage";
+import AdminOperationsPage from "./pages/AdminOperationsPage";
 
 const queryClient = new QueryClient();
 
@@ -98,6 +102,10 @@ const App = () => (
                   <Route path="overview" element={<AdminOverviewPage />} />
                   <Route path="listings" element={<AdminListingsPage />} />
                   <Route path="listings/moderation" element={<AdminModerationPage />} />
+                  <Route path="reports" element={<AdminReportsPage />} />
+                  <Route path="billing" element={<AdminBillingPage />} />
+                  <Route path="users" element={<AdminUsersPage />} />
+                  <Route path="operations" element={<AdminOperationsPage />} />
                 </Route>
                 <Route path="/admin/moderation" element={<Navigate to="/admin/listings/moderation" replace />} />
                 {/* Platform pages */}

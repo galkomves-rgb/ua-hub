@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ShieldCheck, CheckCircle2, XCircle, ArrowRight, AlertTriangle, Search, ImageIcon, RefreshCw, History } from "lucide-react";
 import { toast } from "sonner";
+import AdminPagination from "@/components/admin/AdminPagination";
 import { fetchModerationAuditTrail, moderateListing, fetchModerationQueue, type ListingManagementItem } from "@/lib/account-api";
 import { deriveListingLabels, getModuleLabelSystem, type LabelId } from "@/lib/label-taxonomy";
 import { MODULES } from "@/lib/platform";
@@ -10,6 +11,7 @@ import { useI18n } from "@/lib/i18n";
 
 const MODULE_OPTIONS = ["all", "jobs", "housing", "services", "marketplace", "events", "community", "organizations"] as const;
 const MODERATOR_BADGES = ["featured", "urgent", "remote", "online", "free"] as const;
+const PAGE_SIZE = 12;
 
 function parseBadges(rawBadges: string | null) {
   if (!rawBadges) {
@@ -478,10 +480,15 @@ export default function AdminModerationPage() {
   const [status, setStatus] = useState<"moderation_pending" | "rejected" | "all">("moderation_pending");
   const [module, setModule] = useState<(typeof MODULE_OPTIONS)[number]>("all");
   const [searchText, setSearchText] = useState("");
+  const [offset, setOffset] = useState(0);
+
+  useEffect(() => {
+    setOffset(0);
+  }, [status, module, searchText]);
 
   const queueQuery = useQuery({
-    queryKey: ["admin-moderation-queue", status, module, searchText],
-    queryFn: () => fetchModerationQueue({ status, module: module === "all" ? undefined : module, q: searchText.trim() || undefined, limit: 100 }),
+    queryKey: ["admin-moderation-queue", status, module, searchText, offset],
+    queryFn: () => fetchModerationQueue({ status, module: module === "all" ? undefined : module, q: searchText.trim() || undefined, limit: PAGE_SIZE, offset }),
   });
 
   const moderateMutation = useMutation({
@@ -508,13 +515,14 @@ export default function AdminModerationPage() {
     },
   });
 
-  const items = useMemo(() => queueQuery.data ?? [], [queueQuery.data]);
+  const page = queueQuery.data;
+  const items = useMemo(() => page?.items ?? [], [page?.items]);
   const queueStats = useMemo(() => {
     const withPhotos = items.filter((item) => parseImages(item.images_json).length > 0).length;
     const rejected = items.filter((item) => item.status === "rejected").length;
     const pending = items.filter((item) => item.status === "moderation_pending").length;
-    return { total: items.length, withPhotos, rejected, pending };
-  }, [items]);
+    return { total: page?.total ?? 0, pageTotal: items.length, withPhotos, rejected, pending };
+  }, [items, page?.total]);
 
   return (
     <div className="space-y-6">
@@ -622,6 +630,16 @@ export default function AdminModerationPage() {
             </div>
           ) : null}
 
+          {!queueQuery.isLoading && !queueQuery.isError && items.length > 0 ? (
+            <p className={`text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>
+              {locale === "ua"
+                ? `На цій сторінці ${queueStats.pageTotal} елементів із ${queueStats.total} знайдених.`
+                : locale === "es"
+                  ? `Esta página muestra ${queueStats.pageTotal} elementos de ${queueStats.total} encontrados.`
+                  : `This page shows ${queueStats.pageTotal} items out of ${queueStats.total} matched.`}
+            </p>
+          ) : null}
+
           {items.map((item) => (
             <ModerationCard
               key={item.id}
@@ -631,6 +649,17 @@ export default function AdminModerationPage() {
               onReject={(listingId, reason, moduleId, category, badges) => moderateMutation.mutate({ listingId, decision: "reject", reason, module: moduleId, category, badges })}
             />
           ))}
+        </div>
+
+        <div className="mt-6">
+          <AdminPagination
+            total={page?.total ?? 0}
+            limit={page?.limit ?? PAGE_SIZE}
+            offset={page?.offset ?? offset}
+            isDark={isDark}
+            locale={locale}
+            onPageChange={setOffset}
+          />
         </div>
       </section>
     </div>

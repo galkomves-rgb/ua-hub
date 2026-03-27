@@ -326,33 +326,37 @@ class ListingsService:
         sort: str = "newest",
         limit: int = 100,
         offset: int = 0,
-    ) -> list[dict]:
+    ) -> dict:
         """List listings for admin backoffice catalog."""
         query = select(Listings)
+        total_query = select(func.count(Listings.id))
 
         if status and status != "all":
             query = query.where(Listings.status == status)
+            total_query = total_query.where(Listings.status == status)
 
         if module:
             query = query.where(Listings.module == module)
+            total_query = total_query.where(Listings.module == module)
 
         if owner_type:
             query = query.where(Listings.owner_type == owner_type)
+            total_query = total_query.where(Listings.owner_type == owner_type)
 
         if query_text:
             search_term = f"%{query_text}%"
-            query = query.where(
-                or_(
-                    Listings.title.ilike(search_term),
-                    Listings.description.ilike(search_term),
-                    Listings.category.ilike(search_term),
-                    Listings.module.ilike(search_term),
-                    Listings.city.ilike(search_term),
-                    func.cast(Listings.id, String).ilike(search_term),
-                    Listings.user_id.ilike(search_term),
-                    Listings.owner_id.ilike(search_term),
-                )
+            search_filter = or_(
+                Listings.title.ilike(search_term),
+                Listings.description.ilike(search_term),
+                Listings.category.ilike(search_term),
+                Listings.module.ilike(search_term),
+                Listings.city.ilike(search_term),
+                func.cast(Listings.id, String).ilike(search_term),
+                Listings.user_id.ilike(search_term),
+                Listings.owner_id.ilike(search_term),
             )
+            query = query.where(search_filter)
+            total_query = total_query.where(search_filter)
 
         if sort == "oldest":
             query = query.order_by(Listings.created_at.asc())
@@ -363,10 +367,11 @@ class ListingsService:
         else:
             query = query.order_by(desc(Listings.updated_at), desc(Listings.created_at))
 
+        total = int(await self.db.scalar(total_query) or 0)
         result = await self.db.execute(query.limit(limit).offset(offset))
         listings = result.scalars().all()
         if not listings:
-            return []
+            return {"total": total, "limit": limit, "offset": offset, "items": []}
 
         listing_ids = [listing.id for listing in listings]
         saved_counts_result = await self.db.execute(
@@ -403,7 +408,7 @@ class ListingsService:
                 }
             )
 
-        return items
+        return {"total": total, "limit": limit, "offset": offset, "items": items}
 
     async def search_listings(
         self,
@@ -629,28 +634,34 @@ class ListingsService:
         query_text: str | None = None,
         limit: int = 50,
         offset: int = 0,
-    ) -> list[dict]:
+    ) -> dict:
         query = select(Listings)
+        total_query = select(func.count(Listings.id))
 
         if status == "all":
-            query = query.where(Listings.status.in_([LISTING_STATUS_MODERATION_PENDING, LISTING_STATUS_REJECTED]))
+            status_filter = Listings.status.in_([LISTING_STATUS_MODERATION_PENDING, LISTING_STATUS_REJECTED])
+            query = query.where(status_filter)
+            total_query = total_query.where(status_filter)
         else:
             query = query.where(Listings.status == status)
+            total_query = total_query.where(Listings.status == status)
 
         if module:
             query = query.where(Listings.module == module)
+            total_query = total_query.where(Listings.module == module)
 
         if query_text:
             search_term = f"%{query_text.strip()}%"
-            query = query.where(
-                or_(
-                    Listings.title.ilike(search_term),
-                    Listings.category.ilike(search_term),
-                    Listings.module.ilike(search_term),
-                    func.cast(Listings.id, String).ilike(search_term),
-                )
+            search_filter = or_(
+                Listings.title.ilike(search_term),
+                Listings.category.ilike(search_term),
+                Listings.module.ilike(search_term),
+                func.cast(Listings.id, String).ilike(search_term),
             )
+            query = query.where(search_filter)
+            total_query = total_query.where(search_filter)
 
+        total = int(await self.db.scalar(total_query) or 0)
         query = query.order_by(desc(Listings.updated_at), desc(Listings.created_at)).limit(limit).offset(offset)
         result = await self.db.execute(query)
         listings = result.scalars().all()
@@ -682,7 +693,7 @@ class ListingsService:
                 }
             )
 
-        return items
+        return {"total": total, "limit": limit, "offset": offset, "items": items}
 
     async def list_moderation_audit(self, listing_id: int, limit: int = 20) -> list[dict]:
         result = await self.db.execute(

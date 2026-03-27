@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from dependencies.auth import get_admin_user, get_current_user_id
 from dependencies.database import get_db_session
 from schemas.auth import UserResponse
-from schemas.admin import AdminModerationAuditItemResponse
+from schemas.admin import AdminModerationAuditItemResponse, AdminPagedListingsResponse
 from schemas.listings import (
     ListingActionResponse,
     ListingCreate,
@@ -325,7 +325,7 @@ async def boost_listing(
     )
 
 
-@admin_router.get("/moderation-queue", response_model=list[ListingSummaryResponse])
+@admin_router.get("/moderation-queue", response_model=AdminPagedListingsResponse)
 async def get_moderation_queue(
     status: str = Query("moderation_pending", pattern="^(moderation_pending|rejected|all)$"),
     module: str | None = Query(None),
@@ -339,7 +339,7 @@ async def get_moderation_queue(
     return await service.list_moderation_queue(status=status, module=module, query_text=q, limit=limit, offset=offset)
 
 
-@admin_router.get("/catalog", response_model=list[ListingSummaryResponse])
+@admin_router.get("/catalog", response_model=AdminPagedListingsResponse)
 async def get_admin_listings_catalog(
     status: str | None = Query(None),
     module: str | None = Query(None),
