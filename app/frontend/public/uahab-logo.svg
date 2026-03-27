@@ -1,3 +1,19 @@
-version https://git-lfs.github.com/spec/v1
-oid sha256:0790ba4c4a75ea67a71e4fe5db2f82440fafeea896ed049ecefa271094e95cb5
-size 1977
+<svg width="420" height="110" viewBox="0 0 420 110" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="420" height="110" rx="24" fill="white" fill-opacity="0.001"/>
+  <g transform="translate(10 8)">
+    <rect x="48" y="14" width="66" height="74" rx="18" fill="#FFD229"/>
+    <path d="M71 55C71 47.268 77.268 41 85 41H103C110.732 41 117 47.268 117 55V90C117 97.732 110.732 104 103 104H88L74 90H85C92.732 90 99 83.732 99 76V55C99 47.268 92.732 41 85 41H71V55Z" fill="#90A5F6"/>
+    <path d="M64 11C85.539 11 103 28.461 103 50C103 74.127 72.669 95.505 64 102C55.331 95.505 25 74.127 25 50C25 28.461 42.461 11 64 11Z" fill="#0B53B6" stroke="white" stroke-width="4"/>
+    <path d="M64 25C65.664 25 67 26.336 67 28V61.5C67 63.164 65.664 64.5 64 64.5C62.336 64.5 61 63.164 61 61.5V28C61 26.336 62.336 25 64 25Z" fill="#FFD229"/>
+    <path d="M49 35.5C50.657 35.5 52 36.843 52 38.5V58.5L61.5 67.5C62.71 68.646 62.761 70.545 61.614 71.755C60.468 72.964 58.57 73.016 57.361 71.869L46.924 61.977C46.323 61.407 46 60.611 46 59.783V38.5C46 36.843 47.343 35.5 49 35.5Z" fill="#FFD229"/>
+    <path d="M79 35.5C80.657 35.5 82 36.843 82 38.5V59.783C82 60.611 81.677 61.407 81.076 61.977L70.639 71.869C69.43 73.016 67.532 72.964 66.386 71.755C65.239 70.545 65.29 68.646 66.5 67.5L76 58.5V38.5C76 36.843 77.343 35.5 79 35.5Z" fill="#FFD229"/>
+    <path d="M54.5 49.5L64 42L73.5 49.5" stroke="#FFD229" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M57 57H71" stroke="#FFD229" stroke-width="5" stroke-linecap="round"/>
+  </g>
+  <g transform="translate(142 22)">
+    <text x="0" y="44" font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="56" letter-spacing="1">
+      <tspan fill="#1456B8">UA</tspan><tspan fill="#FFD229">HAB</tspan>
+    </text>
+    <text x="2" y="83" font-family="Segoe UI, Arial, sans-serif" font-weight="600" font-size="26" letter-spacing="0.2" fill="#1E4694">Українці в Іспанії</text>
+  </g>
+</svg>
