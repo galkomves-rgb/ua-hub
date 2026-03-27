@@ -9,7 +9,7 @@ import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
 
 const STATUS_OPTIONS = ["all", "draft", "moderation_pending", "published", "rejected", "expired", "archived"] as const;
-const MODULE_OPTIONS = ["all", ...MODULES.map((module) => module.id)] as const;
+const MODULE_OPTIONS = ["all", ...Object.keys(MODULES)] as const;
 const OWNER_OPTIONS = ["all", "private_user", "business_profile", "organization"] as const;
 const PAGE_SIZE = 24;
 
