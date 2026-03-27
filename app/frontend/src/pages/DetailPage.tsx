@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useParams, useLocation, Link, useSearchParams } from "react-router-dom";
+import { useParams, useLocation, Link, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
   ArrowLeft, MapPin, Clock, User, Briefcase, Share2, Flag, Heart,
