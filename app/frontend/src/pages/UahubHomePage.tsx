@@ -42,9 +42,6 @@ export default function UahubHomePage() {
         <div className={`absolute inset-0 ${isDark ? "bg-gradient-to-r from-[#081425] via-[#081425]/70 to-[#081425]/20" : "bg-gradient-to-r from-[#0c376b]/75 via-[#0c376b]/40 to-white/10"}`} />
         <div className="absolute inset-0 mx-auto flex max-w-7xl items-end px-4 pb-10 lg:px-6">
           <div className="max-w-3xl">
-            <p className="mb-3 inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white backdrop-blur-sm">
-              UAHUB v7.1
-            </p>
             <h1 className="max-w-2xl text-4xl font-black leading-tight text-white md:text-5xl">
               {locale === "ua"
                 ? "Єдина модульна платформа для українців в Іспанії"
@@ -54,10 +51,10 @@ export default function UahubHomePage() {
             </h1>
             <p className="mt-4 max-w-2xl text-sm leading-7 text-white/85 md:text-base">
               {locale === "ua"
-                ? "Робота, житло, послуги, події, спільнота, організації та бізнес-каталог працюють як одна система з єдиною таксономією, профілями власників і монетизацією."
+                ? "Робота, житло, послуги, події, спільнота, організації та бізнес-каталог зібрані в одному зручному просторі для життя в Іспанії."
                 : locale === "es"
-                  ? "Trabajo, vivienda, servicios, eventos, comunidad, organizaciones y directorio empresarial funcionan como un solo sistema con taxonomía unificada, perfiles de propietarios y monetización."
-                  : "Jobs, housing, services, events, community, organizations, and business directory work as one system with unified taxonomy, owner profiles, and monetization."}
+                  ? "Trabajo, vivienda, servicios, eventos, comunidad, organizaciones y directorio empresarial reunidos en un solo espacio práctico para la vida en España."
+                  : "Jobs, housing, services, events, community, organizations, and a business directory gathered in one practical space for life in Spain."}
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link to="/jobs" className="rounded-2xl bg-[#FFD700] px-5 py-3 text-sm font-semibold text-[#0d1a2e]">
@@ -108,23 +105,23 @@ export default function UahubHomePage() {
             },
             {
               icon: Users,
-              title: locale === "ua" ? "Розділення власників" : locale === "es" ? "Separación de propietarios" : "Owner separation",
+              title: locale === "ua" ? "Для людей, бізнесу та організацій" : locale === "es" ? "Para personas, negocios y organizaciones" : "For people, businesses, and organizations",
               description:
                 locale === "ua"
-                  ? "Приватні користувачі, бізнеси та організації мають різні ролі, подачу та відображення."
+                  ? "Кожен формат має свій зручний спосіб подачі оголошень, профілі та видимість на платформі."
                   : locale === "es"
-                    ? "Usuarios privados, negocios y organizaciones tienen reglas de propiedad distintas."
-                    : "Private users, businesses, and organizations have separate ownership logic.",
+                    ? "Cada formato tiene su propia forma de publicar anuncios, gestionar perfiles y mostrarse en la plataforma."
+                    : "Each format has its own way to publish listings, manage profiles, and appear on the platform.",
             },
             {
               icon: Sparkles,
-              title: locale === "ua" ? "Монетизація без хаосу" : locale === "es" ? "Monetización clara" : "Structured monetization",
+              title: locale === "ua" ? "Прозорі платні можливості" : locale === "es" ? "Opciones de pago claras" : "Clear paid options",
               description:
                 locale === "ua"
-                  ? "Безкоштовні соціальні шари відділені від платних listing tiers, бізнес-підписок та реклами."
+                  ? "Безкоштовні можливості для спільноти поєднуються з окремими платними інструментами для бізнесу, реклами та просування."
                   : locale === "es"
-                    ? "La capa social gratuita está separada de los tiers de pago y publicidad."
-                    : "Free social layers are separated from paid listing tiers, subscriptions, and advertising.",
+                    ? "Las opciones gratuitas para la comunidad conviven con herramientas de pago para negocios, promoción y publicidad."
+                    : "Free community features sit alongside paid tools for businesses, promotion, and advertising.",
             },
           ].map((item) => (
             <div
@@ -209,23 +206,23 @@ export default function UahubHomePage() {
             },
             {
               icon: Users,
-              title: locale === "ua" ? "Закрита community-layer" : locale === "es" ? "Capa social cerrada" : "Closed community layer",
+              title: locale === "ua" ? "Спільнота для зареєстрованих" : locale === "es" ? "Comunidad para usuarios registrados" : "Community for registered users",
               body:
                 locale === "ua"
-                  ? "Соціальні взаємодії доступні лише зареєстрованим користувачам і готові до модерації."
+                  ? "Групи, знайомства та взаємодія всередині спільноти відкриваються після входу в акаунт."
                   : locale === "es"
-                    ? "La capa social está limitada a usuarios registrados y preparada para moderación."
-                    : "Community interactions are members-only and moderation-ready.",
+                    ? "Los grupos, contactos e interacciones de la comunidad se abren después de iniciar sesión."
+                    : "Groups, connections, and community interactions open after sign-in.",
             },
             {
               icon: Shield,
-              title: locale === "ua" ? "Єдине джерело таксономії" : locale === "es" ? "Taxonomía única" : "Single taxonomy source",
+              title: locale === "ua" ? "Зручна навігація" : locale === "es" ? "Navegación clara" : "Clear navigation",
               body:
                 locale === "ua"
-                  ? "Модулі, категорії та підкатегорії централізовані й використовуються в навігації, пошуку, фільтрах та формах."
+                  ? "Модулі та категорії організовані так, щоб було легко шукати оголошення, фільтрувати їх і швидко переходити між розділами."
                   : locale === "es"
-                    ? "Módulos, categorías y subcategorías viven en una sola estructura."
-                    : "Modules, categories, and subcategories live in a single centralized structure.",
+                    ? "Los módulos y categorías están organizados para facilitar la búsqueda, el filtrado y la navegación entre secciones."
+                    : "Modules and categories are organized to make search, filtering, and navigation straightforward.",
             },
           ].map((item) => (
             <div key={item.title} className={`rounded-3xl p-5 ${isDark ? "bg-[#111d32]" : "bg-slate-50"}`}>

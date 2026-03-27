@@ -160,10 +160,10 @@ export default function UahubModulePage() {
             </h2>
             <p className={`mx-auto max-w-2xl text-sm leading-7 ${isDark ? "text-slate-400" : "text-slate-600"}`}>
               {locale === "ua"
-                ? "Цей шар не є публічним. Він доступний лише зареєстрованим користувачам, готовий до модерації та не показує чутливі дані відкрито."
+                ? "Цей розділ доступний лише зареєстрованим користувачам. Увійдіть, щоб бачити спільноту, спілкуватися та брати участь у локальних ініціативах."
                 : locale === "es"
-                  ? "Esta capa no es pública. Solo está disponible para usuarios registrados y preparada para moderación."
-                  : "This layer is not public. It is available only to registered users, moderation-ready, and does not expose sensitive data openly."}
+                  ? "Esta sección solo está disponible para usuarios registrados. Inicia sesión para ver la comunidad, comunicarte y participar en iniciativas locales."
+                  : "This section is available only to registered users. Sign in to view the community, connect with others, and take part in local initiatives."}
             </p>
             <button
               type="button"
