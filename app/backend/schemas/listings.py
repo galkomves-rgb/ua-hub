@@ -61,6 +61,7 @@ class ListingActionResponse(BaseModel):
 class ListingModerationRequest(BaseModel):
     decision: str = Field(..., pattern="^(approve|reject)$")
     moderation_reason: str | None = Field(None, max_length=2000)
+    module: str | None = Field(None, min_length=1, max_length=50)
     category: str | None = Field(None, min_length=1, max_length=100)
     badges: list[str] | None = None
 

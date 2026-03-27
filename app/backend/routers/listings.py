@@ -350,6 +350,7 @@ async def moderate_listing(
             listing_id=listing_id,
             decision=payload.decision,
             moderation_reason=payload.moderation_reason,
+            module=payload.module,
             category=payload.category,
             badges=payload.badges,
         )

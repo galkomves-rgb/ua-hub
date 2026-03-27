@@ -258,6 +258,7 @@ export interface ListingManagementItem {
 export interface ListingModerationPayload {
   decision: "approve" | "reject";
   moderation_reason?: string | null;
+  module?: string | null;
   category?: string | null;
   badges?: string[] | null;
 }

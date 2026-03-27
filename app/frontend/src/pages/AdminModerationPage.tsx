@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck, CheckCircle2, XCircle } from "lucide-react";
+import { ShieldCheck, CheckCircle2, XCircle, ArrowRight, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import ProtectedAdminRoute from "@/components/ProtectedAdminRoute";
 import UahubLayout from "@/components/UahubLayout";
@@ -54,6 +54,15 @@ function getLabelTitle(label: LabelId, locale: "ua" | "es" | "en") {
   return titles[label][locale];
 }
 
+function getModuleTitle(moduleId: string, t: (key: string) => string) {
+  return MODULES[moduleId] ? t(`mod.${moduleId}`) : moduleId;
+}
+
+function getCategoryTitle(moduleId: string, categoryId: string) {
+  const category = MODULES[moduleId]?.categories.find((entry) => entry.id === categoryId);
+  return category?.labelKey ?? categoryId;
+}
+
 function ModerationCard({
   item,
   pending,
@@ -62,22 +71,28 @@ function ModerationCard({
 }: {
   item: ListingManagementItem;
   pending: boolean;
-  onApprove: (listingId: number, category: string, badges: string[]) => void;
-  onReject: (listingId: number, reason: string, category: string, badges: string[]) => void;
+  onApprove: (listingId: number, module: string, category: string, badges: string[]) => void;
+  onReject: (listingId: number, reason: string, module: string, category: string, badges: string[]) => void;
 }) {
   const { theme } = useTheme();
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const isDark = theme === "dark";
   const [reason, setReason] = useState(item.moderation_reason ?? "");
+  const [moduleId, setModuleId] = useState(item.module);
   const [category, setCategory] = useState(item.category);
   const [selectedBadges, setSelectedBadges] = useState<string[]>(() => parseBadges(item.badges).filter((badge) => MODERATOR_BADGES.includes(badge as never)));
+  const originalModeratorBadges = useMemo(
+    () => parseBadges(item.badges).filter((badge) => MODERATOR_BADGES.includes(badge as never)),
+    [item.badges],
+  );
   const moduleLabelSystem = getModuleLabelSystem();
-  const availableBadges = moduleLabelSystem[item.module]?.filter((badge) => MODERATOR_BADGES.includes(badge as never)) ?? [];
-  const availableCategories = MODULES[item.module]?.categories ?? [];
+  const availableBadges = moduleLabelSystem[moduleId]?.filter((badge) => MODERATOR_BADGES.includes(badge as never)) ?? [];
+  const availableCategories = MODULES[moduleId]?.categories ?? [];
+  const originalCategories = MODULES[item.module]?.categories ?? [];
   const images = useMemo(() => parseImages(item.images_json), [item.images_json]);
   const derivedLabels = useMemo(
     () => deriveListingLabels({
-      module: item.module,
+      module: moduleId,
       badges: parseBadges(item.badges),
       owner_type: item.owner_type,
       created_at: item.created_at,
@@ -85,9 +100,29 @@ function ModerationCard({
       is_featured: item.is_featured,
       is_promoted: item.is_promoted,
     }),
-    [item.badges, item.created_at, item.is_featured, item.is_promoted, item.is_verified, item.module, item.owner_type],
+    [item.badges, item.created_at, item.is_featured, item.is_promoted, item.is_verified, item.owner_type, moduleId],
   );
   const systemLabels = derivedLabels.filter((badge) => !MODERATOR_BADGES.includes(badge as never));
+  const finalLabels = useMemo(
+    () => deriveListingLabels({
+      module: moduleId,
+      badges: selectedBadges,
+      owner_type: item.owner_type,
+      created_at: item.created_at,
+      is_verified: item.is_verified,
+      is_featured: item.is_featured,
+      is_promoted: item.is_promoted,
+    }),
+    [item.created_at, item.is_featured, item.is_promoted, item.is_verified, item.owner_type, moduleId, selectedBadges],
+  );
+  const finalManagedLabels = finalLabels.filter((badge) => MODERATOR_BADGES.includes(badge as never));
+  const finalSystemLabels = finalLabels.filter((badge) => !MODERATOR_BADGES.includes(badge as never));
+  const originalModuleTitle = getModuleTitle(item.module, t);
+  const reviewedModuleTitle = getModuleTitle(moduleId, t);
+  const originalCategoryTitle = getCategoryTitle(item.module, item.category);
+  const reviewedCategoryTitle = getCategoryTitle(moduleId, category);
+  const originalCategoryIsInvalid = originalCategories.length > 0 && !originalCategories.some((entry) => entry.id === item.category);
+  const reviewChanged = item.module !== moduleId || item.category !== category || JSON.stringify(originalModeratorBadges) !== JSON.stringify(selectedBadges);
 
   return (
     <article className={`rounded-2xl border p-5 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-white"}`}>
@@ -100,11 +135,56 @@ function ModerationCard({
             </span>
           </div>
           <div className={`mt-3 grid gap-2 text-sm sm:grid-cols-2 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-            <p><span className={`font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>{locale === "ua" ? "Модуль" : locale === "es" ? "Módulo" : "Module"}:</span> {item.module}</p>
-            <p><span className={`font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>{locale === "ua" ? "Категорія" : locale === "es" ? "Categoría" : "Category"}:</span> {item.category}</p>
+            <p><span className={`font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>{locale === "ua" ? "Поточний модуль" : locale === "es" ? "Módulo actual" : "Current module"}:</span> {originalModuleTitle}</p>
+            <p><span className={`font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>{locale === "ua" ? "Поточна категорія" : locale === "es" ? "Categoría actual" : "Current category"}:</span> {originalCategoryTitle}</p>
             <p><span className={`font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>{locale === "ua" ? "Перегляди" : locale === "es" ? "Vistas" : "Views"}:</span> {item.views_count}</p>
             <p><span className={`font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>{locale === "ua" ? "Збереження" : locale === "es" ? "Guardados" : "Saves"}:</span> {item.saved_count}</p>
           </div>
+
+          <div className={`mt-4 rounded-2xl border p-4 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-slate-50"}`}>
+            <p className={`mb-3 text-xs font-semibold uppercase tracking-[0.18em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+              {locale === "ua" ? "Рішення модерації" : locale === "es" ? "Resultado de moderación" : "Moderation outcome"}
+            </p>
+            <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center">
+              <div>
+                <p className={`text-xs ${isDark ? "text-slate-500" : "text-slate-500"}`}>{locale === "ua" ? "Було" : locale === "es" ? "Antes" : "Before"}</p>
+                <p className={`mt-1 text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{originalModuleTitle}</p>
+                <p className={`text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>{originalCategoryTitle}</p>
+              </div>
+              <div className={`hidden md:flex md:justify-center ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                <ArrowRight className="h-4 w-4" />
+              </div>
+              <div>
+                <p className={`text-xs ${isDark ? "text-slate-500" : "text-slate-500"}`}>{locale === "ua" ? "Стане після підтвердження" : locale === "es" ? "Quedará después de confirmar" : "After approval"}</p>
+                <p className={`mt-1 text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{reviewedModuleTitle}</p>
+                <p className={`text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>{reviewedCategoryTitle || (locale === "ua" ? "Категорію не обрано" : locale === "es" ? "Categoría no seleccionada" : "Category not selected")}</p>
+              </div>
+            </div>
+            {reviewChanged ? (
+              <p className={`mt-3 text-xs ${isDark ? "text-amber-300" : "text-amber-700"}`}>
+                {locale === "ua"
+                  ? "Зміни ще не збережені. Вони застосуються після натискання “Схвалити” або “Відхилити”."
+                  : locale === "es"
+                    ? "Los cambios aún no se han guardado. Se aplicarán después de pulsar “Aprobar” o “Rechazar”."
+                    : "Changes are not saved yet. They will be applied after you click Approve or Reject."}
+              </p>
+            ) : null}
+          </div>
+
+          {originalCategoryIsInvalid ? (
+            <div className={`mt-4 flex items-start gap-3 rounded-2xl border p-4 ${isDark ? "border-amber-900/40 bg-amber-950/20" : "border-amber-200 bg-amber-50"}`}>
+              <AlertTriangle className={`mt-0.5 h-5 w-5 shrink-0 ${isDark ? "text-amber-300" : "text-amber-700"}`} />
+              <div>
+                <p className={`text-sm ${isDark ? "text-amber-200" : "text-amber-800"}`}>
+                  {locale === "ua"
+                    ? "Поточна категорія не належить до поточного модуля. Це оголошення потребує ручного виправлення під час модерації."
+                    : locale === "es"
+                      ? "La categoría actual no pertenece al módulo actual. Este anuncio necesita corrección manual durante la moderación."
+                      : "The current category does not belong to the current module. This listing needs manual correction during moderation."}
+                </p>
+              </div>
+            </div>
+          ) : null}
 
           <div className="mt-4">
             <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
@@ -158,6 +238,29 @@ function ModerationCard({
 
           <div className="mt-4">
             <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
+              {locale === "ua" ? "Модуль після перевірки" : locale === "es" ? "Módulo final" : "Reviewed module"}
+            </label>
+            <select
+              value={moduleId}
+              onChange={(event) => {
+                const nextModuleId = event.target.value;
+                const nextCategories = MODULES[nextModuleId]?.categories ?? [];
+                setModuleId(nextModuleId);
+                setCategory(nextCategories.some((entry) => entry.id === category) ? category : (nextCategories[0]?.id ?? ""));
+                setSelectedBadges((current) => current.filter((badge) => (moduleLabelSystem[nextModuleId] ?? []).includes(badge as never) && MODERATOR_BADGES.includes(badge as never)));
+              }}
+              className={`w-full rounded-2xl border px-4 py-3 text-sm ${isDark ? "border-[#22416b] bg-[#11203a] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
+            >
+              {Object.keys(MODULES).filter((entry) => entry !== "business").map((entry) => (
+                <option key={entry} value={entry}>
+                  {t(`mod.${entry}`)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="mt-4">
+            <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
               {locale === "ua" ? "Категорія після перевірки" : locale === "es" ? "Categoría final" : "Reviewed category"}
             </label>
             <select
@@ -171,6 +274,15 @@ function ModerationCard({
                 </option>
               ))}
             </select>
+            {availableCategories.length === 0 ? (
+              <p className={`mt-2 text-xs ${isDark ? "text-red-300" : "text-red-600"}`}>
+                {locale === "ua"
+                  ? "Для цього модуля не знайдено жодної категорії. Підтвердження краще не виконувати, поки конфіг не буде виправлено."
+                  : locale === "es"
+                    ? "No se encontraron categorías para este módulo. Es mejor no confirmar hasta corregir la configuración."
+                    : "No categories were found for this module. Avoid confirming until the configuration is fixed."}
+              </p>
+            ) : null}
           </div>
 
           {availableBadges.length > 0 ? (
@@ -201,13 +313,55 @@ function ModerationCard({
               </div>
               <p className={`mt-2 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                 {locale === "ua"
-                  ? "Тут показуються лише лейбли, якими модератор має право керувати для цього модуля."
+                  ? "Тут показуються лише лейбли, якими модератор має право керувати для обраного модуля."
                   : locale === "es"
-                    ? "Aquí solo se muestran las etiquetas que el moderador puede controlar para este módulo."
-                    : "Only the labels that moderators are allowed to control for this module are shown here."}
+                    ? "Aquí solo se muestran las etiquetas que el moderador puede controlar para el módulo seleccionado."
+                    : "Only the labels that moderators are allowed to control for the selected module are shown here."}
               </p>
             </div>
           ) : null}
+
+          <div className="mt-4">
+            <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
+              {locale === "ua" ? "Фінальні лейбли після підтвердження" : locale === "es" ? "Etiquetas finales después de confirmar" : "Final labels after confirmation"}
+            </label>
+            <div className={`rounded-2xl border p-4 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-slate-50"}`}>
+              {finalLabels.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {finalLabels.map((badge) => (
+                    <span
+                      key={`final-${badge}`}
+                      className={`rounded-xl border px-3 py-2 text-xs font-semibold ${MODERATOR_BADGES.includes(badge as never)
+                        ? (isDark ? "border-[#FFD700]/40 bg-[#FFD700]/10 text-[#FFD700]" : "border-[#0057B8]/30 bg-blue-50 text-[#0057B8]")
+                        : (isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-200" : "border-slate-300 bg-white text-slate-700")}`}
+                    >
+                      {getLabelTitle(badge, locale)}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                  {locale === "ua" ? "Після підтвердження у картки не буде жодного лейбла." : locale === "es" ? "Después de confirmar, la tarjeta no tendrá etiquetas." : "After confirmation, the listing card will have no labels."}
+                </p>
+              )}
+              <div className="mt-3 grid gap-2 md:grid-cols-2">
+                <p className={`text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                  {locale === "ua"
+                    ? `Системні: ${finalSystemLabels.length ? finalSystemLabels.map((badge) => getLabelTitle(badge, locale)).join(", ") : "немає"}`
+                    : locale === "es"
+                      ? `Sistema: ${finalSystemLabels.length ? finalSystemLabels.map((badge) => getLabelTitle(badge, locale)).join(", ") : "ninguna"}`
+                      : `System: ${finalSystemLabels.length ? finalSystemLabels.map((badge) => getLabelTitle(badge, locale)).join(", ") : "none"}`}
+                </p>
+                <p className={`text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                  {locale === "ua"
+                    ? `Керовані модератором: ${finalManagedLabels.length ? finalManagedLabels.map((badge) => getLabelTitle(badge, locale)).join(", ") : "немає"}`
+                    : locale === "es"
+                      ? `Gestionadas por moderación: ${finalManagedLabels.length ? finalManagedLabels.map((badge) => getLabelTitle(badge, locale)).join(", ") : "ninguna"}`
+                      : `Moderator-managed: ${finalManagedLabels.length ? finalManagedLabels.map((badge) => getLabelTitle(badge, locale)).join(", ") : "none"}`}
+                </p>
+              </div>
+            </div>
+          </div>
 
           <div className="mt-4">
             <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
@@ -225,14 +379,14 @@ function ModerationCard({
 
         <div className="flex flex-wrap gap-2 lg:w-[250px] lg:flex-col">
           <a
-            href={`/${item.module}/${item.id}`}
+            href={`/${moduleId}/${item.id}`}
             className={`inline-flex items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold ${isDark ? "bg-[#1a2d4c] text-slate-100 hover:bg-[#21365a]" : "bg-slate-100 text-slate-700 hover:bg-slate-200"}`}
           >
             {locale === "ua" ? "Відкрити" : locale === "es" ? "Abrir" : "Open listing"}
           </a>
           <button
             type="button"
-            onClick={() => onApprove(item.id, category, selectedBadges)}
+            onClick={() => onApprove(item.id, moduleId, category, selectedBadges)}
             disabled={pending}
             className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold ${isDark ? "bg-emerald-950/30 text-emerald-300 hover:bg-emerald-950/50" : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"} ${pending ? "cursor-not-allowed opacity-60" : ""}`}
           >
@@ -241,7 +395,7 @@ function ModerationCard({
           </button>
           <button
             type="button"
-            onClick={() => onReject(item.id, reason, category, selectedBadges)}
+            onClick={() => onReject(item.id, reason, moduleId, category, selectedBadges)}
             disabled={pending}
             className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold ${isDark ? "bg-red-950/30 text-red-300 hover:bg-red-950/50" : "bg-red-50 text-red-700 hover:bg-red-100"} ${pending ? "cursor-not-allowed opacity-60" : ""}`}
           >
@@ -256,7 +410,7 @@ function ModerationCard({
 
 export default function AdminModerationPage() {
   const { theme } = useTheme();
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const isDark = theme === "dark";
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<"moderation_pending" | "rejected" | "all">("moderation_pending");
@@ -268,10 +422,11 @@ export default function AdminModerationPage() {
   });
 
   const moderateMutation = useMutation({
-    mutationFn: ({ listingId, decision, reason, category, badges }: { listingId: number; decision: "approve" | "reject"; reason?: string; category?: string; badges?: string[] }) =>
+    mutationFn: ({ listingId, decision, reason, module, category, badges }: { listingId: number; decision: "approve" | "reject"; reason?: string; module?: string; category?: string; badges?: string[] }) =>
       moderateListing(listingId, {
         decision,
         moderation_reason: reason ?? null,
+        module: module ?? null,
         category: category ?? null,
         badges: badges ?? null,
       }),
@@ -333,7 +488,7 @@ export default function AdminModerationPage() {
                   <option key={item} value={item}>
                     {item === "all"
                       ? locale === "ua" ? "Усі модулі" : locale === "es" ? "Todos los módulos" : "All modules"
-                      : item}
+                      : t(`mod.${item}`)}
                   </option>
                 ))}
               </select>
@@ -363,8 +518,8 @@ export default function AdminModerationPage() {
                   key={item.id}
                   item={item}
                   pending={moderateMutation.isPending && moderateMutation.variables?.listingId === item.id}
-                  onApprove={(listingId, category, badges) => moderateMutation.mutate({ listingId, decision: "approve", category, badges })}
-                  onReject={(listingId, reason, category, badges) => moderateMutation.mutate({ listingId, decision: "reject", reason, category, badges })}
+                  onApprove={(listingId, moduleId, category, badges) => moderateMutation.mutate({ listingId, decision: "approve", module: moduleId, category, badges })}
+                  onReject={(listingId, reason, moduleId, category, badges) => moderateMutation.mutate({ listingId, decision: "reject", reason, module: moduleId, category, badges })}
                 />
               ))}
             </div>

@@ -91,7 +91,12 @@ function ListingDetail() {
     enabled: Number.isInteger(numericListingId),
   });
 
-  const listing = publicListingQuery.data ?? SAMPLE_LISTINGS.find((l) => l.id === listingId);
+  const fallbackListing = useMemo(
+    () => SAMPLE_LISTINGS.find((item) => item.id === listingId || item.id === `j${listingId}` || item.id === `h${listingId}` || item.id === `s${listingId}` || item.id === `m${listingId}` || item.id === `e${listingId}` || item.id === `c${listingId}` || item.id === `o${listingId}`),
+    [listingId],
+  );
+
+  const listing = publicListingQuery.data ?? fallbackListing;
   if (!listing) {
     return (
       <Layout>
@@ -131,6 +136,8 @@ function ListingDetail() {
   const description = listing.description || listing.shortDesc || "";
 
   const mod = MODULES[listing.module];
+  const listingImages = Array.isArray(listing.images) ? listing.images : [];
+  const primaryImage = listing.image || listingImages[0] || mod?.banner || IMAGES.hero;
 
   return (
     <Layout>
@@ -149,6 +156,12 @@ function ListingDetail() {
           <div className="flex-1 min-w-0">
             {/* Title card */}
             <div className={`rounded-xl border p-5 mb-4 ${isDark ? "bg-[#111d32] border-[#1a3050]" : "bg-white border-gray-200/80"}`}>
+              {primaryImage ? (
+                <div className="mb-4 overflow-hidden rounded-xl border border-transparent">
+                  <img src={primaryImage} alt={listing.title} className="h-64 w-full object-cover" />
+                </div>
+              ) : null}
+
               {/* Badges */}
               {listingBadges.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mb-3">

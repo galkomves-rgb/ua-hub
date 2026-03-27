@@ -509,6 +509,7 @@ class ListingsService:
         listing_id: int,
         decision: str,
         moderation_reason: str | None = None,
+        module: str | None = None,
         category: str | None = None,
         badges: list[str] | None = None,
     ) -> Listings | None:
@@ -518,6 +519,9 @@ class ListingsService:
 
         if listing.status != LISTING_STATUS_MODERATION_PENDING:
             raise ValueError("Only listings in moderation can be moderated")
+
+        if module and module.strip():
+            listing.module = module.strip()
 
         if category and category.strip():
             listing.category = category.strip()
