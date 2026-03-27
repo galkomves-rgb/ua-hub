@@ -45,7 +45,7 @@ export default function AdminUsersPage() {
       toast.success(locale === "ua" ? "Роль користувача оновлено" : locale === "es" ? "Rol de usuario actualizado" : "User role updated");
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to update user role");
+      toast.error(error instanceof Error ? error.message : (locale === "ua" ? "Не вдалося оновити роль користувача" : locale === "es" ? "No se pudo actualizar el rol del usuario" : "Unable to update the user role"));
     },
   });
 

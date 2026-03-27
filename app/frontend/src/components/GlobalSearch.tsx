@@ -247,7 +247,7 @@ export default function GlobalSearch() {
           }}
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
-          placeholder="Пошук..."
+          placeholder={t("nav.search")}
           className={`w-full sm:w-52 h-8 pl-8 pr-8 text-sm rounded-lg transition-all focus:outline-none ${
             isDark
               ? "bg-[#1a2a40] border border-[#253d5c] text-gray-200 placeholder:text-gray-500 focus:border-[#FFD700]/50 focus:bg-[#1e3048]"
@@ -328,7 +328,7 @@ export default function GlobalSearch() {
                   className={`opacity-0 group-hover/item:opacity-100 p-1 rounded transition-all ${
                     isDark ? "hover:bg-[#253d5c]" : "hover:bg-gray-100"
                   }`}
-                  title="Видалити"
+                  title={t("common.delete")}
                 >
                   <Trash2
                     className={`w-3 h-3 ${

@@ -15,10 +15,10 @@ export default function AdminOperationsPage() {
   const runMutation = useMutation({
     mutationFn: () => runAdminExpirationJobs(asOf || undefined),
     onSuccess: () => {
-      toast.success(locale === "ua" ? "Expiration job виконано" : locale === "es" ? "Job de expiración ejecutado" : "Expiration job completed");
+      toast.success(locale === "ua" ? "Перевірку завершень виконано" : locale === "es" ? "La revisión de vencimientos se completó" : "Expiry check completed");
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to run expiration job");
+      toast.error(error instanceof Error ? error.message : (locale === "ua" ? "Не вдалося запустити перевірку" : locale === "es" ? "No se pudo iniciar la revisión" : "Unable to start the check"));
     },
   });
 
@@ -31,20 +31,20 @@ export default function AdminOperationsPage() {
           <TimerReset className="h-6 w-6" />
         </div>
         <h2 className={`text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-          {locale === "ua" ? "Operations" : locale === "es" ? "Operaciones" : "Operations"}
+          {locale === "ua" ? "Операції" : locale === "es" ? "Operaciones" : "Operations"}
         </h2>
         <p className={`mt-2 text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>
           {locale === "ua"
-            ? "Ручний запуск monetization expiration jobs для перевірки продовжень, завершення промо та деактивації підписок."
+            ? "Тут можна вручну перевірити завершення терміну дії оголошень, просувань і підписок."
             : locale === "es"
-              ? "Ejecución manual de monetization expiration jobs para expirar promociones, listings y suscripciones."
-              : "Manual trigger for monetization expiration jobs affecting listings, promotions, and subscriptions."}
+              ? "Aquí puedes lanzar manualmente la revisión de vencimientos de anuncios, promociones y suscripciones."
+              : "Run a manual expiry check for listings, promotions, and subscriptions."}
         </p>
       </section>
 
       <section className={`rounded-3xl border p-5 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
         <label className={`block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
-          {locale === "ua" ? "Simulate as_of (UTC ISO, optional)" : locale === "es" ? "Simular as_of (UTC ISO, opcional)" : "Simulate as_of (UTC ISO, optional)"}
+          {locale === "ua" ? "Дата й час для перевірки (необов'язково)" : locale === "es" ? "Fecha y hora para la revisión (opcional)" : "Check date and time (optional)"}
         </label>
         <input
           value={asOf}
@@ -60,7 +60,7 @@ export default function AdminOperationsPage() {
           className={`mt-4 inline-flex items-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold ${isDark ? "bg-[#FFD700] text-slate-900" : "bg-blue-50 text-[#0057B8]"} ${runMutation.isPending ? "cursor-not-allowed opacity-60" : ""}`}
         >
           <PlayCircle className="h-4 w-4" />
-          {locale === "ua" ? "Запустити expiration job" : locale === "es" ? "Ejecutar expiration job" : "Run expiration job"}
+          {locale === "ua" ? "Запустити перевірку" : locale === "es" ? "Iniciar revisión" : "Run check"}
         </button>
 
         {runMutation.isError ? (
@@ -72,16 +72,16 @@ export default function AdminOperationsPage() {
         {result ? (
           <div className={`mt-6 rounded-3xl border p-5 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <MetricCard isDark={isDark} label={locale === "ua" ? "Expired listings" : locale === "es" ? "Listings expirados" : "Expired listings"} value={result.expired_listings} />
-              <MetricCard isDark={isDark} label={locale === "ua" ? "Expired promotions" : locale === "es" ? "Promociones expiradas" : "Expired promotions"} value={result.expired_promotions} />
-              <MetricCard isDark={isDark} label={locale === "ua" ? "Expired subscriptions" : locale === "es" ? "Suscripciones expiradas" : "Expired subscriptions"} value={result.expired_subscriptions} />
-              <MetricCard isDark={isDark} label={locale === "ua" ? "Affected businesses" : locale === "es" ? "Negocios afectados" : "Affected businesses"} value={result.affected_business_profile_ids.length} />
+              <MetricCard isDark={isDark} label={locale === "ua" ? "Оголошення завершені" : locale === "es" ? "Anuncios finalizados" : "Listings expired"} value={result.expired_listings} />
+              <MetricCard isDark={isDark} label={locale === "ua" ? "Просування завершені" : locale === "es" ? "Promociones finalizadas" : "Promotions expired"} value={result.expired_promotions} />
+              <MetricCard isDark={isDark} label={locale === "ua" ? "Підписки завершені" : locale === "es" ? "Suscripciones finalizadas" : "Subscriptions expired"} value={result.expired_subscriptions} />
+              <MetricCard isDark={isDark} label={locale === "ua" ? "Бізнесів зачеплено" : locale === "es" ? "Negocios afectados" : "Businesses affected"} value={result.affected_business_profile_ids.length} />
             </div>
             <div className={`mt-4 text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>
-              <p>as_of: {result.as_of}</p>
-              <p>{locale === "ua" ? "Listings IDs" : locale === "es" ? "IDs de listings" : "Listing IDs"}: {result.expired_listing_ids.join(", ") || "-"}</p>
-              <p>{locale === "ua" ? "Promotion IDs" : locale === "es" ? "IDs de promociones" : "Promotion IDs"}: {result.expired_promotion_ids.join(", ") || "-"}</p>
-              <p>{locale === "ua" ? "Subscription IDs" : locale === "es" ? "IDs de suscripciones" : "Subscription IDs"}: {result.expired_subscription_ids.join(", ") || "-"}</p>
+              <p>{locale === "ua" ? "Перевірено на дату" : locale === "es" ? "Revisión realizada para" : "Checked for"}: {result.as_of}</p>
+              <p>{locale === "ua" ? "ID оголошень" : locale === "es" ? "ID de anuncios" : "Listing IDs"}: {result.expired_listing_ids.join(", ") || "-"}</p>
+              <p>{locale === "ua" ? "ID просувань" : locale === "es" ? "ID de promociones" : "Promotion IDs"}: {result.expired_promotion_ids.join(", ") || "-"}</p>
+              <p>{locale === "ua" ? "ID підписок" : locale === "es" ? "ID de suscripciones" : "Subscription IDs"}: {result.expired_subscription_ids.join(", ") || "-"}</p>
             </div>
           </div>
         ) : null}

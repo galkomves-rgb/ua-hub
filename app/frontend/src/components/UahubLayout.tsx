@@ -474,7 +474,7 @@ export default function UahubLayout({ children, hideModuleNav }: LayoutProps) {
               className={`relative hidden h-11 w-11 items-center justify-center rounded-2xl border lg:flex ${
                 isDark ? "border-[#22416b] bg-[#11203a] text-slate-200" : "border-slate-200 bg-white text-slate-700"
               }`}
-              aria-label="Messages"
+              aria-label={t("nav.messages")}
             >
               <MessageSquare className="h-4 w-4" />
               {unreadCount > 0 ? (

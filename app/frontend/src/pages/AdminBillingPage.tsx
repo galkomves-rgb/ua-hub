@@ -53,7 +53,7 @@ export default function AdminBillingPage() {
       toast.success(locale === "ua" ? "Платіж оновлено" : locale === "es" ? "Pago actualizado" : "Payment updated");
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to update payment");
+      toast.error(error instanceof Error ? error.message : (locale === "ua" ? "Не вдалося оновити платіж" : locale === "es" ? "No se pudo actualizar el pago" : "Unable to update the payment"));
     },
   });
 
@@ -67,7 +67,7 @@ export default function AdminBillingPage() {
           <CreditCard className="h-6 w-6" />
         </div>
         <h2 className={`text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-          {locale === "ua" ? "Billing desk" : locale === "es" ? "Mesa de billing" : "Billing desk"}
+          {locale === "ua" ? "Центр платежів" : locale === "es" ? "Centro de pagos" : "Payments center"}
         </h2>
         <p className={`mt-2 text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>
           {locale === "ua"

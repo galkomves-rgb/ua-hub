@@ -35,13 +35,13 @@ const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   {
     to: "/admin/reports",
     label: { ua: "Скарги", es: "Reportes", en: "Reports" },
-    description: { ua: "Кейси та review", es: "Casos y revisión", en: "Cases and review" },
+    description: { ua: "Кейси та перевірка", es: "Casos y revisión", en: "Cases and review" },
     icon: MessageSquareWarning,
   },
   {
     to: "/admin/billing",
-    label: { ua: "Billing", es: "Billing", en: "Billing" },
-    description: { ua: "Платежі та override", es: "Pagos y overrides", en: "Payments and overrides" },
+    label: { ua: "Платежі", es: "Pagos", en: "Payments" },
+    description: { ua: "Платежі та ручні зміни", es: "Pagos y cambios manuales", en: "Payments and manual changes" },
     icon: CreditCard,
   },
   {
@@ -53,7 +53,7 @@ const ADMIN_NAV_ITEMS: AdminNavItem[] = [
   {
     to: "/admin/operations",
     label: { ua: "Операції", es: "Operaciones", en: "Operations" },
-    description: { ua: "Expiration jobs", es: "Expiration jobs", en: "Expiration jobs" },
+    description: { ua: "Перевірка завершень", es: "Revisión de vencimientos", en: "Expiry checks" },
     icon: Settings2,
   },
 ];

@@ -55,7 +55,7 @@ export default function AdminReportsPage() {
       toast.success(locale === "ua" ? "Статус скарги оновлено" : locale === "es" ? "Estado del reporte actualizado" : "Report status updated");
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Failed to update report");
+      toast.error(error instanceof Error ? error.message : (locale === "ua" ? "Не вдалося оновити скаргу" : locale === "es" ? "No se pudo actualizar el reporte" : "Unable to update the report"));
     },
   });
 

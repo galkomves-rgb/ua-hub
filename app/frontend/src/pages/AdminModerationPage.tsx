@@ -614,7 +614,7 @@ export default function AdminModerationPage() {
         <div className="mt-6 space-y-4">
           {queueQuery.isLoading ? (
             <div className={`rounded-2xl border p-4 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
-              {locale === "ua" ? "Завантаження moderation queue..." : locale === "es" ? "Cargando cola de moderación..." : "Loading moderation queue..."}
+              {locale === "ua" ? "Завантажуємо чергу перевірки..." : locale === "es" ? "Cargando la cola de revisión..." : "Loading the review queue..."}
             </div>
           ) : null}
 

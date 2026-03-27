@@ -136,7 +136,7 @@ function ListingDetail() {
   const ownerTypeLabel = ownerType === "business_profile"
     ? t("card.business")
     : ownerType === "organization"
-      ? "Організація"
+      ? t("detail.organization")
       : t("card.private");
   const ownerLabel = listing.authorName || ownerTypeLabel;
   const listingBadges = deriveListingLabels({
@@ -159,7 +159,7 @@ function ListingDetail() {
 
   const handleSave = async () => {
     if (!Number.isInteger(numericListingId)) {
-      toast.error("Зберегти можна лише опубліковане оголошення з бази даних.");
+      toast.error(t("detail.savePublishedOnly"));
       return;
     }
     if (!user) {
@@ -170,12 +170,12 @@ function ListingDetail() {
     try {
       await saveListing(numericListingId);
       setIsSaved(true);
-      toast.success("Оголошення збережено.");
+      toast.success(t("detail.saveSuccess"));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Не вдалося зберегти оголошення.";
+      const message = error instanceof Error ? error.message : t("detail.saveFailed");
       if (message.toLowerCase().includes("already saved")) {
         setIsSaved(true);
-        toast.success("Оголошення вже є в збережених.");
+        toast.success(t("detail.saveAlready"));
       } else if (message.toLowerCase().includes("401") || message.toLowerCase().includes("authorized")) {
         await login();
       } else {
@@ -196,12 +196,12 @@ function ListingDetail() {
         });
       } else if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(detailUrl);
-        toast.success("Посилання скопійовано.");
+        toast.success(t("detail.linkCopied"));
       } else {
-        toast.error("Не вдалося відкрити меню поширення на цьому пристрої.");
+        toast.error(t("detail.shareUnavailable"));
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Не вдалося поділитися оголошенням.";
+      const message = error instanceof Error ? error.message : t("detail.shareFailed");
       if (message !== "Share canceled") {
         toast.error(message);
       }
@@ -210,7 +210,7 @@ function ListingDetail() {
 
   const handleReport = async () => {
     if (!Number.isInteger(numericListingId)) {
-      toast.error("Скарга доступна лише для оголошень з бази даних.");
+      toast.error(t("detail.reportDatabaseOnly"));
       return;
     }
     if (!user) {
@@ -239,7 +239,7 @@ function ListingDetail() {
       setReportReason("spam");
       toast.success(t("msg.reportSubmitted"));
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Не вдалося надіслати скаргу.";
+      const message = error instanceof Error ? error.message : t("detail.reportFailed");
       if (message.toLowerCase().includes("401") || message.toLowerCase().includes("authorized")) {
         await login();
       } else {
@@ -417,7 +417,7 @@ function ListingDetail() {
                     isDark ? "text-gray-400 hover:bg-[#1a2a40]" : "text-gray-500 hover:bg-gray-50"
                   } ${savePending ? "opacity-60 cursor-not-allowed" : ""}`}
                 >
-                  <Heart className={`w-3.5 h-3.5 ${isSaved ? "fill-current" : ""}`} /> {isSaved ? "Збережено" : t("card.save")}
+                  <Heart className={`w-3.5 h-3.5 ${isSaved ? "fill-current" : ""}`} /> {isSaved ? t("detail.saveSuccess") : t("card.save")}
                 </button>
                 <button
                   type="button"
@@ -502,7 +502,7 @@ function ListingDetail() {
               </h3>
               <div className={`flex items-center gap-2 ${isDark ? "text-gray-300" : "text-gray-700"}`}>
                 <MapPin className="w-4 h-4" />
-                <span className="text-sm">{listing.city}, Іспанія</span>
+                <span className="text-sm">{listing.city}, {t("detail.countrySpain")}</span>
               </div>
               {mapsUrl ? (
                 <a
@@ -536,7 +536,7 @@ function BusinessProfilePage() {
     return (
       <Layout>
         <div className="max-w-6xl mx-auto px-4 py-16 text-center">
-          <p className={`text-sm ${isDark ? "text-gray-500" : "text-gray-400"}`}>Бізнес не знайдено</p>
+          <p className={`text-sm ${isDark ? "text-gray-500" : "text-gray-400"}`}>{t("detail.businessNotFound")}</p>
         </div>
       </Layout>
     );
@@ -619,7 +619,7 @@ function BusinessProfilePage() {
               </h3>
               <div className="space-y-2.5">
                 <div className={`flex items-center gap-2 text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
-                  <MapPin className="w-4 h-4 shrink-0" /> {biz.city}, Іспанія
+                  <MapPin className="w-4 h-4 shrink-0" /> {biz.city}, {t("detail.countrySpain")}
                 </div>
                 <div className={`flex items-center gap-2 text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
                   <Phone className="w-4 h-4 shrink-0" /> +34 XXX XXX XXX
@@ -713,7 +713,7 @@ function CreateListingPage() {
       }));
     } catch (error) {
       console.error("Failed to upload listing images:", error);
-      setImageUploadError(error instanceof Error ? error.message : "Не вдалося завантажити фото.");
+      setImageUploadError(error instanceof Error ? error.message : t("create.imageUploadFailed"));
     } finally {
       setIsUploadingImages(false);
     }
@@ -736,23 +736,23 @@ function CreateListingPage() {
 
   const validateBeforePublish = () => {
     if (!formData.title.trim() || formData.title.trim().length < 3) {
-      return "Заголовок має містити щонайменше 3 символи.";
+      return t("create.validationTitleMin");
     }
 
     if (!formData.description.trim() || formData.description.trim().length < 10) {
-      return "Опис має містити щонайменше 10 символів.";
+      return t("create.validationDescriptionMin");
     }
 
     if (!formData.city.trim()) {
-      return "Вкажіть місто.";
+      return t("create.validationCityRequired");
     }
 
     if (!formData.contact.trim()) {
-      return "Додайте контактну інформацію.";
+      return t("create.validationContactRequired");
     }
 
     if (!effectiveOwnerId) {
-      return "Не вдалося визначити власника оголошення. Увійдіть у профіль ще раз.";
+      return t("create.validationOwnerMissing");
     }
 
     return null;
@@ -834,7 +834,7 @@ function CreateListingPage() {
 
   const handlePublish = async () => {
     if (!user || !selectedModule || !selectedCategory) {
-      alert(user ? "Будь ласка, заповніть всі необхідні поля" : "Щоб створити оголошення, потрібно увійти в акаунт.");
+      alert(user ? t("create.validationRequiredFields") : t("create.validationLoginRequired"));
       return;
     }
 
@@ -845,7 +845,7 @@ function CreateListingPage() {
     }
 
     if (userProfileQuery.data?.account_type === "business" && !activeBusinessSlug) {
-      alert("Створіть бізнес-профіль, щоб публікувати як бізнес");
+      alert(t("create.validationBusinessProfileRequired"));
       navigate("/account?tab=business");
       return;
     }
@@ -893,7 +893,7 @@ function CreateListingPage() {
         return;
       }
       console.error("Error publishing listing:", error);
-      alert(error instanceof Error ? error.message : "Помилка при створенні оголошення");
+      alert(error instanceof Error ? error.message : t("create.publishError"));
     }
   };
 
@@ -903,17 +903,17 @@ function CreateListingPage() {
         <div className="max-w-3xl mx-auto px-4 py-12">
           <div className={`rounded-2xl border p-6 text-center ${isDark ? "border-[#1a3050] bg-[#111d32]" : "border-slate-200 bg-white"}`}>
             <h1 className={`text-xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-              Створювати оголошення можуть лише зареєстровані користувачі
+              {t("create.requiredLoginTitle")}
             </h1>
             <p className={`mt-3 text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>
-              Увійдіть або зареєструйтеся, щоб додати своє оголошення, завантажити фото та керувати публікаціями.
+              {t("create.requiredLoginDescription")}
             </p>
             <div className="mt-5 flex justify-center gap-3">
               <Link
                 to="/auth"
                 className={`inline-flex items-center rounded-xl px-5 py-3 text-sm font-semibold ${isDark ? "bg-gradient-to-r from-[#FFD700] to-[#e6c200] text-[#0d1a2e]" : "bg-gradient-to-r from-[#0057B8] to-[#0070E0] text-white"}`}
               >
-                Увійти або зареєструватися
+                {t("create.requiredLoginCta")}
               </Link>
             </div>
           </div>
@@ -931,8 +931,8 @@ function CreateListingPage() {
         {!editingId ? (
           <div className={`mb-6 rounded-2xl border p-4 text-sm ${isDark ? "border-[#22416b] bg-[#111d32] text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
             {userProfileQuery.data?.account_type === "business"
-              ? "Business publishing requires an active plan before the listing can go live."
-              : "You can start with one free listing for 3 days. After that, new listings continue through Basic."}
+              ? t("create.businessPlanNotice")
+              : t("create.privatePlanNotice")}
           </div>
         ) : null}
 
@@ -1022,18 +1022,18 @@ function CreateListingPage() {
             <div className="space-y-4">
               <h2 className={`text-sm font-bold mb-2 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("create.step3")}</h2>
               <div>
-                <label className={`text-xs font-medium mb-1 block ${isDark ? "text-gray-400" : "text-gray-500"}`}>Заголовок *</label>
+                <label className={`text-xs font-medium mb-1 block ${isDark ? "text-gray-400" : "text-gray-500"}`}>{t("create.fieldTitle")} *</label>
                 <input
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                   className={`w-full h-10 px-3 text-sm rounded-lg border focus:outline-none ${
                     isDark ? "bg-[#0d1a2e] border-[#1a3050] text-gray-200 focus:border-[#4a9eff]" : "bg-gray-50 border-gray-200 text-gray-700 focus:border-blue-400"
                   }`}
-                  placeholder="Введіть заголовок оголошення"
+                  placeholder={t("create.titlePlaceholder")}
                 />
               </div>
               <div>
-                <label className={`text-xs font-medium mb-1 block ${isDark ? "text-gray-400" : "text-gray-500"}`}>Опис *</label>
+                <label className={`text-xs font-medium mb-1 block ${isDark ? "text-gray-400" : "text-gray-500"}`}>{t("create.fieldDescription")} *</label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
@@ -1041,12 +1041,12 @@ function CreateListingPage() {
                   className={`w-full px-3 py-2 text-sm rounded-lg border focus:outline-none resize-none ${
                     isDark ? "bg-[#0d1a2e] border-[#1a3050] text-gray-200 focus:border-[#4a9eff]" : "bg-gray-50 border-gray-200 text-gray-700 focus:border-blue-400"
                   }`}
-                  placeholder="Детальний опис"
+                  placeholder={t("create.descriptionPlaceholder")}
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className={`text-xs font-medium mb-1 block ${isDark ? "text-gray-400" : "text-gray-500"}`}>Ціна</label>
+                  <label className={`text-xs font-medium mb-1 block ${isDark ? "text-gray-400" : "text-gray-500"}`}>{t("create.fieldPrice")}</label>
                   <input
                     value={formData.price}
                     onChange={(e) => setFormData({ ...formData, price: e.target.value })}
@@ -1057,7 +1057,7 @@ function CreateListingPage() {
                   />
                 </div>
                 <div>
-                  <label className={`text-xs font-medium mb-1 block ${isDark ? "text-gray-400" : "text-gray-500"}`}>Місто *</label>
+                  <label className={`text-xs font-medium mb-1 block ${isDark ? "text-gray-400" : "text-gray-500"}`}>{t("create.fieldCity")} *</label>
                   <CityPicker
                     value={formData.city}
                     onValueChange={(city) => setFormData({ ...formData, city })}
@@ -1069,14 +1069,14 @@ function CreateListingPage() {
                 </div>
               </div>
               <div>
-                <label className={`text-xs font-medium mb-1 block ${isDark ? "text-gray-400" : "text-gray-500"}`}>Google Maps URL</label>
+                <label className={`text-xs font-medium mb-1 block ${isDark ? "text-gray-400" : "text-gray-500"}`}>{t("create.mapsLabel")}</label>
                 <input
                   value={formData.googleMapsUrl}
                   onChange={(e) => setFormData({ ...formData, googleMapsUrl: e.target.value })}
                   className={`w-full h-10 px-3 text-sm rounded-lg border focus:outline-none ${
                     isDark ? "bg-[#0d1a2e] border-[#1a3050] text-gray-200 focus:border-[#4a9eff]" : "bg-gray-50 border-gray-200 text-gray-700 focus:border-blue-400"
                   }`}
-                  placeholder="https://maps.google.com/..."
+                  placeholder={t("create.mapsPlaceholder")}
                 />
               </div>
             </div>
@@ -1124,9 +1124,9 @@ function CreateListingPage() {
                 <label htmlFor="imageInput" className="block cursor-pointer">
                   <Upload className={`w-8 h-8 mx-auto mb-2 ${isDark ? "text-gray-500" : "text-gray-300"}`} />
                   <p className={`text-sm ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-                    {isUploadingImages ? "Завантажуємо фото..." : "Перетягніть фото сюди або натисніть, щоб вибрати файли з компʼютера"}
+                    {isUploadingImages ? t("create.uploadingImages") : t("create.uploadHint")}
                   </p>
-                  <p className={`text-xs mt-1 ${isDark ? "text-gray-600" : "text-gray-400"}`}>JPG, PNG до 5 МБ</p>
+                  <p className={`text-xs mt-1 ${isDark ? "text-gray-600" : "text-gray-400"}`}>{t("create.uploadFormats")}</p>
                 </label>
               </div>
               {imageUploadError ? (
@@ -1157,18 +1157,18 @@ function CreateListingPage() {
             <div className="space-y-4">
               <h2 className={`text-sm font-bold mb-2 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("create.step5")}</h2>
               <div>
-                <label className={`text-xs font-medium mb-1 block ${isDark ? "text-gray-400" : "text-gray-500"}`}>Контактна інформація *</label>
+                <label className={`text-xs font-medium mb-1 block ${isDark ? "text-gray-400" : "text-gray-500"}`}>{t("create.fieldContact")} *</label>
                 <input
                   value={formData.contact}
                   onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
                   className={`w-full h-10 px-3 text-sm rounded-lg border focus:outline-none ${
                     isDark ? "bg-[#0d1a2e] border-[#1a3050] text-gray-200 focus:border-[#4a9eff]" : "bg-gray-50 border-gray-200 text-gray-700 focus:border-blue-400"
                   }`}
-                  placeholder="Телефон, email або месенджер"
+                  placeholder={t("create.contactPlaceholder")}
                 />
               </div>
               <p className={`text-xs ${isDark ? "text-gray-500" : "text-gray-400"}`}>
-                Лейбли типу "нове", "бізнес", "перевірено" або промо-позначки призначаються автоматично, через оплату або модератором.
+                {t("create.labelsHint")}
               </p>
             </div>
           )}
@@ -1178,12 +1178,12 @@ function CreateListingPage() {
             <div>
               <h2 className={`text-sm font-bold mb-4 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("create.step6")}</h2>
               <div className={`rounded-lg p-4 ${isDark ? "bg-[#0d1a2e]" : "bg-gray-50"}`}>
-                <p className={`text-sm font-bold mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{formData.title || "Без заголовку"}</p>
-                <p className={`text-xs mb-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>{formData.description || "Без опису"}</p>
+                <p className={`text-sm font-bold mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{formData.title || t("create.previewUntitled")}</p>
+                <p className={`text-xs mb-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>{formData.description || t("create.previewNoDescription")}</p>
                 {formData.price && <p className={`text-sm font-bold ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`}>{formData.price} €</p>}
                 <p className={`text-xs mt-1 ${isDark ? "text-gray-500" : "text-gray-400"}`}>{formData.city}</p>
                 {formData.googleMapsUrl ? (
-                  <p className={`text-xs mt-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>Google Maps link буде доступний після публікації.</p>
+                  <p className={`text-xs mt-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>{t("create.mapsAvailableAfterPublish")}</p>
                 ) : null}
               </div>
             </div>

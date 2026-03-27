@@ -515,7 +515,7 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
                   className={`relative hidden md:flex w-8 h-8 rounded-lg items-center justify-center transition-colors ${
                     isDark ? "text-gray-300 bg-[#1a2a40] border border-[#253d5c] hover:border-[#FFD700]/30" : "text-gray-600 bg-gray-50 border border-gray-200 hover:border-blue-300"
                   }`}
-                  aria-label="Messages"
+                  aria-label={t("nav.messages")}
                   title={t("nav.messages")}
                 >
                   <MessageSquare className="w-4 h-4" />
