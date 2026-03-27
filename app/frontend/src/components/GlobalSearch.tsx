@@ -10,6 +10,7 @@ import {
   saveSearchHistory,
 } from "@/lib/account-api";
 import { useTheme } from "@/lib/ThemeContext";
+import { useI18n } from "@/lib/i18n";
 
 const RECENT_SEARCHES_KEY = "uahab_recent_searches";
 const MAX_RECENT = 5;
@@ -43,6 +44,7 @@ export default function GlobalSearch() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const { theme } = useTheme();
+  const { t } = useI18n();
   const { user } = useAuth();
   const isDark = theme === "dark";
   const isLoggedIn = Boolean(user);
