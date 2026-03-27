@@ -19,7 +19,7 @@ interface LayoutProps {
 
 export default function UahubLayout({ children, hideModuleNav }: LayoutProps) {
   const { theme } = useTheme();
-  const { locale, setLocale } = useI18n();
+  const { locale, setLocale, t } = useI18n();
   const { city, setCity } = useGlobalCity();
   const { user, login, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
