@@ -1,5 +1,6 @@
 from core.database import Base
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.sql import func
 
 
 class Listings(Base):
@@ -43,3 +44,17 @@ class Listings(Base):
     @property
     def owner_user_id(self):
         return self.user_id
+
+
+class ModerationAuditLog(Base):
+    __tablename__ = "moderation_audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True, nullable=False)
+    listing_id = Column(Integer, ForeignKey("listings.id", ondelete="CASCADE"), nullable=False, index=True)
+    actor_user_id = Column(String, nullable=True, index=True)
+    action = Column(String, nullable=False, index=True)
+    from_status = Column(String, nullable=True)
+    to_status = Column(String, nullable=True)
+    notes = Column(Text, nullable=True)
+    metadata_json = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

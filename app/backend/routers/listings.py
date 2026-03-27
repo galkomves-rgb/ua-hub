@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from dependencies.auth import get_admin_user, get_current_user_id
 from dependencies.database import get_db_session
 from schemas.auth import UserResponse
+from schemas.admin import AdminModerationAuditItemResponse
 from schemas.listings import (
     ListingActionResponse,
     ListingCreate,
@@ -328,13 +329,49 @@ async def boost_listing(
 async def get_moderation_queue(
     status: str = Query("moderation_pending", pattern="^(moderation_pending|rejected|all)$"),
     module: str | None = Query(None),
+    q: str | None = Query(None),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
     _admin_user: UserResponse = Depends(get_admin_user),
     db: AsyncSession = Depends(get_db_session),
 ):
     service = ListingsService(db)
-    return await service.list_moderation_queue(status=status, module=module, limit=limit, offset=offset)
+    return await service.list_moderation_queue(status=status, module=module, query_text=q, limit=limit, offset=offset)
+
+
+@admin_router.get("/catalog", response_model=list[ListingSummaryResponse])
+async def get_admin_listings_catalog(
+    status: str | None = Query(None),
+    module: str | None = Query(None),
+    owner_type: str | None = Query(None),
+    q: str | None = Query(None),
+    sort: str = Query("newest", pattern="^(newest|oldest|views_desc|expires_soon)$"),
+    limit: int = Query(100, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    _admin_user: UserResponse = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    service = ListingsService(db)
+    return await service.list_admin_listings(
+        status=status,
+        module=module,
+        owner_type=owner_type,
+        query_text=q,
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@admin_router.get("/{listing_id}/audit", response_model=list[AdminModerationAuditItemResponse])
+async def get_moderation_audit(
+    listing_id: int,
+    limit: int = Query(20, ge=1, le=100),
+    _admin_user: UserResponse = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    service = ListingsService(db)
+    return await service.list_moderation_audit(listing_id=listing_id, limit=limit)
 
 
 @admin_router.post("/{listing_id}/moderate", response_model=ListingActionResponse)
@@ -353,6 +390,7 @@ async def moderate_listing(
             module=payload.module,
             category=payload.category,
             badges=payload.badges,
+            actor_user_id=_admin_user.id,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

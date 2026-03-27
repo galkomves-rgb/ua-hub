@@ -196,3 +196,46 @@ async def test_invalid_lifecycle_transitions_are_blocked_via_api(api_client: Asy
     )
     assert reject_without_reason_response.status_code == 400
     assert reject_without_reason_response.json() == {"detail": "Moderation reason is required when rejecting a listing"}
+
+
+@pytest.mark.asyncio
+async def test_admin_catalog_filters_listings(api_client: AsyncClient, db_session: AsyncSession):
+    published_listing = await create_listing(db_session, status="published", title="Published plumbing")
+    rejected_listing = await create_listing(db_session, status="rejected", title="Rejected cleaning")
+
+    response = await api_client.get(
+        "/api/v1/admin/listings/catalog",
+        params={"status": "rejected", "q": "cleaning", "module": "services"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload) == 1
+    assert payload[0]["id"] == rejected_listing.id
+    assert payload[0]["title"] == rejected_listing.title
+    assert payload[0]["status"] == "rejected"
+    assert published_listing.id != rejected_listing.id
+
+
+@pytest.mark.asyncio
+async def test_moderation_audit_is_recorded(api_client: AsyncClient, db_session: AsyncSession):
+    listing = await create_listing(db_session, status="draft", title="Audit me")
+
+    await api_client.post(f"/api/v1/listings/{listing.id}/submit")
+    moderate_response = await api_client.post(
+        f"/api/v1/admin/listings/{listing.id}/moderate",
+        json={"decision": "reject", "moderation_reason": "Wrong category", "module": "services", "category": "services", "badges": ["featured"]},
+    )
+
+    assert moderate_response.status_code == 200
+
+    audit_response = await api_client.get(f"/api/v1/admin/listings/{listing.id}/audit")
+    assert audit_response.status_code == 200
+
+    payload = audit_response.json()
+    assert len(payload) == 1
+    assert payload[0]["action"] == "moderation_rejected"
+    assert payload[0]["from_status"] == "moderation_pending"
+    assert payload[0]["to_status"] == "rejected"
+    assert payload[0]["notes"] == "Wrong category"
+    assert payload[0]["metadata"]["next_badges"] == ["featured"]

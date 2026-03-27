@@ -171,6 +171,55 @@ export interface BillingVerifyResponse {
   payment: BillingHistoryItem;
 }
 
+export interface AdminOverviewCounts {
+  moderation_pending_count: number;
+  rejected_listings_count: number;
+  published_listings_count: number;
+  total_listings_count: number;
+  total_users_count: number;
+  total_business_profiles_count: number;
+  open_reports_count: number;
+  pending_payments_count: number;
+  payment_issues_count: number;
+  active_subscriptions_count: number;
+}
+
+export interface AdminOverviewListingItem {
+  id: number;
+  title: string;
+  module: string;
+  category: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminOverviewReportItem {
+  id: number;
+  reported_user_id: string;
+  listing_id: string | null;
+  reason: string;
+  status: string;
+  created_at: string;
+}
+
+export interface AdminOverviewPaymentItem {
+  id: number;
+  title: string;
+  status: string;
+  amount_total: number;
+  currency: string;
+  created_at: string;
+  failure_reason: string | null;
+}
+
+export interface AdminOverviewResponse {
+  counts: AdminOverviewCounts;
+  recent_pending_listings: AdminOverviewListingItem[];
+  recent_reports: AdminOverviewReportItem[];
+  recent_payment_issues: AdminOverviewPaymentItem[];
+}
+
 export interface UserProfileResponse {
   user_id: string;
   name: string;
@@ -261,6 +310,18 @@ export interface ListingModerationPayload {
   module?: string | null;
   category?: string | null;
   badges?: string[] | null;
+}
+
+export interface ModerationAuditItem {
+  id: number;
+  listing_id: number;
+  actor_user_id: string | null;
+  action: string;
+  from_status: string | null;
+  to_status: string | null;
+  notes: string | null;
+  metadata: Record<string, string | string[] | null | undefined>;
+  created_at: string;
 }
 
 export interface MonetizedListingCreatePayload {
@@ -836,6 +897,9 @@ export async function deleteListing(listingId: number) {
 export function fetchModerationQueue(filters?: {
   status?: "moderation_pending" | "rejected" | "all";
   module?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
 }) {
   const params = new URLSearchParams();
   if (filters?.status) {
@@ -844,10 +908,58 @@ export function fetchModerationQueue(filters?: {
   if (filters?.module) {
     params.set("module", filters.module);
   }
+  if (filters?.q) {
+    params.set("q", filters.q);
+  }
+  if (typeof filters?.limit === "number") {
+    params.set("limit", String(filters.limit));
+  }
+  if (typeof filters?.offset === "number") {
+    params.set("offset", String(filters.offset));
+  }
   const suffix = params.toString();
   return accountFetch<ListingManagementItem[]>(
     `/api/v1/admin/listings/moderation-queue${suffix ? `?${suffix}` : ""}`,
   );
+}
+
+export function fetchAdminListings(filters?: {
+  status?: ListingManagementStatus | "all";
+  module?: string;
+  ownerType?: string;
+  q?: string;
+  sort?: "newest" | "oldest" | "views_desc" | "expires_soon";
+  limit?: number;
+  offset?: number;
+}) {
+  const params = new URLSearchParams();
+  if (filters?.status && filters.status !== "all") {
+    params.set("status", filters.status);
+  }
+  if (filters?.module) {
+    params.set("module", filters.module);
+  }
+  if (filters?.ownerType) {
+    params.set("owner_type", filters.ownerType);
+  }
+  if (filters?.q) {
+    params.set("q", filters.q);
+  }
+  if (filters?.sort) {
+    params.set("sort", filters.sort);
+  }
+  if (typeof filters?.limit === "number") {
+    params.set("limit", String(filters.limit));
+  }
+  if (typeof filters?.offset === "number") {
+    params.set("offset", String(filters.offset));
+  }
+  const suffix = params.toString();
+  return accountFetch<ListingManagementItem[]>(`/api/v1/admin/listings/catalog${suffix ? `?${suffix}` : ""}`);
+}
+
+export function fetchModerationAuditTrail(listingId: number, limit = 20) {
+  return accountFetch<ModerationAuditItem[]>(`/api/v1/admin/listings/${listingId}/audit?limit=${limit}`);
 }
 
 export function moderateListing(listingId: number, payload: ListingModerationPayload) {
@@ -858,6 +970,10 @@ export function moderateListing(listingId: number, payload: ListingModerationPay
       body: JSON.stringify(payload),
     },
   );
+}
+
+export function fetchAdminOverview() {
+  return accountFetch<AdminOverviewResponse>("/api/v1/admin/overview");
 }
 
 export function fetchMessagingInbox() {

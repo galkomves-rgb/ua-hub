@@ -2,7 +2,7 @@ import { useState, useEffect, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/lib/ThemeContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { I18nContext, t as translate } from "@/lib/i18n";
@@ -26,6 +26,9 @@ import AuthCallback from "./pages/AuthCallback";
 import AuthError from "./pages/AuthError";
 import LogoutCallbackPage from "./pages/LogoutCallbackPage";
 import OnboardingPage from "./pages/OnboardingPage";
+import AdminCenterLayout from "./pages/AdminCenterLayout";
+import AdminOverviewPage from "./pages/AdminOverviewPage";
+import AdminListingsPage from "./pages/AdminListingsPage";
 import AdminModerationPage from "./pages/AdminModerationPage";
 
 const queryClient = new QueryClient();
@@ -90,7 +93,13 @@ const App = () => (
                 <Route path="/search" element={<SearchPage />} />
                 <Route path="/auth" element={<AuthPage />} />
                 <Route path="/onboarding" element={<OnboardingPage />} />
-                <Route path="/admin/moderation" element={<AdminModerationPage />} />
+                <Route path="/admin" element={<AdminCenterLayout />}>
+                  <Route index element={<Navigate to="overview" replace />} />
+                  <Route path="overview" element={<AdminOverviewPage />} />
+                  <Route path="listings" element={<AdminListingsPage />} />
+                  <Route path="listings/moderation" element={<AdminModerationPage />} />
+                </Route>
+                <Route path="/admin/moderation" element={<Navigate to="/admin/listings/moderation" replace />} />
                 {/* Platform pages */}
                 <Route path="/pricing" element={<PricingPage />} />
                 <Route path="/about" element={<AboutPage />} />

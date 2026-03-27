@@ -522,11 +522,11 @@ export default function UahubLayout({ children, hideModuleNav }: LayoutProps) {
                     </Link>
                     {isAdmin ? (
                       <Link
-                        to="/admin/moderation"
+                        to="/admin"
                         className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${isDark ? "text-slate-200 hover:bg-[#162b49]" : "text-slate-700 hover:bg-slate-50"}`}
                       >
                         <Shield className="h-4 w-4" />
-                        {locale === "ua" ? "Модерація" : locale === "es" ? "Moderación" : "Moderation"}
+                        {locale === "ua" ? "Адмін центр" : locale === "es" ? "Centro admin" : "Admin center"}
                       </Link>
                     ) : null}
                     <button

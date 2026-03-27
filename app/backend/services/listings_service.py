@@ -1,9 +1,10 @@
 import json
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import and_, desc, func, or_, select
+from typing import Any
+from sqlalchemy import String, and_, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.listings import Listings
+from models.listings import Listings, ModerationAuditLog
 from models.messages import Messages
 from models.profiles import BusinessProfile, UserProfile
 from models.saved import SavedListing
@@ -37,6 +38,20 @@ class ListingsService:
         if not isinstance(parsed, list):
             return []
         return [str(item) for item in parsed if isinstance(item, str)]
+
+    @staticmethod
+    def _serialize_metadata(data: dict[str, Any] | None) -> str:
+        return json.dumps(data or {}, ensure_ascii=True)
+
+    @staticmethod
+    def _deserialize_metadata(raw_value: str | None) -> dict[str, Any]:
+        if not raw_value:
+            return {}
+        try:
+            parsed = json.loads(raw_value)
+            return parsed if isinstance(parsed, dict) else {}
+        except (TypeError, ValueError):
+            return {}
 
     @staticmethod
     def _dump_badges(values: list[str]) -> str:
@@ -302,6 +317,94 @@ class ListingsService:
 
         return items
 
+    async def list_admin_listings(
+        self,
+        status: str | None = None,
+        module: str | None = None,
+        owner_type: str | None = None,
+        query_text: str | None = None,
+        sort: str = "newest",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict]:
+        """List listings for admin backoffice catalog."""
+        query = select(Listings)
+
+        if status and status != "all":
+            query = query.where(Listings.status == status)
+
+        if module:
+            query = query.where(Listings.module == module)
+
+        if owner_type:
+            query = query.where(Listings.owner_type == owner_type)
+
+        if query_text:
+            search_term = f"%{query_text}%"
+            query = query.where(
+                or_(
+                    Listings.title.ilike(search_term),
+                    Listings.description.ilike(search_term),
+                    Listings.category.ilike(search_term),
+                    Listings.module.ilike(search_term),
+                    Listings.city.ilike(search_term),
+                    func.cast(Listings.id, String).ilike(search_term),
+                    Listings.user_id.ilike(search_term),
+                    Listings.owner_id.ilike(search_term),
+                )
+            )
+
+        if sort == "oldest":
+            query = query.order_by(Listings.created_at.asc())
+        elif sort == "views_desc":
+            query = query.order_by(Listings.views_count.desc(), Listings.created_at.desc())
+        elif sort == "expires_soon":
+            query = query.order_by(Listings.expiry_date.asc().nulls_last(), Listings.created_at.desc())
+        else:
+            query = query.order_by(desc(Listings.updated_at), desc(Listings.created_at))
+
+        result = await self.db.execute(query.limit(limit).offset(offset))
+        listings = result.scalars().all()
+        if not listings:
+            return []
+
+        listing_ids = [listing.id for listing in listings]
+        saved_counts_result = await self.db.execute(
+            select(SavedListing.listing_id, func.count(SavedListing.id))
+            .where(SavedListing.listing_id.in_(listing_ids))
+            .group_by(SavedListing.listing_id)
+        )
+        saved_counts = {listing_id: count for listing_id, count in saved_counts_result.all()}
+
+        items: list[dict] = []
+        for listing in listings:
+            items.append(
+                {
+                    "id": listing.id,
+                    "title": listing.title,
+                    "module": listing.module,
+                    "category": listing.category,
+                    "owner_type": listing.owner_type,
+                    "pricing_tier": listing.pricing_tier,
+                    "visibility": listing.visibility,
+                    "ranking_score": int(listing.ranking_score or 0),
+                    "status": listing.status,
+                    "created_at": listing.created_at,
+                    "expires_at": listing.expires_at,
+                    "views_count": listing.views_count or 0,
+                    "unread_messages_count": 0,
+                    "saved_count": int(saved_counts.get(listing.id, 0)),
+                    "is_featured": bool(listing.is_featured),
+                    "is_promoted": bool(listing.is_promoted),
+                    "is_verified": bool(listing.is_verified),
+                    "moderation_reason": listing.moderation_reason,
+                    "badges": listing.badges,
+                    "images_json": listing.images_json,
+                }
+            )
+
+        return items
+
     async def search_listings(
         self,
         query_text: str,
@@ -523,6 +626,7 @@ class ListingsService:
         self,
         status: str = LISTING_STATUS_MODERATION_PENDING,
         module: str | None = None,
+        query_text: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict]:
@@ -535,6 +639,17 @@ class ListingsService:
 
         if module:
             query = query.where(Listings.module == module)
+
+        if query_text:
+            search_term = f"%{query_text.strip()}%"
+            query = query.where(
+                or_(
+                    Listings.title.ilike(search_term),
+                    Listings.category.ilike(search_term),
+                    Listings.module.ilike(search_term),
+                    func.cast(Listings.id, String).ilike(search_term),
+                )
+            )
 
         query = query.order_by(desc(Listings.updated_at), desc(Listings.created_at)).limit(limit).offset(offset)
         result = await self.db.execute(query)
@@ -569,6 +684,52 @@ class ListingsService:
 
         return items
 
+    async def list_moderation_audit(self, listing_id: int, limit: int = 20) -> list[dict]:
+        result = await self.db.execute(
+            select(ModerationAuditLog)
+            .where(ModerationAuditLog.listing_id == listing_id)
+            .order_by(ModerationAuditLog.created_at.desc(), ModerationAuditLog.id.desc())
+            .limit(limit)
+        )
+        logs = result.scalars().all()
+        return [
+            {
+                "id": log.id,
+                "listing_id": log.listing_id,
+                "actor_user_id": log.actor_user_id,
+                "action": log.action,
+                "from_status": log.from_status,
+                "to_status": log.to_status,
+                "notes": log.notes,
+                "metadata": self._deserialize_metadata(log.metadata_json),
+                "created_at": log.created_at,
+            }
+            for log in logs
+        ]
+
+    async def _log_moderation_audit(
+        self,
+        *,
+        listing_id: int,
+        actor_user_id: str | None,
+        action: str,
+        from_status: str | None,
+        to_status: str | None,
+        notes: str | None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        self.db.add(
+            ModerationAuditLog(
+                listing_id=listing_id,
+                actor_user_id=actor_user_id,
+                action=action,
+                from_status=from_status,
+                to_status=to_status,
+                notes=notes,
+                metadata_json=self._serialize_metadata(metadata),
+            )
+        )
+
     async def moderate_listing(
         self,
         listing_id: int,
@@ -577,6 +738,7 @@ class ListingsService:
         module: str | None = None,
         category: str | None = None,
         badges: list[str] | None = None,
+        actor_user_id: str | None = None,
     ) -> Listings | None:
         listing = await self.get_listing(listing_id)
         if not listing:
@@ -584,6 +746,11 @@ class ListingsService:
 
         if listing.status != LISTING_STATUS_MODERATION_PENDING:
             raise ValueError("Only listings in moderation can be moderated")
+
+        previous_status = listing.status
+        previous_module = listing.module
+        previous_category = listing.category
+        previous_badges = self._parse_badges(listing.badges)
 
         if module and module.strip():
             listing.module = module.strip()
@@ -604,6 +771,24 @@ class ListingsService:
             listing.moderation_reason = moderation_reason.strip()
         else:
             raise ValueError("Unsupported moderation decision")
+
+        await self._log_moderation_audit(
+            listing_id=listing.id,
+            actor_user_id=actor_user_id,
+            action="moderation_approved" if decision == "approve" else "moderation_rejected",
+            from_status=previous_status,
+            to_status=listing.status,
+            notes=listing.moderation_reason,
+            metadata={
+                "decision": decision,
+                "previous_module": previous_module,
+                "next_module": listing.module,
+                "previous_category": previous_category,
+                "next_category": listing.category,
+                "previous_badges": previous_badges,
+                "next_badges": self._parse_badges(listing.badges),
+            },
+        )
 
         listing.updated_at = datetime.now(timezone.utc)
         await self.db.commit()

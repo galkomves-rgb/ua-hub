@@ -1,10 +1,8 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ShieldCheck, CheckCircle2, XCircle, ArrowRight, AlertTriangle } from "lucide-react";
+import { ShieldCheck, CheckCircle2, XCircle, ArrowRight, AlertTriangle, Search, ImageIcon, RefreshCw, History } from "lucide-react";
 import { toast } from "sonner";
-import ProtectedAdminRoute from "@/components/ProtectedAdminRoute";
-import UahubLayout from "@/components/UahubLayout";
-import { moderateListing, fetchModerationQueue, type ListingManagementItem } from "@/lib/account-api";
+import { fetchModerationAuditTrail, moderateListing, fetchModerationQueue, type ListingManagementItem } from "@/lib/account-api";
 import { deriveListingLabels, getModuleLabelSystem, type LabelId } from "@/lib/label-taxonomy";
 import { MODULES } from "@/lib/platform";
 import { useTheme } from "@/lib/ThemeContext";
@@ -80,6 +78,7 @@ function ModerationCard({
   const [reason, setReason] = useState(item.moderation_reason ?? "");
   const [moduleId, setModuleId] = useState(item.module);
   const [category, setCategory] = useState(item.category);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [selectedBadges, setSelectedBadges] = useState<string[]>(() => parseBadges(item.badges).filter((badge) => MODERATOR_BADGES.includes(badge as never)));
   const originalModeratorBadges = useMemo(
     () => parseBadges(item.badges).filter((badge) => MODERATOR_BADGES.includes(badge as never)),
@@ -123,6 +122,11 @@ function ModerationCard({
   const reviewedCategoryTitle = getCategoryTitle(moduleId, category);
   const originalCategoryIsInvalid = originalCategories.length > 0 && !originalCategories.some((entry) => entry.id === item.category);
   const reviewChanged = item.module !== moduleId || item.category !== category || JSON.stringify(originalModeratorBadges) !== JSON.stringify(selectedBadges);
+  const auditQuery = useQuery({
+    queryKey: ["admin-moderation-audit", item.id],
+    queryFn: () => fetchModerationAuditTrail(item.id),
+    enabled: historyOpen,
+  });
 
   return (
     <article className={`rounded-2xl border p-5 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-white"}`}>
@@ -375,6 +379,64 @@ function ModerationCard({
               placeholder={locale === "ua" ? "Заповнюйте лише якщо відхиляєте оголошення" : locale === "es" ? "Complete solo si rechaza el anuncio" : "Fill this only when rejecting a listing"}
             />
           </div>
+
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((current) => !current)}
+              className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold ${isDark ? "bg-[#11203a] text-slate-100" : "bg-slate-100 text-slate-700"}`}
+            >
+              <History className="h-4 w-4" />
+              {historyOpen
+                ? locale === "ua" ? "Сховати аудит" : locale === "es" ? "Ocultar auditoría" : "Hide audit"
+                : locale === "ua" ? "Показати аудит" : locale === "es" ? "Mostrar auditoría" : "Show audit"}
+            </button>
+
+            {historyOpen ? (
+              <div className={`mt-3 rounded-2xl border p-4 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-slate-50"}`}>
+                {auditQuery.isLoading ? (
+                  <p className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                    {locale === "ua" ? "Завантаження аудиту..." : locale === "es" ? "Cargando auditoría..." : "Loading audit trail..."}
+                  </p>
+                ) : null}
+
+                {auditQuery.isError ? (
+                  <p className={`text-sm ${isDark ? "text-red-300" : "text-red-700"}`}>
+                    {auditQuery.error instanceof Error ? auditQuery.error.message : "Failed to load moderation audit"}
+                  </p>
+                ) : null}
+
+                {auditQuery.data && auditQuery.data.length > 0 ? (
+                  <div className="space-y-3">
+                    {auditQuery.data.map((entry) => (
+                      <div key={entry.id} className={`rounded-2xl border px-4 py-3 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-white"}`}>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{entry.action}</p>
+                          <p className={`text-xs ${isDark ? "text-slate-500" : "text-slate-500"}`}>{new Intl.DateTimeFormat(locale === "ua" ? "uk-UA" : locale === "es" ? "es-ES" : "en-GB", { dateStyle: "medium", timeStyle: "short" }).format(new Date(entry.created_at))}</p>
+                        </div>
+                        <p className={`mt-2 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                          {(locale === "ua" ? "Статус" : locale === "es" ? "Estado" : "Status") + `: ${entry.from_status ?? "-"} -> ${entry.to_status ?? "-"}`}
+                        </p>
+                        {entry.notes ? <p className={`mt-2 text-sm ${isDark ? "text-amber-300" : "text-amber-700"}`}>{entry.notes}</p> : null}
+                        <div className={`mt-2 grid gap-1 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                          <p>{locale === "ua" ? "Модуль" : locale === "es" ? "Módulo" : "Module"}: {(entry.metadata.previous_module as string | undefined) ?? "-"}{" -> "}{(entry.metadata.next_module as string | undefined) ?? "-"}</p>
+                          <p>{locale === "ua" ? "Категорія" : locale === "es" ? "Categoría" : "Category"}: {(entry.metadata.previous_category as string | undefined) ?? "-"}{" -> "}{(entry.metadata.next_category as string | undefined) ?? "-"}</p>
+                          <p>{locale === "ua" ? "Лейбли" : locale === "es" ? "Etiquetas" : "Badges"}: {Array.isArray(entry.metadata.next_badges) && entry.metadata.next_badges.length > 0 ? entry.metadata.next_badges.join(", ") : (locale === "ua" ? "немає" : locale === "es" ? "ninguna" : "none")}</p>
+                          {entry.actor_user_id ? <p>{locale === "ua" ? "Адмін" : locale === "es" ? "Admin" : "Admin"}: {entry.actor_user_id}</p> : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {auditQuery.data && auditQuery.data.length === 0 ? (
+                  <p className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                    {locale === "ua" ? "Для цього оголошення ще немає записів аудиту." : locale === "es" ? "Aún no hay registros de auditoría para este anuncio." : "No audit entries exist for this listing yet."}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-2 lg:w-[250px] lg:flex-col">
@@ -415,10 +477,11 @@ export default function AdminModerationPage() {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<"moderation_pending" | "rejected" | "all">("moderation_pending");
   const [module, setModule] = useState<(typeof MODULE_OPTIONS)[number]>("all");
+  const [searchText, setSearchText] = useState("");
 
   const queueQuery = useQuery({
-    queryKey: ["admin-moderation-queue", status, module],
-    queryFn: () => fetchModerationQueue({ status, module: module === "all" ? undefined : module }),
+    queryKey: ["admin-moderation-queue", status, module, searchText],
+    queryFn: () => fetchModerationQueue({ status, module: module === "all" ? undefined : module, q: searchText.trim() || undefined, limit: 100 }),
   });
 
   const moderateMutation = useMutation({
@@ -432,6 +495,7 @@ export default function AdminModerationPage() {
       }),
     onSuccess: async (_, variables) => {
       await queryClient.invalidateQueries({ queryKey: ["admin-moderation-queue"] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-moderation-audit", variables.listingId] });
       await queryClient.invalidateQueries({ queryKey: ["account-my-listings"] });
       toast.success(
         variables.decision === "approve"
@@ -445,87 +509,130 @@ export default function AdminModerationPage() {
   });
 
   const items = useMemo(() => queueQuery.data ?? [], [queueQuery.data]);
+  const queueStats = useMemo(() => {
+    const withPhotos = items.filter((item) => parseImages(item.images_json).length > 0).length;
+    const rejected = items.filter((item) => item.status === "rejected").length;
+    const pending = items.filter((item) => item.status === "moderation_pending").length;
+    return { total: items.length, withPhotos, rejected, pending };
+  }, [items]);
 
   return (
-    <ProtectedAdminRoute>
-      <UahubLayout hideModuleNav>
-        <div className="mx-auto max-w-6xl px-4 py-12 lg:px-6">
-          <section className={`rounded-3xl border p-6 md:p-8 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div>
-                <div className={`mb-3 inline-flex h-12 w-12 items-center justify-center rounded-2xl ${isDark ? "bg-[#1a2d4c] text-[#FFD700]" : "bg-blue-50 text-[#0057B8]"}`}>
-                  <ShieldCheck className="h-6 w-6" />
-                </div>
-                <h1 className={`text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
-                  {locale === "ua" ? "Модерація оголошень" : locale === "es" ? "Moderación de anuncios" : "Listing moderation"}
-                </h1>
-                <p className={`mt-2 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
-                  {locale === "ua"
-                    ? "Тимчасова мінімальна backoffice-сторінка для ручного E2E тестування approve/reject flow. Перед релізом перевірити, чи її треба замінити повним admin center."
-                    : locale === "es"
-                      ? "Página mínima temporal de backoffice para probar manualmente el flujo approve/reject. Antes del release, revisar si debe sustituirse por un admin center completo."
-                      : "Temporary minimal backoffice page for manual approve/reject E2E testing. Before release, verify whether it should be replaced by a full admin center."}
-                </p>
-              </div>
+    <div className="space-y-6">
+      <section className={`rounded-3xl border p-6 md:p-8 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className={`mb-3 inline-flex h-12 w-12 items-center justify-center rounded-2xl ${isDark ? "bg-[#1a2d4c] text-[#FFD700]" : "bg-blue-50 text-[#0057B8]"}`}>
+              <ShieldCheck className="h-6 w-6" />
             </div>
-
-            <div className="mt-6 grid gap-3 md:grid-cols-2">
-              <select
-                value={status}
-                onChange={(event) => setStatus(event.target.value as "moderation_pending" | "rejected" | "all")}
-                className={`rounded-2xl border px-4 py-3 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
-              >
-                <option value="moderation_pending">{locale === "ua" ? "Очікують модерації" : locale === "es" ? "Pendientes" : "Pending moderation"}</option>
-                <option value="rejected">{locale === "ua" ? "Відхилені" : locale === "es" ? "Rechazados" : "Rejected"}</option>
-                <option value="all">{locale === "ua" ? "Усі проблемні" : locale === "es" ? "Todos los problemáticos" : "All moderation items"}</option>
-              </select>
-              <select
-                value={module}
-                onChange={(event) => setModule(event.target.value as (typeof MODULE_OPTIONS)[number])}
-                className={`rounded-2xl border px-4 py-3 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
-              >
-                {MODULE_OPTIONS.map((item) => (
-                  <option key={item} value={item}>
-                    {item === "all"
-                      ? locale === "ua" ? "Усі модулі" : locale === "es" ? "Todos los módulos" : "All modules"
-                      : t(`mod.${item}`)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="mt-6 space-y-4">
-              {queueQuery.isLoading ? (
-                <div className={`rounded-2xl border p-4 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
-                  {locale === "ua" ? "Завантаження moderation queue..." : locale === "es" ? "Cargando cola de moderación..." : "Loading moderation queue..."}
-                </div>
-              ) : null}
-
-              {queueQuery.isError ? (
-                <div className={`rounded-2xl border p-4 text-sm ${isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>
-                  {queueQuery.error instanceof Error ? queueQuery.error.message : "Failed to load moderation queue"}
-                </div>
-              ) : null}
-
-              {!queueQuery.isLoading && !queueQuery.isError && items.length === 0 ? (
-                <div className={`rounded-2xl border p-5 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
-                  {locale === "ua" ? "Немає оголошень для модерації за поточними фільтрами." : locale === "es" ? "No hay anuncios para moderar con los filtros actuales." : "No listings found for the current moderation filters."}
-                </div>
-              ) : null}
-
-              {items.map((item) => (
-                <ModerationCard
-                  key={item.id}
-                  item={item}
-                  pending={moderateMutation.isPending && moderateMutation.variables?.listingId === item.id}
-                  onApprove={(listingId, moduleId, category, badges) => moderateMutation.mutate({ listingId, decision: "approve", module: moduleId, category, badges })}
-                  onReject={(listingId, reason, moduleId, category, badges) => moderateMutation.mutate({ listingId, decision: "reject", reason, module: moduleId, category, badges })}
-                />
-              ))}
-            </div>
-          </section>
+            <h1 className={`text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+              {locale === "ua" ? "Модераційний центр" : locale === "es" ? "Centro de moderación" : "Moderation center"}
+            </h1>
+            <p className={`mt-2 max-w-3xl text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+              {locale === "ua"
+                ? "Операційна черга для перевірки контенту, корекції модулів і категорій та контролю фінальних лейблів перед публікацією."
+                : locale === "es"
+                  ? "Cola operativa para revisar contenido, corregir módulos/categorías y controlar etiquetas finales antes de publicar."
+                  : "Operational queue for reviewing content, correcting module/category mismatches, and controlling final labels before publication."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => queueQuery.refetch()}
+            className={`inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold ${isDark ? "bg-[#1a2d4c] text-slate-100" : "bg-slate-100 text-slate-700"}`}
+          >
+            <RefreshCw className="h-4 w-4" />
+            {locale === "ua" ? "Оновити" : locale === "es" ? "Actualizar" : "Refresh"}
+          </button>
         </div>
-      </UahubLayout>
-    </ProtectedAdminRoute>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className={`rounded-2xl border px-4 py-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+            <p className={`text-xs uppercase tracking-[0.18em] ${isDark ? "text-slate-500" : "text-slate-500"}`}>{locale === "ua" ? "У черзі" : locale === "es" ? "En cola" : "In queue"}</p>
+            <p className={`mt-3 text-3xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{queueStats.total}</p>
+          </div>
+          <div className={`rounded-2xl border px-4 py-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+            <p className={`text-xs uppercase tracking-[0.18em] ${isDark ? "text-slate-500" : "text-slate-500"}`}>{locale === "ua" ? "Очікують" : locale === "es" ? "Pendientes" : "Pending"}</p>
+            <p className={`mt-3 text-3xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{queueStats.pending}</p>
+          </div>
+          <div className={`rounded-2xl border px-4 py-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+            <p className={`text-xs uppercase tracking-[0.18em] ${isDark ? "text-slate-500" : "text-slate-500"}`}>{locale === "ua" ? "Відхилені" : locale === "es" ? "Rechazados" : "Rejected"}</p>
+            <p className={`mt-3 text-3xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{queueStats.rejected}</p>
+          </div>
+          <div className={`rounded-2xl border px-4 py-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+            <p className={`text-xs uppercase tracking-[0.18em] ${isDark ? "text-slate-500" : "text-slate-500"}`}>{locale === "ua" ? "З фото" : locale === "es" ? "Con fotos" : "With photos"}</p>
+            <div className="mt-3 flex items-center gap-2">
+              <ImageIcon className={`h-5 w-5 ${isDark ? "text-slate-400" : "text-slate-500"}`} />
+              <p className={`text-3xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{queueStats.withPhotos}</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-3 xl:grid-cols-[minmax(0,1fr)_220px_220px]">
+          <label className={`flex items-center gap-3 rounded-2xl border px-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-300" : "border-slate-300 bg-white text-slate-700"}`}>
+            <Search className="h-4 w-4" />
+            <input
+              value={searchText}
+              onChange={(event) => setSearchText(event.target.value)}
+              placeholder={locale === "ua" ? "Пошук за title, id, module або category" : locale === "es" ? "Buscar por título, id, módulo o categoría" : "Search by title, id, module, or category"}
+              className="h-12 w-full bg-transparent text-sm outline-none"
+            />
+          </label>
+
+          <select
+            value={status}
+            onChange={(event) => setStatus(event.target.value as "moderation_pending" | "rejected" | "all")}
+            className={`rounded-2xl border px-4 py-3 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
+          >
+            <option value="moderation_pending">{locale === "ua" ? "Очікують модерації" : locale === "es" ? "Pendientes" : "Pending moderation"}</option>
+            <option value="rejected">{locale === "ua" ? "Відхилені" : locale === "es" ? "Rechazados" : "Rejected"}</option>
+            <option value="all">{locale === "ua" ? "Усі проблемні" : locale === "es" ? "Todos los problemáticos" : "All moderation items"}</option>
+          </select>
+
+          <select
+            value={module}
+            onChange={(event) => setModule(event.target.value as (typeof MODULE_OPTIONS)[number])}
+            className={`rounded-2xl border px-4 py-3 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
+          >
+            {MODULE_OPTIONS.map((item) => (
+              <option key={item} value={item}>
+                {item === "all"
+                  ? locale === "ua" ? "Усі модулі" : locale === "es" ? "Todos los módulos" : "All modules"
+                  : t(`mod.${item}`)}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="mt-6 space-y-4">
+          {queueQuery.isLoading ? (
+            <div className={`rounded-2xl border p-4 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+              {locale === "ua" ? "Завантаження moderation queue..." : locale === "es" ? "Cargando cola de moderación..." : "Loading moderation queue..."}
+            </div>
+          ) : null}
+
+          {queueQuery.isError ? (
+            <div className={`rounded-2xl border p-4 text-sm ${isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>
+              {queueQuery.error instanceof Error ? queueQuery.error.message : "Failed to load moderation queue"}
+            </div>
+          ) : null}
+
+          {!queueQuery.isLoading && !queueQuery.isError && items.length === 0 ? (
+            <div className={`rounded-2xl border p-5 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+              {locale === "ua" ? "Немає оголошень для модерації за поточними фільтрами." : locale === "es" ? "No hay anuncios para moderar con los filtros actuales." : "No listings found for the current moderation filters."}
+            </div>
+          ) : null}
+
+          {items.map((item) => (
+            <ModerationCard
+              key={item.id}
+              item={item}
+              pending={moderateMutation.isPending && moderateMutation.variables?.listingId === item.id}
+              onApprove={(listingId, moduleId, category, badges) => moderateMutation.mutate({ listingId, decision: "approve", module: moduleId, category, badges })}
+              onReject={(listingId, reason, moduleId, category, badges) => moderateMutation.mutate({ listingId, decision: "reject", reason, module: moduleId, category, badges })}
+            />
+          ))}
+        </div>
+      </section>
+    </div>
   );
 }
