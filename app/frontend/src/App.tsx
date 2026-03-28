@@ -11,11 +11,11 @@ import AppErrorBoundary from "@/components/AppErrorBoundary";
 import Index from "./pages/Index";
 import ModulePage from "./pages/ModulePage";
 import AccountPage from "./pages/AccountPage";
+import PricingPage from "./pages/PricingPage";
 import {
   ListingDetail,
   BusinessProfilePage,
   CreateListingPage,
-  PricingPage,
   AboutPage,
   RulesPage,
   ContactsPage,

@@ -12,7 +12,7 @@ import Layout from "@/components/Layout";
 import { ListingCard, SectionHeader } from "@/components/Cards";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { createMonetizedListing, fetchBillingProducts, fetchMyBusinessProfiles, fetchUserProfile, reportMessagingUser, saveListing, submitListing, updateListing, type BillingProduct, type BillingProductCode } from "@/lib/account-api";
+import { createMonetizedListing, fetchMyBusinessProfiles, fetchUserProfile, reportMessagingUser, saveListing, submitListing, updateListing } from "@/lib/account-api";
 import { deriveListingLabels } from "@/lib/label-taxonomy";
 import { fetchPublicListing, fetchPublicListings } from "@/lib/public-listings";
 import { getAPIBaseURL } from "@/lib/config";
@@ -28,53 +28,6 @@ import {
 
 function normalizeCityFilter(value: string): string {
   return value === "All Spain" ? "all" : value;
-}
-
-function formatPlanAmount(amount: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("en-GB", {
-      style: "currency",
-      currency: currency.toUpperCase(),
-      minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
-      maximumFractionDigits: amount % 1 === 0 ? 0 : 2,
-    }).format(amount);
-  } catch {
-    return `${amount} ${currency.toUpperCase()}`;
-  }
-}
-
-function buildPlanFeatures(product: BillingProduct): string[] {
-  const features = [product.description];
-
-  if (product.duration_days) {
-    features.push(`Active for ${product.duration_days} days`);
-  }
-
-  if (product.listing_quota === null && product.category === "business_subscription") {
-    features.push("Unlimited publishing");
-  } else if (typeof product.listing_quota === "number") {
-    features.push(`Publish up to ${product.listing_quota} listings`);
-  }
-
-  if (product.category === "listing_promotion") {
-    features.push("Apply to one listing");
-  }
-
-  if (product.category === "business_subscription") {
-    features.push("Renews monthly while active");
-  }
-
-  return features;
-}
-
-function getPlanCta(productCode: BillingProductCode): string {
-  if (productCode === "listing_free") return "Start free";
-  if (productCode === "listing_basic") return "Get more responses";
-  if (productCode === "promotion_boost") return "Your listing appears first";
-  if (productCode === "promotion_featured") return "Show at the top";
-  if (productCode === "business_starter") return "Start publishing";
-  if (productCode === "business_growth") return "Get more responses";
-  return "Show at the top";
 }
 
 // ─── Listing Detail ───
@@ -1233,122 +1186,6 @@ function CreateListingPage() {
   );
 }
 
-// ─── Pricing Page ───
-function PricingPage() {
-  const { theme } = useTheme();
-  const { t } = useI18n();
-  const { user } = useAuth();
-  const isDark = theme === "dark";
-  const navigate = useNavigate();
-  const [segment, setSegment] = useState<"private" | "business">("private");
-  const productsQuery = useQuery({
-    queryKey: ["public-billing-products"],
-    queryFn: fetchBillingProducts,
-  });
-
-  const plans = useMemo(() => {
-    const products = productsQuery.data ?? [];
-    return products
-      .filter((product) => (segment === "private" ? product.target_type === "listing" : product.target_type === "business_profile"))
-      .map((product) => ({
-        ...product,
-        cta: getPlanCta(product.code as BillingProductCode),
-        featured: product.code === "business_growth",
-        displayPrice: formatPlanAmount(product.amount, product.currency),
-        features: buildPlanFeatures(product),
-      }));
-  }, [productsQuery.data, segment]);
-
-  return (
-    <Layout>
-      <div className="max-w-5xl mx-auto px-4 py-10">
-        <h1 className={`text-2xl font-bold text-center mb-2 ${isDark ? "text-gray-100" : "text-gray-900"}`}>
-          {t("pricing.title")}
-        </h1>
-        <p className={`text-sm text-center mb-8 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-          Choose what gets you more responses.
-        </p>
-        <div className={`mx-auto mb-8 flex max-w-md rounded-2xl border p-1 ${isDark ? "border-[#1a3050] bg-[#111d32]" : "border-slate-200 bg-slate-50"}`}>
-          {(["private", "business"] as const).map((item) => (
-            <button
-              key={item}
-              type="button"
-              onClick={() => setSegment(item)}
-              className={`flex-1 rounded-xl px-4 py-3 text-sm font-semibold ${segment === item ? (isDark ? "bg-[#FFD700] text-[#0d1a2e]" : "bg-[#0057B8] text-white") : (isDark ? "text-slate-300" : "text-slate-600")}`}
-            >
-              {item === "private" ? "Individuals" : "Business"}
-            </button>
-          ))}
-        </div>
-        <div className={`mb-6 rounded-2xl border p-4 text-sm ${isDark ? "border-[#22416b] bg-[#111d32] text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
-          {segment === "private"
-            ? "Start free once, then keep going with paid listing options and promotions."
-            : "Choose a plan first, then keep publishing inside your monthly limit."}
-        </div>
-        {productsQuery.isLoading ? (
-          <div className={`mb-6 rounded-2xl border p-4 text-sm ${isDark ? "border-[#22416b] bg-[#111d32] text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
-            Loading pricing...
-          </div>
-        ) : null}
-        {productsQuery.isError ? (
-          <div className={`mb-6 rounded-2xl border p-4 text-sm ${isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-600"}`}>
-            {productsQuery.error instanceof Error ? productsQuery.error.message : "Failed to load pricing."}
-          </div>
-        ) : null}
-        <div className={`grid grid-cols-1 gap-4 ${segment === "private" ? "sm:grid-cols-2 lg:grid-cols-4" : "md:grid-cols-3"}`}>
-          {plans.map((plan) => (
-            <div
-              key={plan.code}
-              className={`rounded-xl border p-5 transition-all ${
-                plan.featured
-                  ? isDark ? "border-[#FFD700]/40 bg-[#111d32] ring-1 ring-[#FFD700]/20" : "border-[#0057B8] bg-white ring-1 ring-blue-100"
-                  : isDark ? "border-[#1a3050] bg-[#111d32]" : "border-gray-200/80 bg-white"
-              }`}
-            >
-              <h3 className={`text-sm font-bold mb-1 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{plan.title}</h3>
-              <p className={`text-2xl font-extrabold mb-4 ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`}>
-                {plan.displayPrice}
-              </p>
-              <ul className="space-y-2">
-                {plan.features.map((f, fi) => (
-                  <li key={fi} className={`flex items-start gap-2 text-xs ${isDark ? "text-gray-400" : "text-gray-600"}`}>
-                    <Check className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${isDark ? "text-emerald-400" : "text-emerald-500"}`} />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!user) {
-                    navigate("/auth");
-                    return;
-                  }
-                  if (plan.code === "listing_free") {
-                    navigate("/create");
-                    return;
-                  }
-                  navigate(`/account?tab=billing&product=${plan.code}`);
-                }}
-                className={`w-full h-9 mt-5 rounded-lg text-xs font-semibold transition-all ${
-                plan.featured
-                  ? isDark
-                    ? "bg-gradient-to-r from-[#FFD700] to-[#e6c200] text-[#0d1a2e]"
-                    : "bg-gradient-to-r from-[#0057B8] to-[#0070E0] text-white"
-                  : isDark
-                    ? "border border-[#1a3050] text-gray-300 hover:bg-[#1a2a40]"
-                    : "border border-gray-200 text-gray-600 hover:bg-gray-50"
-              }`}>
-                {plan.cta}
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-    </Layout>
-  );
-}
-
 // ─── About Page ───
 function AboutPage() {
   const { theme } = useTheme();
@@ -1454,7 +1291,6 @@ export {
   ListingDetail,
   BusinessProfilePage,
   CreateListingPage,
-  PricingPage,
   AboutPage,
   RulesPage,
   ContactsPage,

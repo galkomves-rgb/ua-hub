@@ -31,17 +31,60 @@ PROMOTION_BOOST = "boost"
 PROMOTION_FEATURED = "featured"
 
 PRIVATE_FREE_PRODUCT_CODE = "listing_free"
-PRIVATE_BASIC_PRODUCT_CODE = "listing_basic"
-PROMOTION_BOOST_PRODUCT_CODE = "promotion_boost"
-PROMOTION_FEATURED_PRODUCT_CODE = "promotion_featured"
-BUSINESS_STARTER_PRODUCT_CODE = "business_starter"
-BUSINESS_GROWTH_PRODUCT_CODE = "business_growth"
-BUSINESS_PRO_PRODUCT_CODE = "business_pro"
+PRIVATE_EXTENSION_PRODUCT_CODE = "listing_extend_30"
+PRIVATE_NEXT_PRODUCT_CODE = "next_private_listing_30"
+PROMOTION_BOOST_PRODUCT_CODE = "boost"
+PROMOTION_FEATURED_PRODUCT_CODE = "featured"
+BUSINESS_STARTER_PRODUCT_CODE = "business_presence"
+BUSINESS_GROWTH_PRODUCT_CODE = "business_priority"
+BUSINESS_PRO_PRODUCT_CODE = "agency_starter"
+AGENCY_GROWTH_PRODUCT_CODE = "agency_growth"
+AGENCY_PRO_PRODUCT_CODE = "agency_pro"
+
+LEGACY_PRODUCT_CODE_ALIASES = {
+    "listing_basic": PRIVATE_NEXT_PRODUCT_CODE,
+    "promotion_boost": PROMOTION_BOOST_PRODUCT_CODE,
+    "promotion_featured": PROMOTION_FEATURED_PRODUCT_CODE,
+    "business_starter": BUSINESS_STARTER_PRODUCT_CODE,
+    "business_growth": BUSINESS_GROWTH_PRODUCT_CODE,
+    "business_pro": BUSINESS_PRO_PRODUCT_CODE,
+}
+
+LISTING_POLICY_ALWAYS_FREE = "always_free"
+LISTING_POLICY_PRIVATE_TRIAL = "private_trial"
+LISTING_POLICY_PRIVATE_PAID = "private_paid"
+LISTING_POLICY_BUSINESS = "business"
+SUBSCRIPTION_ACTIVE_STATUSES = {"active", "trialing"}
+
+ALWAYS_FREE_MODULES = {"community", "organizations"}
+ALWAYS_FREE_MODULE_CATEGORY_RULES = {
+    "jobs": {"job-seekers"},
+    "housing": {"looking", "room-search", "room-searching"},
+    "events": {"community-meetups", "community-events", "volunteering", "cultural"},
+}
+ALWAYS_FREE_CATEGORIES = {
+    "job-seekers",
+    "looking",
+    "room-search",
+    "volunteering",
+    "non-profit",
+    "nonprofit",
+    "community-posts",
+    "community-events",
+    "community-meetups",
+    "community-initiatives",
+    "cultural",
+}
 
 BUSINESS_PLAN_PRODUCT_MAP = {
     "starter": BUSINESS_STARTER_PRODUCT_CODE,
     "growth": BUSINESS_GROWTH_PRODUCT_CODE,
     "pro": BUSINESS_PRO_PRODUCT_CODE,
+    "business_presence": BUSINESS_STARTER_PRODUCT_CODE,
+    "business_priority": BUSINESS_GROWTH_PRODUCT_CODE,
+    "agency_starter": BUSINESS_PRO_PRODUCT_CODE,
+    "agency_growth": AGENCY_GROWTH_PRODUCT_CODE,
+    "agency_pro": AGENCY_PRO_PRODUCT_CODE,
 }
 
 PROMOTION_PRODUCT_MAP = {
@@ -50,17 +93,30 @@ PROMOTION_PRODUCT_MAP = {
 }
 
 PRODUCT_CATALOG: dict[str, dict[str, Any]] = {
-    PRIVATE_BASIC_PRODUCT_CODE: {
-        "title": "Basic listing",
-        "description": "Get more responses for 7 days.",
+    PRIVATE_NEXT_PRODUCT_CODE: {
+        "title": "Private listing 30 days",
+        "description": "Keep a private paid listing active for 30 days.",
         "category": "listing_purchase",
         "target_type": "listing",
-        "amount": Decimal("1.99"),
+        "amount": Decimal("4.99"),
         "currency": "eur",
-        "duration_days": 7,
+        "duration_days": 30,
         "pricing_tier": LISTING_PRICING_BASIC,
         "visibility": LISTING_VISIBILITY_STANDARD,
         "checkout_mode": "payment",
+    },
+    PRIVATE_EXTENSION_PRODUCT_CODE: {
+        "title": "Complete 30 days",
+        "description": "Extend the same first private paid listing to a full 30-day period.",
+        "category": "listing_purchase",
+        "target_type": "listing",
+        "amount": Decimal("3.99"),
+        "currency": "eur",
+        "duration_days": 30,
+        "pricing_tier": LISTING_PRICING_BASIC,
+        "visibility": LISTING_VISIBILITY_STANDARD,
+        "checkout_mode": "payment",
+        "extension_total_days": 30,
     },
     PROMOTION_BOOST_PRODUCT_CODE: {
         "title": "Boost",
@@ -78,53 +134,86 @@ PRODUCT_CATALOG: dict[str, dict[str, Any]] = {
         "description": "Show at the top for 7 days.",
         "category": "listing_promotion",
         "target_type": "listing",
-        "amount": Decimal("6.99"),
+        "amount": Decimal("5.99"),
         "currency": "eur",
         "duration_days": 7,
         "promotion_type": PROMOTION_FEATURED,
         "checkout_mode": "payment",
     },
     BUSINESS_STARTER_PRODUCT_CODE: {
-        "title": "Starter",
-        "description": "Publish up to 5 listings.",
+        "title": "Business Presence",
+        "description": "Commercial presence with one active offer and standard visibility.",
         "category": "business_subscription",
         "target_type": "business_profile",
-        "amount": Decimal("9.00"),
+        "amount": Decimal("9.99"),
         "currency": "eur",
         "duration_days": 30,
-        "plan_code": "starter",
-        "listing_quota": 5,
+        "plan_code": "business_presence",
+        "listing_quota": 1,
         "priority_rank": 100,
         "is_premium": False,
-        "checkout_mode": "payment",
+        "checkout_mode": "subscription",
+        "trial_days": 14,
     },
     BUSINESS_GROWTH_PRODUCT_CODE: {
-        "title": "Growth",
-        "description": "Get more responses with priority placement.",
+        "title": "Business Priority",
+        "description": "Priority placement for one active commercial offer.",
         "category": "business_subscription",
         "target_type": "business_profile",
-        "amount": Decimal("24.00"),
+        "amount": Decimal("19.99"),
         "currency": "eur",
         "duration_days": 30,
-        "plan_code": "growth",
-        "listing_quota": 20,
+        "plan_code": "business_priority",
+        "listing_quota": 1,
         "priority_rank": 200,
         "is_premium": True,
-        "checkout_mode": "payment",
+        "checkout_mode": "subscription",
+        "trial_days": 14,
     },
     BUSINESS_PRO_PRODUCT_CODE: {
-        "title": "Pro",
-        "description": "Show at the top with unlimited publishing.",
+        "title": "Agency Starter",
+        "description": "Start with up to 10 active agency listings.",
         "category": "business_subscription",
         "target_type": "business_profile",
-        "amount": Decimal("49.00"),
+        "amount": Decimal("24.99"),
         "currency": "eur",
         "duration_days": 30,
-        "plan_code": "pro",
-        "listing_quota": None,
-        "priority_rank": 300,
+        "plan_code": "agency_starter",
+        "listing_quota": 10,
+        "priority_rank": 220,
         "is_premium": True,
-        "checkout_mode": "payment",
+        "checkout_mode": "subscription",
+        "trial_days": 14,
+    },
+    AGENCY_GROWTH_PRODUCT_CODE: {
+        "title": "Agency Growth",
+        "description": "Grow with up to 30 active listings and stronger visibility.",
+        "category": "business_subscription",
+        "target_type": "business_profile",
+        "amount": Decimal("49.99"),
+        "currency": "eur",
+        "duration_days": 30,
+        "plan_code": "agency_growth",
+        "listing_quota": 30,
+        "priority_rank": 280,
+        "is_premium": True,
+        "checkout_mode": "subscription",
+        "trial_days": 14,
+    },
+    AGENCY_PRO_PRODUCT_CODE: {
+        "title": "Agency Pro",
+        "description": "Scale to 100 active listings with the strongest visibility.",
+        "category": "business_subscription",
+        "target_type": "business_profile",
+        "amount": Decimal("79.99"),
+        "currency": "eur",
+        "duration_days": 30,
+        "plan_code": "agency_pro",
+        "listing_quota": 100,
+        "priority_rank": 320,
+        "is_premium": True,
+        "checkout_mode": "subscription",
+        "trial_days": 14,
     },
 }
 
@@ -135,6 +224,8 @@ class ListingCreationDecision:
     visibility: str
     expires_at: datetime | None
     ranking_score: int
+    pricing_policy: str
+    metadata_patch: dict[str, Any] | None = None
     required_product_code: str | None = None
     paywall_reason: str | None = None
     subscription_id: int | None = None
@@ -170,6 +261,158 @@ class MonetizationService:
     def _dump_badges(values: list[str]) -> str:
         return json.dumps(values, ensure_ascii=True)
 
+    @staticmethod
+    def normalize_product_code(product_code: str) -> str:
+        return LEGACY_PRODUCT_CODE_ALIASES.get(product_code, product_code)
+
+    @staticmethod
+    def normalize_subscription_plan(plan_code: str) -> str:
+        return BUSINESS_PLAN_PRODUCT_MAP.get(plan_code, plan_code)
+
+    @staticmethod
+    def _normalize_lookup_value(value: str | None) -> str:
+        return (value or "").strip().lower().replace("_", "-")
+
+    @classmethod
+    def is_always_free_listing(cls, module: str, category: str) -> bool:
+        normalized_module = cls._normalize_lookup_value(module)
+        normalized_category = cls._normalize_lookup_value(category)
+        if normalized_module in ALWAYS_FREE_MODULES:
+            return True
+        if normalized_category in ALWAYS_FREE_CATEGORIES:
+            return True
+        return normalized_category in ALWAYS_FREE_MODULE_CATEGORY_RULES.get(normalized_module, set())
+
+    @staticmethod
+    def _parse_metadata(raw_value: str | None) -> dict[str, Any]:
+        if not raw_value:
+            return {}
+        try:
+            parsed = json.loads(raw_value)
+        except (TypeError, ValueError):
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+
+    @staticmethod
+    def merge_listing_metadata(raw_value: str | None, patch: dict[str, Any] | None) -> str:
+        payload = MonetizationService._parse_metadata(raw_value)
+        payload.update(patch or {})
+        return json.dumps(payload, ensure_ascii=True)
+
+    @classmethod
+    def get_listing_pricing_policy(cls, listing: Listings) -> str:
+        meta = cls._parse_metadata(listing.meta_json)
+        value = meta.get("_pricing_policy")
+        if isinstance(value, str) and value:
+            return value
+        return cls.infer_legacy_listing_pricing_policy(listing)
+
+    @classmethod
+    def build_listing_pricing_metadata(
+        cls,
+        *,
+        policy: str,
+        module: str,
+        category: str,
+        requires_email_verification: bool = False,
+        requires_phone_verification: bool = False,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "_pricing_policy": policy,
+            "_pricing_rules_version": "launch_v1",
+            "_pricing_scope": {
+                "module": module,
+                "category": category,
+            },
+        }
+        if policy == LISTING_POLICY_PRIVATE_TRIAL:
+            payload["_verification_hooks"] = {
+                "email_required": requires_email_verification,
+                "phone_required": requires_phone_verification,
+                # Phone verification storage does not exist yet; keep the hook explicit until it is wired.
+                "phone_enforcement_ready": False,
+            }
+        return payload
+
+    @classmethod
+    def infer_legacy_listing_pricing_policy(cls, listing: Listings) -> str:
+        if listing.pricing_tier == LISTING_PRICING_BUSINESS:
+            return LISTING_POLICY_BUSINESS
+        if listing.pricing_tier == LISTING_PRICING_BASIC:
+            return LISTING_POLICY_PRIVATE_PAID
+        if cls.is_always_free_listing(listing.module, listing.category):
+            return LISTING_POLICY_ALWAYS_FREE
+        if listing.status in {"published", "active", "moderation_pending"}:
+            return LISTING_POLICY_PRIVATE_PAID
+        return LISTING_POLICY_PRIVATE_TRIAL
+
+    async def ensure_listing_pricing_metadata(self, listing: Listings) -> str:
+        meta = self._parse_metadata(listing.meta_json)
+        existing_policy = meta.get("_pricing_policy")
+        if isinstance(existing_policy, str) and existing_policy:
+            return existing_policy
+
+        inferred_policy = self.infer_legacy_listing_pricing_policy(listing)
+        patch = self.build_listing_pricing_metadata(
+            policy=inferred_policy,
+            module=listing.module,
+            category=listing.category,
+        )
+        patch["_pricing_backfill"] = {
+            "source": "lazy_legacy_fallback",
+            "policy": inferred_policy,
+        }
+        listing.meta_json = self.merge_listing_metadata(listing.meta_json, patch)
+        await self.db.flush()
+        return inferred_policy
+
+    async def evaluate_private_trial_verification_gate(self, user_id: str) -> dict[str, Any]:
+        profile = await self.get_user_profile(user_id)
+        email_verified = getattr(profile, "email_verified", None) if profile else None
+        phone_verified = getattr(profile, "phone_verified", None) if profile else None
+        email_enforcement_ready = email_verified is not None
+        phone_enforcement_ready = phone_verified is not None
+        if email_enforcement_ready and email_verified is False:
+            return {
+                "can_activate": False,
+                "block_reason": "email_verification_required",
+                "email_required": True,
+                "email_verified": False,
+                "email_enforcement_ready": True,
+                "phone_required": True,
+                "phone_verified": phone_verified,
+                "phone_enforcement_ready": phone_enforcement_ready,
+                "deferred_checks": [] if phone_enforcement_ready else ["phone_verification_not_persisted"],
+            }
+        if phone_enforcement_ready and phone_verified is False:
+            return {
+                "can_activate": False,
+                "block_reason": "phone_verification_required",
+                "email_required": True,
+                "email_verified": email_verified,
+                "email_enforcement_ready": email_enforcement_ready,
+                "phone_required": True,
+                "phone_verified": False,
+                "phone_enforcement_ready": True,
+                "deferred_checks": [] if email_enforcement_ready else ["email_verification_not_persisted"],
+            }
+        deferred_checks: list[str] = []
+        if not email_enforcement_ready:
+            deferred_checks.append("email_verification_not_persisted")
+        if not phone_enforcement_ready:
+            deferred_checks.append("phone_verification_not_persisted")
+        return {
+            "can_activate": True,
+            "block_reason": None,
+            "email_required": True,
+            "email_verified": email_verified,
+            "email_enforcement_ready": email_enforcement_ready,
+            "phone_required": True,
+            "phone_verified": phone_verified,
+            "phone_enforcement_ready": phone_enforcement_ready,
+            "deferred_checks": deferred_checks,
+        }
+
     async def get_user_profile(self, user_id: str) -> UserProfile | None:
         result = await self.db.execute(select(UserProfile).where(UserProfile.user_id == user_id))
         return result.scalar_one_or_none()
@@ -192,21 +435,22 @@ class MonetizationService:
         result = await self.db.execute(
             select(BillingSubscription).where(
                 BillingSubscription.business_profile_id == business_id,
-                BillingSubscription.status == "active",
+                BillingSubscription.status.in_(list(SUBSCRIPTION_ACTIVE_STATUSES)),
                 or_(BillingSubscription.current_period_end.is_(None), BillingSubscription.current_period_end > now),
             )
             .order_by(BillingSubscription.current_period_end.desc().nullslast(), BillingSubscription.id.desc())
         )
         return result.scalars().first()
 
-    async def _has_free_listing_history(self, user_id: str) -> bool:
-        count = await self.db.scalar(
-            select(func.count(Listings.id)).where(
-                Listings.user_id == user_id,
-                Listings.pricing_tier == LISTING_PRICING_FREE,
-            )
+    async def _has_private_trial_history(self, user_id: str) -> bool:
+        result = await self.db.execute(
+            select(Listings.meta_json).where(Listings.user_id == user_id)
         )
-        return bool(count)
+        for raw_meta in result.scalars().all():
+            meta = self._parse_metadata(raw_meta)
+            if meta.get("_pricing_policy") == LISTING_POLICY_PRIVATE_TRIAL:
+                return True
+        return False
 
     async def _active_business_listing_count(self, business_slug: str) -> int:
         count = await self.db.scalar(
@@ -223,29 +467,24 @@ class MonetizationService:
         count = await self.db.scalar(
             select(func.count(BillingPayment.id)).where(
                 BillingPayment.listing_id == listing_id,
-                BillingPayment.product_code == PRIVATE_BASIC_PRODUCT_CODE,
+                BillingPayment.product_code.in_(
+                    [
+                        PRIVATE_NEXT_PRODUCT_CODE,
+                        PRIVATE_EXTENSION_PRODUCT_CODE,
+                        "listing_basic",
+                    ]
+                ),
                 BillingPayment.status == "paid",
                 or_(BillingPayment.period_end.is_(None), BillingPayment.period_end > now),
             )
         )
         return bool(count)
 
-    async def _is_first_free_listing(self, user_id: str, listing_id: int) -> bool:
-        result = await self.db.execute(
-            select(Listings.id)
-            .where(
-                Listings.user_id == user_id,
-                Listings.pricing_tier == LISTING_PRICING_FREE,
-            )
-            .order_by(Listings.created_at.asc(), Listings.id.asc())
-            .limit(1)
-        )
-        first_listing_id = result.scalar_one_or_none()
-        return first_listing_id == listing_id
-
     async def resolve_listing_creation(
         self,
         user_id: str,
+        module: str,
+        category: str,
         owner_type: str,
         owner_id: str,
         requested_pricing_tier: str | None,
@@ -280,48 +519,92 @@ class MonetizationService:
                 visibility=LISTING_VISIBILITY_STANDARD,
                 expires_at=subscription.current_period_end,
                 ranking_score=int(product.get("priority_rank") or 0),
+                pricing_policy=LISTING_POLICY_BUSINESS,
+                metadata_patch=self.build_listing_pricing_metadata(
+                    policy=LISTING_POLICY_BUSINESS,
+                    module=module,
+                    category=category,
+                ),
                 subscription_id=subscription.id,
+            )
+
+        if self.is_always_free_listing(module, category):
+            return ListingCreationDecision(
+                pricing_tier=LISTING_PRICING_FREE,
+                visibility=LISTING_VISIBILITY_STANDARD,
+                expires_at=now + timedelta(days=30),
+                ranking_score=0,
+                pricing_policy=LISTING_POLICY_ALWAYS_FREE,
+                metadata_patch=self.build_listing_pricing_metadata(
+                    policy=LISTING_POLICY_ALWAYS_FREE,
+                    module=module,
+                    category=category,
+                ),
             )
 
         desired_tier = requested_pricing_tier or LISTING_PRICING_FREE
         if desired_tier == LISTING_PRICING_FREE:
-            if await self._has_free_listing_history(user_id):
+            verification_gate = await self.evaluate_private_trial_verification_gate(user_id)
+            if not verification_gate["can_activate"]:
+                raise ValueError(
+                    "Complete the required verification checks before activating the first private trial."
+                )
+            if await self._has_private_trial_history(user_id):
                 raise PaymentRequiredError(
-                    "Choose Basic to keep publishing.",
-                    PRIVATE_BASIC_PRODUCT_CODE,
-                    "free_listing_already_used",
+                    "Your first 7-day private trial is already used. Publish the next listing for 30 days.",
+                    PRIVATE_NEXT_PRODUCT_CODE,
+                    "private_trial_already_used",
                 )
             return ListingCreationDecision(
                 pricing_tier=LISTING_PRICING_FREE,
                 visibility=LISTING_VISIBILITY_STANDARD,
-                expires_at=now + timedelta(days=3),
+                expires_at=now + timedelta(days=7),
                 ranking_score=0,
+                pricing_policy=LISTING_POLICY_PRIVATE_TRIAL,
+                metadata_patch=self.build_listing_pricing_metadata(
+                    policy=LISTING_POLICY_PRIVATE_TRIAL,
+                    module=module,
+                    category=category,
+                    requires_email_verification=True,
+                    requires_phone_verification=True,
+                )
+                | {"_verification_gate": verification_gate},
             )
 
         return ListingCreationDecision(
             pricing_tier=LISTING_PRICING_BASIC,
             visibility=LISTING_VISIBILITY_STANDARD,
-            expires_at=now + timedelta(days=7),
+            expires_at=now + timedelta(days=30),
             ranking_score=0,
-            required_product_code=PRIVATE_BASIC_PRODUCT_CODE,
+            pricing_policy=LISTING_POLICY_PRIVATE_PAID,
+            metadata_patch=self.build_listing_pricing_metadata(
+                policy=LISTING_POLICY_PRIVATE_PAID,
+                module=module,
+                category=category,
+            ),
+            required_product_code=PRIVATE_NEXT_PRODUCT_CODE,
             paywall_reason="private_paid_required",
         )
 
     async def assert_listing_submission_allowed(self, listing: Listings) -> None:
-        if listing.pricing_tier == LISTING_PRICING_FREE:
-            if not await self._is_first_free_listing(listing.user_id, listing.id):
-                raise PaymentRequiredError(
-                    "Choose Basic to keep publishing.",
-                    PRIVATE_BASIC_PRODUCT_CODE,
-                    "free_listing_already_used",
-                    listing_id=listing.id,
-                )
+        pricing_policy = await self.ensure_listing_pricing_metadata(listing)
+        if pricing_policy == LISTING_POLICY_ALWAYS_FREE:
             return
+        if pricing_policy == LISTING_POLICY_PRIVATE_TRIAL:
+            trial_expires_at = listing.created_at + timedelta(days=7)
+            if trial_expires_at > self._now():
+                return
+            raise PaymentRequiredError(
+                "Pay €3.99 to complete the 30-day period for this listing.",
+                PRIVATE_EXTENSION_PRODUCT_CODE,
+                "private_trial_extension_required",
+                listing_id=listing.id,
+            )
         if listing.pricing_tier == LISTING_PRICING_BASIC:
             if not await self.has_paid_listing_access(listing.id):
                 raise PaymentRequiredError(
                     "Complete payment to publish this listing.",
-                    PRIVATE_BASIC_PRODUCT_CODE,
+                    PRIVATE_NEXT_PRODUCT_CODE,
                     "payment_required_for_basic_listing",
                     listing_id=listing.id,
                 )
@@ -375,7 +658,7 @@ class MonetizationService:
                 if subscription:
                     product = PRODUCT_CATALOG[BUSINESS_PLAN_PRODUCT_MAP.get(subscription.plan_code, BUSINESS_GROWTH_PRODUCT_CODE)]
                     base_rank = int(product.get("priority_rank") or 0)
-                    if subscription.plan_code == "pro" and "featured" not in badges:
+                    if subscription.plan_code in {"pro", "agency_pro"} and "featured" not in badges:
                         badges.append("featured")
         else:
             badges = [badge for badge in badges if badge != "featured"]

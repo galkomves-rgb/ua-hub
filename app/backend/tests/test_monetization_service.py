@@ -33,16 +33,19 @@ async def create_listing(
     db_session,
     *,
     user_id: str,
+    module: str = "services",
+    category: str = "services",
     owner_type: str = "private_user",
     owner_id: str | None = None,
     pricing_tier: str = "free",
     status: str = "draft",
     title: str = "Listing title",
+    meta_json: str = "{}",
 ):
     listing = await ListingsService(db_session).create_listing(
         user_id=user_id,
-        module="services",
-        category="services",
+        module=module,
+        category=category,
         title=title,
         description="Long enough description",
         city="Madrid",
@@ -57,7 +60,7 @@ async def create_listing(
         subcategory=None,
         region=None,
         images_json="[]",
-        meta_json="{}",
+        meta_json=meta_json,
     )
     listing.status = status
     await db_session.commit()
@@ -66,33 +69,86 @@ async def create_listing(
 
 
 @pytest.mark.asyncio
-async def test_second_free_listing_requires_paid_fallback_on_submit(db_session):
-    first_listing = await create_listing(db_session, user_id="user-1", pricing_tier="free", title="First")
-    second_listing = await create_listing(db_session, user_id="user-1", pricing_tier="free", title="Second")
+async def test_first_private_trial_is_granted_once_per_account(db_session):
+    service = MonetizationService(db_session)
 
-    service = ListingsService(db_session)
+    first_decision = await service.resolve_listing_creation(
+        "user-1",
+        "services",
+        "services",
+        "private_user",
+        "user-1",
+        "free",
+    )
 
-    submitted_first = await service.submit_listing(first_listing.id)
-    assert submitted_first is not None
-    assert submitted_first.status == "moderation_pending"
+    assert first_decision.pricing_tier == "free"
+    assert first_decision.pricing_policy == "private_trial"
+    assert first_decision.metadata_patch is not None
+    assert first_decision.metadata_patch["_pricing_policy"] == "private_trial"
+    assert first_decision.metadata_patch["_verification_hooks"] == {
+        "email_required": True,
+        "phone_required": True,
+        "phone_enforcement_ready": False,
+    }
+
+    await create_listing(
+        db_session,
+        user_id="user-1",
+        pricing_tier="free",
+        title="Trial listing",
+        meta_json=MonetizationService.merge_listing_metadata(None, first_decision.metadata_patch),
+    )
 
     with pytest.raises(PaymentRequiredError) as exc_info:
-        await service.submit_listing(second_listing.id)
+        await service.resolve_listing_creation(
+            "user-1",
+            "services",
+            "services",
+            "private_user",
+            "user-1",
+            "free",
+        )
 
-    assert exc_info.value.product_code == "listing_basic"
-    assert exc_info.value.paywall_reason == "free_listing_already_used"
-    assert exc_info.value.listing_id == second_listing.id
+    assert exc_info.value.product_code == "next_private_listing_30"
+    assert exc_info.value.paywall_reason == "private_trial_already_used"
+
+
+@pytest.mark.asyncio
+async def test_private_trial_verification_gate_is_explicitly_deferred_without_persisted_state(db_session):
+    gate = await MonetizationService(db_session).evaluate_private_trial_verification_gate("user-1")
+
+    assert gate["can_activate"] is True
+    assert gate["email_required"] is True
+    assert gate["phone_required"] is True
+    assert gate["email_enforcement_ready"] is False
+    assert gate["phone_enforcement_ready"] is False
+    assert gate["deferred_checks"] == [
+        "email_verification_not_persisted",
+        "phone_verification_not_persisted",
+    ]
 
 
 @pytest.mark.asyncio
 async def test_basic_listing_requires_payment_before_submit(db_session):
-    listing = await create_listing(db_session, user_id="user-1", pricing_tier="basic")
+    listing = await create_listing(
+        db_session,
+        user_id="user-1",
+        pricing_tier="basic",
+        meta_json=MonetizationService.merge_listing_metadata(
+            None,
+            MonetizationService.build_listing_pricing_metadata(
+                policy="private_paid",
+                module="services",
+                category="services",
+            ),
+        ),
+    )
     service = ListingsService(db_session)
 
     with pytest.raises(PaymentRequiredError) as exc_info:
         await service.submit_listing(listing.id)
 
-    assert exc_info.value.product_code == "listing_basic"
+    assert exc_info.value.product_code == "next_private_listing_30"
     assert exc_info.value.paywall_reason == "payment_required_for_basic_listing"
 
     now = datetime.now(timezone.utc)
@@ -101,17 +157,17 @@ async def test_basic_listing_requires_payment_before_submit(db_session):
             user_id="user-1",
             listing_id=listing.id,
             provider="stripe",
-            product_code="listing_basic",
+            product_code="next_private_listing_30",
             product_type="listing_purchase",
             target_type="listing",
-            title="Basic listing",
+            title="Next private listing for 30 days",
             status="paid",
             entitlement_status="active",
-            amount_total=Decimal("1.99"),
+            amount_total=Decimal("4.99"),
             currency="eur",
             checkout_mode="payment",
             period_start=now,
-            period_end=now + timedelta(days=7),
+            period_end=now + timedelta(days=30),
             paid_at=now,
             metadata_json="{}",
         )
@@ -121,6 +177,68 @@ async def test_basic_listing_requires_payment_before_submit(db_session):
     submitted = await service.submit_listing(listing.id)
     assert submitted is not None
     assert submitted.status == "moderation_pending"
+
+
+@pytest.mark.asyncio
+async def test_private_trial_requires_extension_payment_after_day_seven(db_session):
+    listing = await create_listing(
+        db_session,
+        user_id="user-1",
+        pricing_tier="free",
+        meta_json=MonetizationService.merge_listing_metadata(
+            None,
+            MonetizationService.build_listing_pricing_metadata(
+                policy="private_trial",
+                module="services",
+                category="services",
+                requires_email_verification=True,
+                requires_phone_verification=True,
+            ),
+        ),
+    )
+    listing.created_at = datetime.now(timezone.utc) - timedelta(days=8)
+    await db_session.commit()
+
+    with pytest.raises(PaymentRequiredError) as exc_info:
+        await ListingsService(db_session).submit_listing(listing.id)
+
+    assert exc_info.value.product_code == "listing_extend_30"
+    assert exc_info.value.paywall_reason == "private_trial_extension_required"
+    assert exc_info.value.listing_id == listing.id
+
+
+@pytest.mark.asyncio
+async def test_always_free_categories_bypass_private_paid_logic(db_session):
+    decision = await MonetizationService(db_session).resolve_listing_creation(
+        "user-1",
+        "jobs",
+        "job-seekers",
+        "private_user",
+        "user-1",
+        "free",
+    )
+
+    assert decision.pricing_tier == "free"
+    assert decision.pricing_policy == "always_free"
+    assert decision.required_product_code is None
+
+
+@pytest.mark.asyncio
+async def test_legacy_private_listing_backfill_marks_live_non_free_listing_as_private_paid(db_session):
+    listing = await create_listing(
+        db_session,
+        user_id="user-1",
+        pricing_tier="free",
+        status="published",
+        meta_json="{}",
+    )
+
+    inferred_policy = await MonetizationService(db_session).ensure_listing_pricing_metadata(listing)
+
+    assert inferred_policy == "private_paid"
+    meta = MonetizationService._parse_metadata(listing.meta_json)
+    assert meta["_pricing_policy"] == "private_paid"
+    assert meta["_pricing_backfill"]["source"] == "lazy_legacy_fallback"
 
 
 @pytest.mark.asyncio
@@ -162,7 +280,7 @@ async def test_business_listing_requires_active_subscription(db_session):
     with pytest.raises(PaymentRequiredError) as exc_info:
         await ListingsService(db_session).submit_listing(listing.id)
 
-    assert exc_info.value.product_code == "business_growth"
+    assert exc_info.value.product_code == "business_priority"
     assert exc_info.value.paywall_reason == "business_without_subscription"
 
 
@@ -197,7 +315,7 @@ async def test_business_listing_quota_is_enforced_on_submit(db_session):
         BillingSubscription(
             user_id="business-user",
             business_profile_id=business.id,
-            plan_code="starter",
+            plan_code="business_presence",
             status="active",
             provider="stripe",
             billing_cycle="monthly",
@@ -262,6 +380,47 @@ async def test_expire_due_entities_clears_boost_state(db_session):
     assert refreshed_listing.is_promoted is False
     assert refreshed_listing.is_featured is False
     assert refreshed_listing.ranking_score == 0
+
+
+@pytest.mark.asyncio
+async def test_has_paid_listing_access_accepts_trial_extension_payment(db_session):
+    listing = await create_listing(
+        db_session,
+        user_id="user-1",
+        pricing_tier="basic",
+        meta_json=MonetizationService.merge_listing_metadata(
+            None,
+            MonetizationService.build_listing_pricing_metadata(
+                policy="private_paid",
+                module="services",
+                category="services",
+            ),
+        ),
+    )
+    now = datetime.now(timezone.utc)
+    db_session.add(
+        BillingPayment(
+            user_id="user-1",
+            listing_id=listing.id,
+            provider="stripe",
+            product_code="listing_extend_30",
+            product_type="listing_purchase",
+            target_type="listing",
+            title="Complete 30 days",
+            status="paid",
+            entitlement_status="active",
+            amount_total=Decimal("3.99"),
+            currency="eur",
+            checkout_mode="payment",
+            period_start=now,
+            period_end=now + timedelta(days=30),
+            paid_at=now,
+            metadata_json="{}",
+        )
+    )
+    await db_session.commit()
+
+    assert await MonetizationService(db_session).has_paid_listing_access(listing.id) is True
 
 
 @pytest.mark.asyncio

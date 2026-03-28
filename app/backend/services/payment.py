@@ -17,6 +17,7 @@ class CheckoutSessionRequest(BaseModel):
     stripe_price_id: Optional[str] = Field(
         None, description="The Stripe Price ID to use for the payment or subscription"
     )
+    trial_days: Optional[int] = Field(None, description="Trial days for subscription checkout")
     quantity: int = Field(1, description="The quantity of items to purchase")
     mode: Literal["payment", "subscription"] = Field("payment", description="Checkout mode")
     ui_mode: Literal["hosted", "embedded"] = Field("hosted", description="Checkout UI mode")
@@ -42,6 +43,13 @@ class CheckoutSessionRequest(BaseModel):
     def validate_quantity(cls, v):
         if v < 1:
             raise ValueError("Quantity must be greater than 0")
+        return v
+
+    @field_validator("trial_days")
+    @classmethod
+    def validate_trial_days(cls, v):
+        if v is not None and v < 0:
+            raise ValueError("trial_days must be greater than or equal to 0")
         return v
 
     @model_validator(mode="after")
@@ -269,6 +277,14 @@ class PaymentService:
             else:
                 params["success_url"] = request.success_url
                 params["cancel_url"] = request.cancel_url
+
+                if request.mode == "subscription":
+                    subscription_data: Dict[str, object] = {
+                        "metadata": request.metadata or {},
+                    }
+                    if request.trial_days:
+                        subscription_data["trial_period_days"] = request.trial_days
+                    params["subscription_data"] = subscription_data
 
             creation_kwargs = {}
             if request.idempotency_key:

@@ -397,7 +397,7 @@ async function mockAccountApi(page: Page, options: MockOptions = {}) {
           {
             detail: {
               message: "Complete payment to publish this listing.",
-              required_product_code: "listing_basic",
+              required_product_code: "next_private_listing_30",
               paywall_reason: "payment_required_for_basic_listing",
               listing_id: listingId,
             },
@@ -431,28 +431,32 @@ async function mockAccountApi(page: Page, options: MockOptions = {}) {
         },
         available_products: [
           {
-            code: "listing_basic",
-            title: "Basic listing",
-            description: "Publish one paid listing.",
+            code: "next_private_listing_30",
+            title: "Next private listing for 30 days",
+            description: "Every new paid private listing after the first trial costs €4.99 for 30 days.",
             category: "listing_purchase",
             target_type: "listing",
-            amount: 1.99,
+            amount: 4.99,
             currency: "EUR",
             duration_days: 30,
             listing_quota: null,
             is_recurring: false,
+            billing_mode: "payment",
+            trial_days: null,
           },
           {
-            code: "promotion_boost",
-            title: "Boost listing",
-            description: "Increase listing visibility.",
-            category: "promotion",
+            code: "boost",
+            title: "Boost",
+            description: "Temporarily pushes an active paid private listing higher in the feed for 3 days.",
+            category: "listing_promotion",
             target_type: "listing",
-            amount: 4.99,
+            amount: 2.99,
             currency: "EUR",
-            duration_days: 7,
+            duration_days: 3,
             listing_quota: null,
             is_recurring: false,
+            billing_mode: "payment",
+            trial_days: null,
           },
         ],
       });
@@ -774,7 +778,7 @@ test("routes submit paywalls to billing with product and listing context", async
   const listingRow = page.locator("article").filter({ hasText: "Rejected translator profile" });
   await listingRow.getByRole("button", { name: "Submit again" }).click();
 
-  await expect(page).toHaveURL(/\/account\?(?=.*tab=billing)(?=.*product=listing_basic)(?=.*listingId=104)/);
+  await expect(page).toHaveURL(/\/account\?(?=.*tab=billing)(?=.*product=next_private_listing_30)(?=.*listingId=104)/);
   await expect(page.getByRole("heading", { name: "Billing" })).toBeVisible();
   await expect(page.locator('label:has-text("Listing") + select')).toBeVisible();
 });

@@ -14,6 +14,8 @@ class BillingProductResponse(BaseModel):
     duration_days: int | None = None
     listing_quota: int | None = None
     is_recurring: bool = False
+    billing_mode: str = "payment"
+    trial_days: int | None = None
 
 
 class BillingSubscriptionSummaryResponse(BaseModel):

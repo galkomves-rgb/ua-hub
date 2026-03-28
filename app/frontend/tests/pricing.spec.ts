@@ -1,4 +1,4 @@
-import { expect, test, type Route } from "@playwright/test";
+import { expect, test, type Page, type Route } from "@playwright/test";
 
 function json(route: Route, payload: unknown, status = 200) {
   return route.fulfill({
@@ -8,39 +8,63 @@ function json(route: Route, payload: unknown, status = 200) {
   });
 }
 
-test("pricing page renders backend product catalog values instead of hardcoded frontend prices", async ({ page }) => {
-  await page.addInitScript(() => {
-    window.localStorage.setItem("uahab-locale", "en");
-    window.localStorage.removeItem("auth_token");
-  });
-
+async function openPricing(page: Page, locale: "ua" | "en" | "es") {
   await page.route("**/api/config", async (route) => {
     await json(route, { API_BASE_URL: "http://127.0.0.1:8000" });
   });
 
-  await page.route("**/api/v1/billing/products", async (route) => {
-    await json(route, [
-      { code: "listing_free", title: "Free", description: "Go live for 5 days.", category: "listing_trial", target_type: "listing", amount: 0, currency: "eur", duration_days: 5, listing_quota: 1, is_recurring: false },
-      { code: "listing_basic", title: "Basic listing", description: "Stay live for 11 days.", category: "listing_purchase", target_type: "listing", amount: 3.49, currency: "eur", duration_days: 11, listing_quota: null, is_recurring: false },
-      { code: "promotion_boost", title: "Boost", description: "Your listing appears first for 4 days.", category: "listing_promotion", target_type: "listing", amount: 7.25, currency: "eur", duration_days: 4, listing_quota: null, is_recurring: false },
-      { code: "promotion_featured", title: "Featured", description: "Show at the top for 9 days.", category: "listing_promotion", target_type: "listing", amount: 12.5, currency: "eur", duration_days: 9, listing_quota: null, is_recurring: false },
-      { code: "business_starter", title: "Starter", description: "Publish up to 6 listings.", category: "business_subscription", target_type: "business_profile", amount: 15, currency: "eur", duration_days: 30, listing_quota: 6, is_recurring: true },
-      { code: "business_growth", title: "Growth", description: "Priority placement for up to 33 listings.", category: "business_subscription", target_type: "business_profile", amount: 31, currency: "eur", duration_days: 30, listing_quota: 33, is_recurring: true },
-      { code: "business_pro", title: "Pro", description: "Unlimited publishing with top visibility.", category: "business_subscription", target_type: "business_profile", amount: 77, currency: "eur", duration_days: 30, listing_quota: null, is_recurring: true },
-    ]);
-  });
-
+  await page.addInitScript((selectedLocale) => {
+    window.localStorage.setItem("uahab-locale", selectedLocale);
+    window.localStorage.removeItem("auth_token");
+  }, locale);
   await page.goto("/pricing");
+}
 
-  await expect(page.getByRole("heading", { name: "Pricing" })).toBeVisible();
-  await expect(page.getByText("Go live for 5 days.")).toBeVisible();
-  await expect(page.getByText("€3.49")).toBeVisible();
-  await expect(page.getByText("€7.25")).toBeVisible();
-  await expect(page.getByText("€12.50")).toBeVisible();
+test("pricing page renders all three launch segments and individuals pricing logic", async ({ page }) => {
+  await openPricing(page, "en");
 
-  await page.getByRole("button", { name: "Business" }).click();
-  await expect(page.getByText("€31")).toBeVisible();
-  await expect(page.getByText("Publish up to 6 listings.")).toBeVisible();
-  await expect(page.getByText("Priority placement for up to 33 listings.")).toBeVisible();
-  await expect(page.getByText("€77")).toBeVisible();
+  await expect(page.getByRole("button", { name: "For individuals" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "For professionals & business" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "For agencies" })).toBeVisible();
+
+  await expect(page.getByRole("heading", { name: "Always free" })).toBeVisible();
+  await expect(page.getByText("7 days free", { exact: true })).toBeVisible();
+  await expect(page.getByText("Then €3.99 to complete the 30-day period", { exact: true })).toBeVisible();
+  await expect(page.getByText("Next listings €4.99 / 30 days", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Boost", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Featured", exact: true })).toBeVisible();
+});
+
+test("pricing page shows exactly two business plans and three agency plans", async ({ page }) => {
+  await openPricing(page, "en");
+
+  await page.getByRole("button", { name: "For professionals & business" }).click();
+  await expect(page.getByRole("heading", { name: "Business Presence" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Business Priority" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Business Presence" })).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "Business Priority" })).toHaveCount(1);
+
+  await page.getByRole("button", { name: "For agencies" }).click();
+  await expect(page.getByRole("heading", { name: "Agency Starter" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Agency Growth" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Agency Pro" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Agency Starter" })).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "Agency Growth" })).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "Agency Pro" })).toHaveCount(1);
+});
+
+test("pricing page major copy follows the selected locale without mixed-language fragments", async ({ page }) => {
+  await openPricing(page, "ua");
+  await expect(page.getByRole("button", { name: "Для людей" })).toBeVisible();
+  await expect(page.getByText("Завжди безкоштовно")).toBeVisible();
+  await expect(page.getByText("7 днів безкоштовно", { exact: true })).toBeVisible();
+  await expect(page.getByText("Потім €3.99 до завершення 30 днів", { exact: true })).toBeVisible();
+  await expect(page.getByText("Next listings €4.99 / 30 days")).toHaveCount(0);
+
+  await openPricing(page, "es");
+  await expect(page.getByRole("button", { name: "Para personas" })).toBeVisible();
+  await expect(page.getByText("Siempre gratis")).toBeVisible();
+  await expect(page.getByText("7 días gratis", { exact: true })).toBeVisible();
+  await expect(page.getByText("Después €3.99 para completar los 30 días", { exact: true })).toBeVisible();
+  await expect(page.getByText("7 days free")).toHaveCount(0);
 });

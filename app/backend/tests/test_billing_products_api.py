@@ -55,29 +55,43 @@ async def test_public_billing_products_expose_backend_catalog(api_client: AsyncC
     body = response.json()
     codes = [item["code"] for item in body]
 
-    assert codes[:4] == [
+    assert codes[:5] == [
         "listing_free",
-        "listing_basic",
-        "promotion_boost",
-        "promotion_featured",
+        "listing_extend_30",
+        "next_private_listing_30",
+        "boost",
+        "featured",
     ]
-    assert "business_growth" in codes
+    assert "business_priority" in codes
+    assert "agency_starter" in codes
 
     free_listing = next(item for item in body if item["code"] == "listing_free")
     assert free_listing == {
         "code": "listing_free",
-        "title": "Free",
-        "description": "Go live for 3 days.",
+        "title": "First private listing trial",
+        "description": "Go live for 7 days for the first paid-type private listing.",
         "category": "listing_trial",
         "target_type": "listing",
         "amount": 0.0,
         "currency": "eur",
-        "duration_days": 3,
+        "duration_days": 7,
         "listing_quota": 1,
         "is_recurring": False,
+        "billing_mode": "free",
+        "trial_days": 7,
     }
 
-    growth_plan = next(item for item in body if item["code"] == "business_growth")
-    assert growth_plan["amount"] == 24.0
-    assert growth_plan["listing_quota"] == 20
+    growth_plan = next(item for item in body if item["code"] == "business_priority")
+    assert growth_plan["amount"] == 19.99
+    assert growth_plan["listing_quota"] == 1
     assert growth_plan["is_recurring"] is True
+    assert growth_plan["billing_mode"] == "subscription"
+    assert growth_plan["trial_days"] == 14
+
+    extension_product = next(item for item in body if item["code"] == "listing_extend_30")
+    assert extension_product["billing_mode"] == "payment"
+    assert extension_product["is_recurring"] is False
+
+    featured_product = next(item for item in body if item["code"] == "featured")
+    assert featured_product["billing_mode"] == "payment"
+    assert featured_product["is_recurring"] is False

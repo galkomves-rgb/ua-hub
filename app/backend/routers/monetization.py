@@ -24,9 +24,12 @@ from services.listings_service import ListingsService
 from services.monetization import (
     BUSINESS_PLAN_PRODUCT_MAP,
     MonetizationService,
+    PRIVATE_EXTENSION_PRODUCT_CODE,
     PROMOTION_PRODUCT_MAP,
     PaymentRequiredError,
-    PRIVATE_BASIC_PRODUCT_CODE,
+    PRIVATE_NEXT_PRODUCT_CODE,
+    LISTING_POLICY_BUSINESS,
+    LISTING_POLICY_PRIVATE_PAID,
 )
 from schemas.auth import UserResponse
 
@@ -46,10 +49,13 @@ async def create_listing_with_monetization(
     try:
         decision = await monetization.resolve_listing_creation(
             user_id=user_id,
+            module=payload.module,
+            category=payload.category,
             owner_type=payload.owner_type,
             owner_id=payload.owner_id,
             requested_pricing_tier=payload.pricing_tier,
         )
+        listing_meta_json = monetization.merge_listing_metadata(payload.meta_json, decision.metadata_patch)
         listing = await listings.create_listing(
             user_id=user_id,
             module=payload.module,
@@ -68,7 +74,7 @@ async def create_listing_with_monetization(
             ranking_score=decision.ranking_score,
             expiry_date=decision.expires_at,
             images_json=payload.images_json,
-            meta_json=payload.meta_json,
+            meta_json=listing_meta_json,
         )
         return {
             "listing": listing,
@@ -77,6 +83,15 @@ async def create_listing_with_monetization(
             "message": None,
         }
     except PaymentRequiredError as exc:
+        is_private_listing_paywall = exc.product_code in {PRIVATE_NEXT_PRODUCT_CODE, PRIVATE_EXTENSION_PRODUCT_CODE, "listing_basic"}
+        listing_meta_json = monetization.merge_listing_metadata(
+            payload.meta_json,
+            monetization.build_listing_pricing_metadata(
+                policy=LISTING_POLICY_PRIVATE_PAID if is_private_listing_paywall else LISTING_POLICY_BUSINESS,
+                module=payload.module,
+                category=payload.category,
+            ),
+        )
         listing = await listings.create_listing(
             user_id=user_id,
             module=payload.module,
@@ -90,12 +105,12 @@ async def create_listing_with_monetization(
             region=payload.region,
             owner_type=payload.owner_type,
             owner_id=payload.owner_id,
-            pricing_tier="basic" if exc.product_code == PRIVATE_BASIC_PRODUCT_CODE else "business",
+            pricing_tier="basic" if is_private_listing_paywall else "business",
             visibility="standard",
             ranking_score=0,
             expiry_date=None,
             images_json=payload.images_json,
-            meta_json=payload.meta_json,
+            meta_json=listing_meta_json,
         )
         raise HTTPException(
             status_code=402,
@@ -121,10 +136,10 @@ async def extend_listing(
     listing = await listings.get_listing(payload.listing_id)
     if not listing or listing.user_id != user_id:
         raise HTTPException(status_code=404, detail="Listing not found")
-    if listing.pricing_tier != "basic":
-        raise HTTPException(status_code=400, detail="Only Basic listings can be extended")
-    checkout = await billing.create_checkout_session(user_id=user_id, product_code=PRIVATE_BASIC_PRODUCT_CODE, listing_id=listing.id)
-    return {**checkout, "type": PRIVATE_BASIC_PRODUCT_CODE}
+    if listing.pricing_tier not in {"free", "basic"}:
+        raise HTTPException(status_code=400, detail="Only private listings can be extended")
+    checkout = await billing.create_checkout_session(user_id=user_id, product_code=PRIVATE_EXTENSION_PRODUCT_CODE, listing_id=listing.id)
+    return {**checkout, "type": PRIVATE_EXTENSION_PRODUCT_CODE}
 
 
 @router.get("/listings/my", response_model=list[ListingSummaryResponse])
@@ -189,6 +204,7 @@ async def create_payment(
     db: AsyncSession = Depends(get_db_session),
 ):
     billing = BillingService(db)
+    normalized_type = MonetizationService.normalize_product_code(payload.type)
     checkout = await billing.create_checkout_session(
         user_id=user_id,
         product_code=payload.type,
@@ -197,7 +213,7 @@ async def create_payment(
         success_url=payload.success_url,
         cancel_url=payload.cancel_url,
     )
-    return {**checkout, "type": payload.type}
+    return {**checkout, "type": normalized_type}
 
 
 @router.post("/payments/confirm", response_model=PaymentConfirmResponse)

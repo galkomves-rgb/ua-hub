@@ -55,6 +55,7 @@ class BillingSubscription(Base):
     plan_code = Column(String, nullable=False, index=True)
     status = Column(String, nullable=False, default="active", index=True)
     provider = Column(String, nullable=False, default="stripe")
+    stripe_subscription_id = Column(String, nullable=True, unique=True, index=True)
     billing_cycle = Column(String, nullable=False, default="monthly")
     current_period_start = Column(DateTime(timezone=True), nullable=True)
     current_period_end = Column(DateTime(timezone=True), nullable=True)
@@ -96,4 +97,18 @@ class BillingAuditLog(Base):
     to_status = Column(String, nullable=True)
     notes = Column(Text, nullable=True)
     metadata_json = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class BillingWebhookEvent(Base):
+    __tablename__ = "billing_webhook_events"
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True, nullable=False)
+    provider = Column(String, nullable=False, default="stripe")
+    event_id = Column(String, nullable=False, unique=True, index=True)
+    event_type = Column(String, nullable=False, index=True)
+    object_id = Column(String, nullable=True, index=True)
+    status = Column(String, nullable=False, default="processing", index=True)
+    payload_json = Column(Text, nullable=True)
+    processed_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

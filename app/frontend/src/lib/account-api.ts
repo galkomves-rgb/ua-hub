@@ -78,6 +78,8 @@ export interface BillingProduct {
   duration_days: number | null;
   listing_quota: number | null;
   is_recurring: boolean;
+  billing_mode: "free" | "payment" | "subscription";
+  trial_days: number | null;
 }
 
 export interface BillingSubscriptionSummary {
@@ -439,7 +441,7 @@ export interface ListingUpdatePayload {
 export interface SubscriptionCurrentResponse {
   profile_type: "private" | "business";
   has_active_subscription: boolean;
-  plan: "starter" | "growth" | "pro" | null;
+  plan: "business_presence" | "business_priority" | "agency_starter" | "agency_growth" | "agency_pro" | null;
   status: string | null;
   expires_at: string | null;
   listing_quota: number | null;
@@ -450,12 +452,15 @@ export interface SubscriptionCurrentResponse {
 
 export type BillingProductCode =
   | "listing_free"
-  | "listing_basic"
-  | "promotion_boost"
-  | "promotion_featured"
-  | "business_starter"
-  | "business_growth"
-  | "business_pro";
+  | "listing_extend_30"
+  | "next_private_listing_30"
+  | "boost"
+  | "featured"
+  | "business_presence"
+  | "business_priority"
+  | "agency_starter"
+  | "agency_growth"
+  | "agency_pro";
 
 export interface PaymentCreatePayload {
   type: BillingProductCode;

@@ -52,6 +52,51 @@ function formatMoney(amount: number, currency: string, locale: "ua" | "es" | "en
   }
 }
 
+function getProductTitleKey(code: string) {
+  return `account.billing.product.${normalizeBillingCode(code)}.title`;
+}
+
+function getProductDescriptionKey(code: string) {
+  return `account.billing.product.${normalizeBillingCode(code)}.description`;
+}
+
+function getPlanLabelKey(planCode: string | null | undefined) {
+  if (!planCode) {
+    return "account.billing.noPlan";
+  }
+  if (planCode === "starter") return "account.billing.plan.business_presence";
+  if (planCode === "growth") return "account.billing.plan.business_priority";
+  if (planCode === "pro") return "account.billing.plan.agency_starter";
+  return `account.billing.plan.${planCode}`;
+}
+
+function getPaymentStatusLabelKey(status: string) {
+  return `account.billing.status.${status}`;
+}
+
+function getEntitlementLabelKey(type: string) {
+  return `account.billing.entitlement.${type}`;
+}
+
+function normalizeBillingCode(code: string) {
+  switch (code) {
+    case "listing_basic":
+      return "next_private_listing_30";
+    case "promotion_boost":
+      return "boost";
+    case "promotion_featured":
+      return "featured";
+    case "business_starter":
+      return "business_presence";
+    case "business_growth":
+      return "business_priority";
+    case "business_pro":
+      return "agency_starter";
+    default:
+      return code;
+  }
+}
+
 function ProductCard({
   product,
   selected,
@@ -64,6 +109,8 @@ function ProductCard({
   const { theme } = useTheme();
   const { locale, t } = useI18n();
   const isDark = theme === "dark";
+  const title = t(getProductTitleKey(product.code));
+  const description = t(getProductDescriptionKey(product.code));
 
   return (
     <button
@@ -81,8 +128,8 @@ function ProductCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className={`text-base font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{product.title}</h3>
-          <p className={`mt-2 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>{product.description}</p>
+          <h3 className={`text-base font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{title}</h3>
+          <p className={`mt-2 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>{description}</p>
         </div>
         {selected ? <CheckCircle2 className={`h-5 w-5 ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`} /> : null}
       </div>
@@ -96,9 +143,19 @@ function ProductCard({
             {product.duration_days} {t("account.billing.days")}
           </span>
         ) : null}
+        {product.trial_days ? (
+          <span className={`rounded-full px-2.5 py-1 ${isDark ? "bg-[#1a2d4c] text-slate-200" : "bg-slate-100 text-slate-700"}`}>
+            {product.trial_days} {t("account.billing.trialDays")}
+          </span>
+        ) : null}
         {product.listing_quota ? (
           <span className={`rounded-full px-2.5 py-1 ${isDark ? "bg-[#1a2d4c] text-slate-200" : "bg-slate-100 text-slate-700"}`}>
             {product.listing_quota} {t("account.billing.listingsQuota")}
+          </span>
+        ) : null}
+        {product.billing_mode === "subscription" ? (
+          <span className={`rounded-full px-2.5 py-1 ${isDark ? "bg-[#1a2d4c] text-slate-200" : "bg-slate-100 text-slate-700"}`}>
+            {t("account.billing.recurring")}
           </span>
         ) : null}
       </div>
@@ -174,8 +231,9 @@ export function AccountBillingPanel() {
 
   useEffect(() => {
     const requestedProductCode = searchParams.get("product");
-    if (requestedProductCode && products.some((item) => item.code === requestedProductCode)) {
-      setSelectedProductCode(requestedProductCode);
+    const normalizedRequestedProductCode = requestedProductCode ? normalizeBillingCode(requestedProductCode) : null;
+    if (normalizedRequestedProductCode && products.some((item) => item.code === normalizedRequestedProductCode)) {
+      setSelectedProductCode(normalizedRequestedProductCode);
       return;
     }
     if (!selectedProductCode && products.length > 0) {
@@ -370,10 +428,10 @@ export function AccountBillingPanel() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <h4 className={`text-base font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{item.business_name}</h4>
-                        <p className={`mt-1 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>{item.plan_code || t("account.billing.noPlan")}</p>
+                        <p className={`mt-1 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t(getPlanLabelKey(item.plan_code))}</p>
                       </div>
                       <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${item.subscription_status === "active" ? isDark ? "bg-emerald-950/40 text-emerald-300" : "bg-emerald-50 text-emerald-700" : isDark ? "bg-slate-800 text-slate-300" : "bg-slate-100 text-slate-700"}`}>
-                        {item.subscription_status || t("account.billing.inactive")}
+                        {item.subscription_status ? t(getPaymentStatusLabelKey(item.subscription_status)) : t("account.billing.inactive")}
                       </span>
                     </div>
                     <div className={`mt-3 grid gap-2 text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>
@@ -403,7 +461,7 @@ export function AccountBillingPanel() {
                   <div key={`${item.payment_id}-${item.listing_id}`} className={`rounded-2xl border p-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
                     <h4 className={`text-base font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{item.listing_title}</h4>
                     <div className={`mt-2 grid gap-2 text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>
-                      <p>{t("account.billing.boostType")}: {item.entitlement_type}</p>
+                      <p>{t("account.billing.boostType")}: {t(getEntitlementLabelKey(item.entitlement_type))}</p>
                       <p>{t("account.billing.expiresAt")}: {formatDate(item.ends_at, locale) || t("account.billing.notAvailable")}</p>
                     </div>
                   </div>
@@ -434,13 +492,13 @@ export function AccountBillingPanel() {
             {history.map((item) => (
               <div key={item.id} className={`rounded-2xl border p-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h4 className={`text-base font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{item.title}</h4>
-                    <p className={`mt-1 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>{item.target_label || item.product_code}</p>
-                  </div>
+                        <div>
+                          <h4 className={`text-base font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{item.title}</h4>
+                          <p className={`mt-1 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>{item.target_label || t(getProductTitleKey(item.product_code))}</p>
+                        </div>
                   <div className="text-right">
                     <p className={`text-base font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{formatMoney(item.amount_total, item.currency, locale)}</p>
-                    <p className={`mt-1 text-xs font-semibold uppercase tracking-[0.16em] ${item.status === "paid" ? isDark ? "text-emerald-300" : "text-emerald-700" : isDark ? "text-amber-300" : "text-amber-700"}`}>{item.status}</p>
+                    <p className={`mt-1 text-xs font-semibold uppercase tracking-[0.16em] ${item.status === "paid" ? isDark ? "text-emerald-300" : "text-emerald-700" : isDark ? "text-amber-300" : "text-amber-700"}`}>{t(getPaymentStatusLabelKey(item.status))}</p>
                   </div>
                 </div>
                 <div className={`mt-3 grid gap-2 text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>

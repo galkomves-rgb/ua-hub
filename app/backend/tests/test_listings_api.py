@@ -14,6 +14,7 @@ from models.billing import BillingPayment, BillingSubscription
 from models.profiles import BusinessProfile, UserProfile
 from routers.listings import router as listings_router
 from services.listings_service import ListingsService
+from services.monetization import MonetizationService
 
 
 TEST_USER_ID = "user-1"
@@ -59,16 +60,19 @@ async def create_listing(
     db_session: AsyncSession,
     *,
     user_id: str,
+    module: str = "services",
+    category: str = "services",
     owner_type: str = "private_user",
     owner_id: str | None = None,
     pricing_tier: str = "free",
     status: str = "draft",
     title: str = "Listing title",
+    meta_json: str = "{}",
 ):
     listing = await ListingsService(db_session).create_listing(
         user_id=user_id,
-        module="services",
-        category="services",
+        module=module,
+        category=category,
         title=title,
         description="Long enough description",
         city="Madrid",
@@ -83,7 +87,7 @@ async def create_listing(
         subcategory=None,
         region=None,
         images_json="[]",
-        meta_json="{}",
+        meta_json=meta_json,
     )
     listing.status = status
     await db_session.commit()
@@ -122,34 +126,58 @@ async def test_legacy_create_endpoint_is_explicitly_disabled(api_client: AsyncCl
 
 
 @pytest.mark.asyncio
-async def test_submit_returns_402_for_second_free_listing(api_client: AsyncClient, db_session: AsyncSession):
-    first_listing = await create_listing(db_session, user_id=TEST_USER_ID, pricing_tier="free", title="First")
-    second_listing = await create_listing(db_session, user_id=TEST_USER_ID, pricing_tier="free", title="Second")
+async def test_submit_returns_402_for_private_trial_extension_after_day_seven(api_client: AsyncClient, db_session: AsyncSession):
+    listing = await create_listing(
+        db_session,
+        user_id=TEST_USER_ID,
+        pricing_tier="free",
+        meta_json=MonetizationService.merge_listing_metadata(
+            None,
+            MonetizationService.build_listing_pricing_metadata(
+                policy="private_trial",
+                module="services",
+                category="services",
+                requires_email_verification=True,
+                requires_phone_verification=True,
+            ),
+        ),
+    )
+    listing.created_at = datetime.now(timezone.utc) - timedelta(days=8)
+    await db_session.commit()
 
-    first_response = await api_client.post(f"/api/v1/listings/{first_listing.id}/submit")
-    assert first_response.status_code == 200
+    response = await api_client.post(f"/api/v1/listings/{listing.id}/submit")
 
-    second_response = await api_client.post(f"/api/v1/listings/{second_listing.id}/submit")
-
-    assert second_response.status_code == 402
-    assert second_response.json()["detail"] == {
-        "message": "Choose Basic to keep publishing.",
-        "required_product_code": "listing_basic",
-        "paywall_reason": "free_listing_already_used",
-        "listing_id": second_listing.id,
+    assert response.status_code == 402
+    assert response.json()["detail"] == {
+        "message": "Pay €3.99 to complete the 30-day period for this listing.",
+        "required_product_code": "listing_extend_30",
+        "paywall_reason": "private_trial_extension_required",
+        "listing_id": listing.id,
     }
 
 
 @pytest.mark.asyncio
 async def test_submit_returns_402_for_unpaid_basic_listing(api_client: AsyncClient, db_session: AsyncSession):
-    listing = await create_listing(db_session, user_id=TEST_USER_ID, pricing_tier="basic")
+    listing = await create_listing(
+        db_session,
+        user_id=TEST_USER_ID,
+        pricing_tier="basic",
+        meta_json=MonetizationService.merge_listing_metadata(
+            None,
+            MonetizationService.build_listing_pricing_metadata(
+                policy="private_paid",
+                module="services",
+                category="services",
+            ),
+        ),
+    )
 
     response = await api_client.post(f"/api/v1/listings/{listing.id}/submit")
 
     assert response.status_code == 402
     assert response.json()["detail"] == {
         "message": "Complete payment to publish this listing.",
-        "required_product_code": "listing_basic",
+        "required_product_code": "next_private_listing_30",
         "paywall_reason": "payment_required_for_basic_listing",
         "listing_id": listing.id,
     }
@@ -196,7 +224,7 @@ async def test_submit_returns_402_for_business_listing_without_subscription(api_
     assert response.status_code == 402
     assert response.json()["detail"] == {
         "message": "Activate a business plan to publish.",
-        "required_product_code": "business_growth",
+        "required_product_code": "business_priority",
         "paywall_reason": "business_without_subscription",
         "listing_id": listing.id,
     }
@@ -267,7 +295,7 @@ async def test_submit_returns_400_when_business_quota_is_exceeded(api_client: As
         BillingSubscription(
             user_id=TEST_USER_ID,
             business_profile_id=business.id,
-            plan_code="starter",
+            plan_code="business_presence",
             status="active",
             provider="stripe",
             billing_cycle="monthly",
@@ -308,24 +336,36 @@ async def test_submit_returns_400_when_business_quota_is_exceeded(api_client: As
 
 @pytest.mark.asyncio
 async def test_submit_allows_paid_basic_listing(api_client: AsyncClient, db_session: AsyncSession):
-    listing = await create_listing(db_session, user_id=TEST_USER_ID, pricing_tier="basic")
+    listing = await create_listing(
+        db_session,
+        user_id=TEST_USER_ID,
+        pricing_tier="basic",
+        meta_json=MonetizationService.merge_listing_metadata(
+            None,
+            MonetizationService.build_listing_pricing_metadata(
+                policy="private_paid",
+                module="services",
+                category="services",
+            ),
+        ),
+    )
     now = datetime.now(timezone.utc)
     db_session.add(
         BillingPayment(
             user_id=TEST_USER_ID,
             listing_id=listing.id,
             provider="stripe",
-            product_code="listing_basic",
+            product_code="next_private_listing_30",
             product_type="listing_purchase",
             target_type="listing",
-            title="Basic listing",
+            title="Next private listing for 30 days",
             status="paid",
             entitlement_status="active",
-            amount_total=Decimal("1.99"),
+            amount_total=Decimal("4.99"),
             currency="eur",
             checkout_mode="payment",
             period_start=now,
-            period_end=now + timedelta(days=7),
+            period_end=now + timedelta(days=30),
             paid_at=now,
             metadata_json="{}",
         )

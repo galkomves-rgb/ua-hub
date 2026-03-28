@@ -42,7 +42,7 @@ class PromotionCheckoutResponse(BaseModel):
 
 
 class SubscriptionActivateRequest(BaseModel):
-    plan: str = Field(..., pattern="^(starter|growth|pro)$")
+    plan: str = Field(..., pattern="^(starter|growth|pro|business_presence|business_priority|agency_starter|agency_growth|agency_pro)$")
     business_slug: str = Field(..., min_length=1, max_length=255)
 
 
@@ -59,7 +59,7 @@ class SubscriptionCurrentResponse(BaseModel):
 
 
 class PaymentCreateRequest(BaseModel):
-    type: str = Field(..., pattern="^(listing_basic|promotion_boost|promotion_featured|business_starter|business_growth|business_pro)$")
+    type: str = Field(..., pattern="^(next_private_listing_30|listing_extend_30|boost|featured|business_presence|business_priority|agency_starter|agency_growth|agency_pro|listing_basic|promotion_boost|promotion_featured|business_starter|business_growth|business_pro)$")
     listing_id: int | None = None
     business_slug: str | None = Field(None, max_length=255)
     success_url: str | None = Field(None, max_length=2000)

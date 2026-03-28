@@ -516,7 +516,7 @@ export function AccountListingsPanel() {
               isPending={activeMutationId === item.id}
               onArchive={handleArchive}
               onRenew={(listingId) => renewMutation.mutate(listingId)}
-                  onBoost={(listingId) => navigate(`/account?tab=billing&product=promotion_boost&listingId=${listingId}`)}
+              onBoost={(listingId) => navigate(`/account?tab=billing&product=boost&listingId=${listingId}`)}
               onDuplicate={(listingId) => duplicateMutation.mutate(listingId)}
               onDelete={handleDelete}
               onSubmit={(listingId) => submitMutation.mutate(listingId)}
