@@ -6,6 +6,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchUserProfile } from "@/lib/account-api";
+import { refreshAuthTokenIfPossible } from "@/lib/auth";
 import { getAPIBaseURL } from "@/lib/config";
 import { useTheme } from "@/lib/ThemeContext";
 import { LOCALES, useI18n } from "@/lib/i18n";
@@ -60,11 +61,21 @@ export default function UahubLayout({ children, hideModuleNav }: LayoutProps) {
       }
 
       try {
+        const requestUnread = (token: string | null) =>
+          fetch(`${getAPIBaseURL()}/api/v1/messaging/unread-count`, {
+            method: "GET",
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+
         const token = localStorage.getItem("auth_token");
-        const response = await fetch(`${getAPIBaseURL()}/api/v1/messaging/unread-count`, {
-          method: "GET",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
+        let response = await requestUnread(token);
+
+        if (response.status === 401) {
+          const refreshedToken = await refreshAuthTokenIfPossible();
+          if (refreshedToken) {
+            response = await requestUnread(refreshedToken);
+          }
+        }
 
         if (!response.ok) {
           throw new Error("Unread count request failed");

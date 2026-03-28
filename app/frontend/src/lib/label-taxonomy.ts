@@ -100,7 +100,6 @@ export function deriveBusinessLabels(biz: {
   verified?: boolean;
   isPremium?: boolean;
   premium?: boolean;
-  rating?: number;
 }): LabelId[] {
   const labels = new Set<LabelId>();
   const isVerified = Boolean(biz.isVerified ?? biz.verified);
@@ -109,7 +108,6 @@ export function deriveBusinessLabels(biz: {
   if (isVerified) labels.add("verified");
   if (isPremium) labels.add("premium");
   if (!isVerified && !isPremium) labels.add("new");
-  if ((biz.rating ?? 0) >= 4.7) labels.add("featured");
 
   return sortByPriority(Array.from(labels));
 }

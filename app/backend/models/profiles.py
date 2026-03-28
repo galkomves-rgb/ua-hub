@@ -45,6 +45,10 @@ class BusinessProfile(Base):
     is_premium = Column(Boolean, default=False)
     tags_json = Column(String, nullable=True)  # JSON array of strings
     rating = Column(String, nullable=True)  # e.g., "4.8"
+    google_place_id = Column(String, nullable=True)
+    google_maps_rating = Column(String, nullable=True)
+    google_maps_review_count = Column(Integer, nullable=True)
+    google_maps_rating_updated_at = Column(DateTime(timezone=True), nullable=True)
     website = Column(String, nullable=True)
     social_links_json = Column(String, nullable=True)
     service_areas_json = Column(String, nullable=True)

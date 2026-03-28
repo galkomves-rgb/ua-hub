@@ -4,7 +4,7 @@ import {
   Menu, X, User, LogOut, Plus, ChevronDown, MessageSquare, Search,
   Briefcase, Home, Wrench, ShoppingBag, Calendar, Users, Building2, Store,
 } from "lucide-react";
-import { authApi, redirectToAuthEntry } from "@/lib/auth";
+import { authApi, redirectToAuthEntry, refreshAuthTokenIfPossible } from "@/lib/auth";
 import { useTheme } from "@/lib/ThemeContext";
 import { useGlobalCity } from "@/lib/global-preferences";
 import { useI18n, LOCALES } from "@/lib/i18n";
@@ -78,11 +78,22 @@ export default function Layout({ children, hideModuleNav }: LayoutProps) {
 
     const loadUnread = async () => {
       try {
+        const requestUnread = (token: string | null) =>
+          fetch(`${getAPIBaseURL()}/api/v1/messaging/unread-count`, {
+            method: "GET",
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+
         const token = localStorage.getItem("auth_token");
-        const res = await fetch(`${getAPIBaseURL()}/api/v1/messaging/unread-count`, {
-          method: "GET",
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
+        let res = await requestUnread(token);
+
+        if (res.status === 401) {
+          const refreshedToken = await refreshAuthTokenIfPossible();
+          if (refreshedToken) {
+            res = await requestUnread(refreshedToken);
+          }
+        }
+
         if (!res.ok) {
           throw new Error("Unread count request failed");
         }

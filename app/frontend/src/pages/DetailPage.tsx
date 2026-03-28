@@ -4,7 +4,7 @@ import { useParams, useLocation, Link, useNavigate, useSearchParams } from "reac
 import { toast } from "sonner";
 import {
   ArrowLeft, MapPin, Clock, User, Briefcase, Share2, Flag, Heart,
-  CheckCircle, Star, Calendar, Phone, Mail, Globe, ChevronRight,
+  CheckCircle, Star, Calendar, Mail, Globe, ChevronRight,
   Plus, Upload, Eye, Check, Shield, Users, TrendingUp, BadgeCheck, X,
 } from "lucide-react";
 import CityPicker from "@/components/CityPicker";
@@ -14,7 +14,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Textarea } from "@/components/ui/textarea";
 import { createMonetizedListing, fetchMyBusinessProfiles, fetchUserProfile, reportMessagingUser, saveListing, submitListing, updateListing } from "@/lib/account-api";
 import { deriveListingLabels } from "@/lib/label-taxonomy";
-import { fetchPublicListing, fetchPublicListings } from "@/lib/public-listings";
+import { fetchPublicBusiness } from "@/lib/public-businesses";
+import { fetchPublicBusinessListings, fetchPublicListing, fetchPublicListings } from "@/lib/public-listings";
 import { getAPIBaseURL } from "@/lib/config";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
@@ -22,7 +23,7 @@ import { useGlobalCity } from "@/lib/global-preferences";
 import { useAuth } from "@/contexts/AuthContext";
 import { uploadImageFile } from "@/lib/media-storage";
 import {
-  MODULES, MODULE_ORDER, SAMPLE_LISTINGS, SAMPLE_BUSINESSES,
+  MODULES, MODULE_ORDER, SAMPLE_LISTINGS,
   IMAGES,
 } from "@/lib/platform";
 
@@ -484,24 +485,31 @@ function BusinessProfilePage() {
   const { city: globalCity } = useGlobalCity();
   const isDark = theme === "dark";
   const selectedCity = normalizeCityFilter(globalCity);
-
-  const biz = SAMPLE_BUSINESSES.find((b) => b.id === bizId);
+  const businessQuery = useQuery({
+    queryKey: ["public-business-detail", bizId],
+    queryFn: () => fetchPublicBusiness(String(bizId)),
+    enabled: Boolean(bizId),
+  });
+  const businessListingsQuery = useQuery({
+    queryKey: ["public-business-listings", bizId],
+    queryFn: () => fetchPublicBusinessListings(String(bizId), { limit: 24 }),
+    enabled: Boolean(bizId),
+  });
+  const biz = businessQuery.data;
   if (!biz) {
     return (
       <Layout>
         <div className="max-w-6xl mx-auto px-4 py-16 text-center">
-          <p className={`text-sm ${isDark ? "text-gray-500" : "text-gray-400"}`}>{t("detail.businessNotFound")}</p>
+          <p className={`text-sm ${isDark ? "text-gray-500" : "text-gray-400"}`}>
+            {businessQuery.isLoading ? t("home.businessesLoading") : t("detail.businessNotFound")}
+          </p>
         </div>
       </Layout>
     );
   }
 
-  const bizListings = SAMPLE_LISTINGS.filter(
-    (l) =>
-      l.ownerId === biz.slug &&
-      l.ownerType === "business_profile" &&
-      (selectedCity === "all" || l.city === selectedCity)
-  );
+  const bizListings = (businessListingsQuery.data ?? []).filter((listing) => selectedCity === "all" || listing.city === selectedCity);
+  const googleMapsRatingVisible = Boolean(biz.google_place_id && biz.google_maps_rating);
 
   return (
     <Layout>
@@ -518,26 +526,21 @@ function BusinessProfilePage() {
                 <div className={`w-16 h-16 rounded-xl flex items-center justify-center text-2xl font-bold shrink-0 ${
                   isDark ? "bg-[#1a2a40] text-[#4a9eff]" : "bg-blue-50 text-[#0057B8]"
                 }`}>
-                  {biz.name.charAt(0)}
+                  {biz.logo_url ? (
+                    <img src={biz.logo_url} alt={biz.business_name} className="h-16 w-16 rounded-xl object-cover" />
+                  ) : (
+                    biz.business_name.charAt(0)
+                  )}
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <h1 className={`text-xl font-bold ${isDark ? "text-gray-100" : "text-gray-900"}`}>{biz.name}</h1>
-                    {biz.isVerified && <BadgeCheck className={`w-5 h-5 ${isDark ? "text-emerald-400" : "text-emerald-500"}`} />}
-                    {biz.isPremium && <Star className={`w-5 h-5 ${isDark ? "text-[#FFD700]" : "text-amber-500"}`} />}
+                    <h1 className={`text-xl font-bold ${isDark ? "text-gray-100" : "text-gray-900"}`}>{biz.business_name}</h1>
+                    {biz.is_verified && <BadgeCheck className={`w-5 h-5 ${isDark ? "text-emerald-400" : "text-emerald-500"}`} />}
+                    {biz.is_premium && <Star className={`w-5 h-5 ${isDark ? "text-[#FFD700]" : "text-amber-500"}`} />}
                   </div>
                   <p className={`text-sm mb-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>{biz.category}</p>
                   <p className={`text-sm leading-relaxed ${isDark ? "text-gray-300" : "text-gray-600"}`}>{biz.description}</p>
                 </div>
-              </div>
-
-              {/* Tags */}
-              <div className="flex flex-wrap gap-2 mt-4">
-                {biz.tags.map((tag) => (
-                  <span key={tag} className={`px-2.5 py-1 text-xs rounded-lg ${isDark ? "bg-[#1a2a40] text-gray-400" : "bg-gray-50 text-gray-500"}`}>
-                    {tag}
-                  </span>
-                ))}
               </div>
 
               {/* CTA */}
@@ -575,27 +578,26 @@ function BusinessProfilePage() {
                 <div className={`flex items-center gap-2 text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
                   <MapPin className="w-4 h-4 shrink-0" /> {biz.city}, {t("detail.countrySpain")}
                 </div>
-                <div className={`flex items-center gap-2 text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
-                  <Phone className="w-4 h-4 shrink-0" /> +34 XXX XXX XXX
-                </div>
-                <div className={`flex items-center gap-2 text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
-                  <Mail className="w-4 h-4 shrink-0" /> info@{biz.name.toLowerCase().replace(/\s/g, "")}.es
-                </div>
-                <div className={`flex items-center gap-2 text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
-                  <Globe className="w-4 h-4 shrink-0" /> www.{biz.name.toLowerCase().replace(/\s/g, "")}.es
-                </div>
+                {biz.website ? (
+                  <div className={`flex items-center gap-2 text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                    <Globe className="w-4 h-4 shrink-0" /> {biz.website}
+                  </div>
+                ) : null}
               </div>
             </div>
 
-            {biz.rating && (
+            {googleMapsRatingVisible ? (
               <div className={`rounded-xl border p-4 ${isDark ? "bg-[#111d32] border-[#1a3050]" : "bg-white border-gray-200/80"}`}>
                 <div className="flex items-center gap-2">
                   <Star className={`w-5 h-5 fill-current ${isDark ? "text-[#FFD700]" : "text-amber-500"}`} />
-                  <span className={`text-lg font-bold ${isDark ? "text-gray-100" : "text-gray-900"}`}>{biz.rating}</span>
-                  <span className={`text-xs ${isDark ? "text-gray-500" : "text-gray-400"}`}>/ 5.0</span>
+                  <span className={`text-lg font-bold ${isDark ? "text-gray-100" : "text-gray-900"}`}>{biz.google_maps_rating}</span>
+                  {typeof biz.google_maps_review_count === "number" ? (
+                    <span className={`text-xs ${isDark ? "text-gray-500" : "text-gray-400"}`}>({biz.google_maps_review_count})</span>
+                  ) : null}
                 </div>
+                <p className={`mt-2 text-xs ${isDark ? "text-gray-500" : "text-gray-400"}`}>{t("biz.googleMapsRating")}</p>
               </div>
-            )}
+            ) : null}
           </aside>
         </div>
       </div>
