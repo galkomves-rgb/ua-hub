@@ -145,14 +145,9 @@ export default function HomePage() {
         </section>
 
         {/* ─── Verified Businesses ─── */}
-        {(businessesQuery.isLoading || businessesQuery.isError || verifiedBusinesses.length > 0) ? (
+        {(businessesQuery.isLoading || verifiedBusinesses.length > 0) ? (
           <section>
             <SectionHeader title={t("home.businesses")} linkTo="/business?type=verified" linkLabel={t("common.showAll")} />
-            {businessesQuery.isError ? (
-              <div className={`mb-4 rounded-xl border p-4 text-sm ${isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>
-                {t("home.businessesLoadError")}
-              </div>
-            ) : null}
             {businessesQuery.isLoading ? (
               <div className={`rounded-xl border p-4 text-sm ${isDark ? "border-[#1a3050] bg-[#111d32] text-slate-400" : "border-slate-200 bg-white text-slate-500"}`}>
                 {t("home.businessesLoading")}
