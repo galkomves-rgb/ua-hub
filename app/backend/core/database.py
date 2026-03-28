@@ -216,6 +216,54 @@ class DatabaseManager:
         finally:
             self._table_creation_lock.release()
 
+    async def repair_business_profile_google_columns(self):
+        """Repair the known business_profiles Google Maps schema drift.
+
+        Production may have an older business_profiles table created before the
+        Google Maps columns were added to the ORM model. `create_all()` does not
+        alter existing tables, so we repair only this known drift explicitly.
+        """
+        if not self.engine:
+            logger.error("Database engine not initialized")
+            raise RuntimeError("Database engine not initialized")
+
+        try:
+            existing_tables = await self._get_existing_tables()
+            if "business_profiles" not in existing_tables:
+                logger.debug("business_profiles table not found, skipping Google column repair")
+                return
+
+            existing_columns = await self._get_table_columns("business_profiles")
+            existing_column_names = {column["name"] for column in existing_columns}
+            target_column_names = {
+                "google_place_id",
+                "google_maps_rating",
+                "google_maps_review_count",
+                "google_maps_rating_updated_at",
+            }
+
+            if target_column_names.issubset(existing_column_names):
+                logger.debug("business_profiles Google columns already present")
+                return
+
+            model_columns = self._get_model_columns("business_profiles")
+            missing_columns = [
+                column for column in model_columns if column["name"] in target_column_names - existing_column_names
+            ]
+
+            if not missing_columns:
+                logger.debug("No missing business_profiles Google columns detected")
+                return
+
+            logger.info(
+                "🔧 Repairing missing business_profiles Google columns: %s",
+                [column["name"] for column in missing_columns],
+            )
+            await self._add_missing_columns("business_profiles", missing_columns)
+        except Exception as e:
+            logger.error(f"Failed to repair business_profiles Google columns: {e}")
+            raise
+
     async def check_and_repair_existing_tables(self):
         """Check and fix the structure of existing tables, adding only the missing fields."""
         repair_start = time.time()
