@@ -264,6 +264,56 @@ class DatabaseManager:
             logger.error(f"Failed to repair business_profiles Google columns: {e}")
             raise
 
+    async def repair_business_profile_workflow_columns(self):
+        """Repair known business_profiles workflow schema drift.
+
+        Some deployed environments were created before workflow fields were added
+        to the ORM model (verification/subscription request metadata). Missing
+        columns can break profile create/update and account fetch flows.
+        """
+        if not self.engine:
+            logger.error("Database engine not initialized")
+            raise RuntimeError("Database engine not initialized")
+
+        try:
+            existing_tables = await self._get_existing_tables()
+            if "business_profiles" not in existing_tables:
+                logger.debug("business_profiles table not found, skipping workflow column repair")
+                return
+
+            existing_columns = await self._get_table_columns("business_profiles")
+            existing_column_names = {column["name"] for column in existing_columns}
+            target_column_names = {
+                "verification_requested_at",
+                "verification_notes",
+                "subscription_request_status",
+                "subscription_requested_plan",
+                "subscription_requested_at",
+                "subscription_renewal_date",
+            }
+
+            if target_column_names.issubset(existing_column_names):
+                logger.debug("business_profiles workflow columns already present")
+                return
+
+            model_columns = self._get_model_columns("business_profiles")
+            missing_columns = [
+                column for column in model_columns if column["name"] in target_column_names - existing_column_names
+            ]
+
+            if not missing_columns:
+                logger.debug("No missing business_profiles workflow columns detected")
+                return
+
+            logger.info(
+                "🔧 Repairing missing business_profiles workflow columns: %s",
+                [column["name"] for column in missing_columns],
+            )
+            await self._add_missing_columns("business_profiles", missing_columns)
+        except Exception as e:
+            logger.error(f"Failed to repair business_profiles workflow columns: {e}")
+            raise
+
     async def check_and_repair_existing_tables(self):
         """Check and fix the structure of existing tables, adding only the missing fields."""
         repair_start = time.time()

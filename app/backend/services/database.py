@@ -38,6 +38,8 @@ async def initialize_database():
         await db_manager.init_db()
         logger.info("🔧 Database connection initialized, now creating tables if tables not exist...")
         await db_manager.create_tables()
+        logger.info("🔧 Checking business_profiles workflow columns for schema drift...")
+        await db_manager.repair_business_profile_workflow_columns()
         logger.info("🔧 Checking business_profiles Google columns for schema drift...")
         await db_manager.repair_business_profile_google_columns()
         logger.info("🔧 Table creation completed")
