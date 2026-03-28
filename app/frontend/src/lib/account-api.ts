@@ -1,5 +1,5 @@
 import { getAPIBaseURL } from "@/lib/config";
-import { refreshAuthTokenIfPossible } from "@/lib/auth";
+import { ReauthenticationRequiredError, refreshAuthTokenIfPossible } from "@/lib/auth";
 
 export interface AccountDashboardResponse {
   active_listings_count: number;
@@ -633,6 +633,13 @@ async function accountFetch<T>(
     const refreshedToken = await refreshAuthTokenIfPossible();
     if (refreshedToken) {
       response = await request(refreshedToken);
+    }
+
+    if (response.status === 401) {
+      if (initialToken) {
+        throw new ReauthenticationRequiredError();
+      }
+      throw new Error("Authentication required");
     }
   }
 

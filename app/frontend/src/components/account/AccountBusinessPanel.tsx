@@ -24,6 +24,7 @@ import {
   type BusinessProfilePayload,
   type BusinessProfileResponse,
 } from "@/lib/account-api";
+import { beginReauthenticationFlow, ReauthenticationRequiredError } from "@/lib/auth";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
 import { uploadImageFile } from "@/lib/media-storage";
@@ -50,6 +51,8 @@ const PLAN_OPTIONS = ["basic", "premium", "business"] as const;
 
 type PlanOption = (typeof PLAN_OPTIONS)[number];
 type BusinessImageField = "logo_url" | "cover_url";
+
+const BUSINESS_PROFILE_DRAFT_KEY = "account_business_profile_draft";
 
 const CYRILLIC_SLUG_MAP: Record<string, string> = {
   а: "a", б: "b", в: "v", г: "h", ґ: "g", д: "d", е: "e", є: "ye", ж: "zh", з: "z", и: "y", і: "i",
@@ -146,6 +149,45 @@ function formatDate(value: string | null) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
 }
 
+function persistBusinessDraft(form: BusinessFormState) {
+  sessionStorage.setItem(BUSINESS_PROFILE_DRAFT_KEY, JSON.stringify(form));
+}
+
+function consumeBusinessDraft(): BusinessFormState | null {
+  const rawValue = sessionStorage.getItem(BUSINESS_PROFILE_DRAFT_KEY);
+  if (!rawValue) {
+    return null;
+  }
+
+  sessionStorage.removeItem(BUSINESS_PROFILE_DRAFT_KEY);
+
+  try {
+    const parsed = JSON.parse(rawValue);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    return {
+      slug: stringValue((parsed as Record<string, unknown>).slug),
+      name: stringValue((parsed as Record<string, unknown>).name),
+      category: stringValue((parsed as Record<string, unknown>).category),
+      city: stringValue((parsed as Record<string, unknown>).city),
+      description: stringValue((parsed as Record<string, unknown>).description),
+      logo_url: stringValue((parsed as Record<string, unknown>).logo_url),
+      cover_url: stringValue((parsed as Record<string, unknown>).cover_url),
+      contact_phone: stringValue((parsed as Record<string, unknown>).contact_phone),
+      contact_email: stringValue((parsed as Record<string, unknown>).contact_email),
+      tags_text: stringValue((parsed as Record<string, unknown>).tags_text),
+      rating: stringValue((parsed as Record<string, unknown>).rating) || "0",
+      website: stringValue((parsed as Record<string, unknown>).website),
+      social_links_json: stringValue((parsed as Record<string, unknown>).social_links_json) || "[]",
+      service_areas_text: stringValue((parsed as Record<string, unknown>).service_areas_text),
+    };
+  } catch {
+    return null;
+  }
+}
+
 function getReadableErrorMessage(error: unknown, fallback: string) {
   if (!(error instanceof Error)) {
     return fallback;
@@ -215,9 +257,17 @@ export function AccountBusinessPanel() {
   const [draggingField, setDraggingField] = useState<BusinessImageField | null>(null);
   const [uploadingField, setUploadingField] = useState<BusinessImageField | null>(null);
   const [uploadErrors, setUploadErrors] = useState<Partial<Record<BusinessImageField, string>>>({});
+  const [restoredDraft, setRestoredDraft] = useState(false);
 
   useEffect(() => {
-    setForm(buildBusinessForm(activeProfile));
+    const pendingDraft = consumeBusinessDraft();
+    if (pendingDraft) {
+      setForm(pendingDraft);
+      setRestoredDraft(true);
+    } else {
+      setForm(buildBusinessForm(activeProfile));
+      setRestoredDraft(false);
+    }
     setVerificationNote(activeProfile?.verification_notes || "");
     const requestedPlan = activeProfile?.subscription_requested_plan;
     const currentPlan = activeProfile?.subscription_plan;
@@ -321,12 +371,12 @@ export function AccountBusinessPanel() {
       !(activeProfile.subscription_request_status === "pending" && activeProfile.subscription_requested_plan === targetPlan),
   );
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!isFormReady) {
       return;
     }
 
-    saveMutation.mutate({
+    const payload: BusinessProfilePayload = {
       slug: slugNormalized,
       name: form.name.trim(),
       category: form.category.trim(),
@@ -343,7 +393,20 @@ export function AccountBusinessPanel() {
       website: form.website.trim() || null,
       social_links_json: form.social_links_json.trim() || "[]",
       service_areas_json: serializeStringList(form.service_areas_text),
-    });
+    };
+
+    saveMutation.reset();
+
+    try {
+      await saveMutation.mutateAsync(payload);
+      sessionStorage.removeItem(BUSINESS_PROFILE_DRAFT_KEY);
+      setRestoredDraft(false);
+    } catch (error) {
+      if (error instanceof ReauthenticationRequiredError) {
+        persistBusinessDraft(form);
+        await beginReauthenticationFlow("/account?tab=business");
+      }
+    }
   };
 
   const clearUploadError = (field: BusinessImageField) => {
@@ -522,6 +585,18 @@ export function AccountBusinessPanel() {
                 }`}
               >
                 {t("account.business.saveSuccess")}
+              </div>
+            ) : null}
+
+            {restoredDraft ? (
+              <div
+                className={`rounded-2xl border p-4 text-sm ${
+                  isDark
+                    ? "border-amber-900/40 bg-amber-950/20 text-amber-200"
+                    : "border-amber-200 bg-amber-50 text-amber-700"
+                }`}
+              >
+                {t("account.business.draftRestored")}
               </div>
             ) : null}
 

@@ -1,13 +1,21 @@
 import { useEffect } from 'react';
+import { consumePostAuthRedirect } from '@/lib/auth';
 
 export default function AuthCallback() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const token = params.get('token');
+    const expiresAt = params.get('expires_at');
 
     if (token) {
       localStorage.setItem('auth_token', token);
-      window.location.replace('/onboarding');
+      localStorage.setItem('auth_provider', 'oidc');
+      if (expiresAt) {
+        localStorage.setItem('auth_expires_at', expiresAt);
+      } else {
+        localStorage.removeItem('auth_expires_at');
+      }
+      window.location.replace(consumePostAuthRedirect('/onboarding'));
       return;
     }
 
