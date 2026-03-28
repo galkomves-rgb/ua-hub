@@ -172,6 +172,10 @@ async def create_business_profile(
     """Create a new business profile for authenticated user."""
     service = ProfileService(db)
 
+    existing_for_owner = await service.get_business_profiles_by_owner(user_id)
+    if existing_for_owner:
+        raise HTTPException(status_code=400, detail="Business profile already exists for this account")
+
     # Check if slug already exists
     existing = await service.get_business_profile(profile_data.slug)
     if existing:

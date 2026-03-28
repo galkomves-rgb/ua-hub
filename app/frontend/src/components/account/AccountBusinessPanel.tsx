@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart3,
@@ -11,6 +11,8 @@ import {
   ShieldCheck,
   Sparkles,
   Star,
+  Upload,
+  X,
 } from "lucide-react";
 import CityPicker from "@/components/CityPicker";
 import {
@@ -24,6 +26,8 @@ import {
 } from "@/lib/account-api";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
+import { uploadImageFile } from "@/lib/media-storage";
+import { MODULES } from "@/lib/platform";
 
 type BusinessFormState = {
   slug: string;
@@ -45,6 +49,29 @@ type BusinessFormState = {
 const PLAN_OPTIONS = ["basic", "premium", "business"] as const;
 
 type PlanOption = (typeof PLAN_OPTIONS)[number];
+type BusinessImageField = "logo_url" | "cover_url";
+
+const CYRILLIC_SLUG_MAP: Record<string, string> = {
+  а: "a", б: "b", в: "v", г: "h", ґ: "g", д: "d", е: "e", є: "ye", ж: "zh", з: "z", и: "y", і: "i",
+  ї: "yi", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u",
+  ф: "f", х: "kh", ц: "ts", ч: "ch", ш: "sh", щ: "shch", ь: "", ю: "yu", я: "ya",
+};
+
+function slugifyBusinessValue(value: string): string {
+  const transliterated = value
+    .trim()
+    .toLowerCase()
+    .split("")
+    .map((char) => CYRILLIC_SLUG_MAP[char] ?? char)
+    .join("");
+
+  return transliterated
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-");
+}
 
 function buildBusinessForm(profile: BusinessProfileResponse | null): BusinessFormState {
   const contacts = safeParseRecord(profile?.contacts_json);
@@ -119,6 +146,22 @@ function formatDate(value: string | null) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
 }
 
+function getReadableErrorMessage(error: unknown, fallback: string) {
+  if (!(error instanceof Error)) {
+    return fallback;
+  }
+
+  const message = error.message.trim();
+  if (message.includes("slug: String should match pattern")) {
+    return fallback;
+  }
+  if (!message || message === "Failed to fetch" || message === "NetworkError when attempting to fetch resource.") {
+    return fallback;
+  }
+
+  return message;
+}
+
 function VerificationBadge({ status }: { status: string }) {
   const { theme } = useTheme();
   const { t } = useI18n();
@@ -169,6 +212,9 @@ export function AccountBusinessPanel() {
   const [form, setForm] = useState<BusinessFormState>(() => buildBusinessForm(null));
   const [verificationNote, setVerificationNote] = useState("");
   const [targetPlan, setTargetPlan] = useState<PlanOption>("business");
+  const [draggingField, setDraggingField] = useState<BusinessImageField | null>(null);
+  const [uploadingField, setUploadingField] = useState<BusinessImageField | null>(null);
+  const [uploadErrors, setUploadErrors] = useState<Partial<Record<BusinessImageField, string>>>({});
 
   useEffect(() => {
     setForm(buildBusinessForm(activeProfile));
@@ -228,9 +274,42 @@ export function AccountBusinessPanel() {
       form.slug.trim().length > 0 &&
       form.name.trim().length > 0 &&
       form.category.trim().length > 0 &&
+      form.city.trim().length > 0 &&
       form.description.trim().length > 0
     );
-  }, [form.category, form.description, form.name, form.slug]);
+  }, [form.category, form.city, form.description, form.name, form.slug]);
+
+  const slugValue = form.slug.trim();
+  const slugNormalized = slugifyBusinessValue(slugValue);
+  const slugError = !activeProfile && slugValue.length > 0 && slugValue !== slugNormalized
+    ? t("account.business.slugInvalid")
+    : null;
+  const requiredFields = [
+    { key: "slug", valid: slugValue.length > 0 && !slugError },
+    { key: "name", valid: form.name.trim().length > 0 },
+    { key: "category", valid: form.category.trim().length > 0 },
+    { key: "city", valid: form.city.trim().length > 0 },
+    { key: "description", valid: form.description.trim().length > 0 },
+  ];
+  const isFormReady = canSubmit && !slugError;
+  const categoryOptionGroups = useMemo(() => {
+    return Object.entries(MODULES)
+      .filter(([moduleId]) => moduleId !== "business")
+      .map(([moduleId, moduleConfig]) => ({
+        moduleId,
+        moduleLabel: t(`mod.${moduleId}`),
+        options: moduleConfig.categories.map((category) => ({
+          value: category.labelKey,
+          label: category.labelKey,
+        })),
+      }))
+      .filter((group) => group.options.length > 0);
+  }, [t]);
+  const categoryValues = useMemo(
+    () => new Set(categoryOptionGroups.flatMap((group) => group.options.map((option) => option.value))),
+    [categoryOptionGroups],
+  );
+  const hasCustomCategory = form.category.trim().length > 0 && !categoryValues.has(form.category.trim());
 
   const canRequestVerification = Boolean(
     activeProfile && activeProfile.verification_status !== "pending" && activeProfile.verification_status !== "verified",
@@ -243,12 +322,12 @@ export function AccountBusinessPanel() {
   );
 
   const handleSave = () => {
-    if (!canSubmit) {
+    if (!isFormReady) {
       return;
     }
 
     saveMutation.mutate({
-      slug: form.slug.trim(),
+      slug: slugNormalized,
       name: form.name.trim(),
       category: form.category.trim(),
       city: form.city.trim(),
@@ -265,6 +344,54 @@ export function AccountBusinessPanel() {
       social_links_json: form.social_links_json.trim() || "[]",
       service_areas_json: serializeStringList(form.service_areas_text),
     });
+  };
+
+  const clearUploadError = (field: BusinessImageField) => {
+    setUploadErrors((current) => {
+      if (!current[field]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  };
+
+  const handleBusinessImageFiles = async (field: BusinessImageField, files: File[]) => {
+    if (files.length === 0) {
+      return;
+    }
+
+    clearUploadError(field);
+    setUploadingField(field);
+
+    try {
+      const uploadedAsset = await uploadImageFile(files[0], "listing");
+      setForm((current) => ({ ...current, [field]: uploadedAsset.accessUrl }));
+    } catch (error) {
+      setUploadErrors((current) => ({
+        ...current,
+        [field]: error instanceof Error ? error.message : t("account.business.imageUploadError"),
+      }));
+    } finally {
+      setUploadingField((current) => (current === field ? null : current));
+    }
+  };
+
+  const handleBusinessImageInputChange = async (field: BusinessImageField, event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    await handleBusinessImageFiles(field, files);
+  };
+
+  const handleBusinessImageDrop = async (field: BusinessImageField, event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDraggingField((current) => (current === field ? null : current));
+
+    const files = Array.from(event.dataTransfer.files || []);
+    await handleBusinessImageFiles(field, files);
   };
 
   const planLabel = (plan: string | null | undefined) => {
@@ -352,7 +479,7 @@ export function AccountBusinessPanel() {
             }`}
           >
             <p className={isDark ? "text-red-300" : "text-red-600"}>
-              {businessQuery.error instanceof Error ? businessQuery.error.message : t("account.loadError")}
+              {getReadableErrorMessage(businessQuery.error, t("account.loadError"))}
             </p>
             <button
               type="button"
@@ -382,7 +509,7 @@ export function AccountBusinessPanel() {
                   isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-600"
                 }`}
               >
-                {saveMutation.error instanceof Error ? saveMutation.error.message : t("account.business.saveError")}
+                {getReadableErrorMessage(saveMutation.error, t("account.business.saveError"))}
               </div>
             ) : null}
 
@@ -582,8 +709,8 @@ export function AccountBusinessPanel() {
                     </p>
                     {subscriptionMutation.isError ? (
                       <p className={`mt-3 text-sm ${isDark ? "text-red-300" : "text-red-600"}`}>
-                        {subscriptionMutation.error instanceof Error
-                          ? subscriptionMutation.error.message
+                      {subscriptionMutation.error instanceof Error
+                          ? getReadableErrorMessage(subscriptionMutation.error, t("account.business.saveError"))
                           : t("account.business.saveError")}
                       </p>
                     ) : null}
@@ -636,7 +763,7 @@ export function AccountBusinessPanel() {
                   {verifyMutation.isError ? (
                     <p className={`mt-3 text-sm ${isDark ? "text-red-300" : "text-red-600"}`}>
                       {verifyMutation.error instanceof Error
-                        ? verifyMutation.error.message
+                        ? getReadableErrorMessage(verifyMutation.error, t("account.business.saveError"))
                         : t("account.business.saveError")}
                     </p>
                   ) : null}
@@ -644,25 +771,47 @@ export function AccountBusinessPanel() {
               </>
             ) : null}
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div
+              className={`rounded-2xl border p-4 text-sm ${
+                isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-400" : "border-slate-200 bg-slate-50 text-slate-600"
+              }`}
+            >
+              <p className={`font-medium ${isDark ? "text-slate-200" : "text-slate-800"}`}>
+                {t("account.business.requiredFieldsTitle")}
+              </p>
+              <p className="mt-1">{t("account.business.requiredFieldsHint")}</p>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2">
               <div className="space-y-4">
+                <div>
+                  <p className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                    {t("account.business.requiredSection")}
+                  </p>
+                </div>
                 <div>
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                     {t("account.business.slug")}
+                    <span className={`ml-2 text-xs ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`}>{t("account.business.requiredMark")}</span>
                   </label>
                   <input
                     type="text"
                     value={form.slug}
-                    onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
+                    onChange={(event) => setForm((current) => ({ ...current, slug: slugifyBusinessValue(event.target.value) }))}
                     disabled={Boolean(activeProfile)}
+                    placeholder={t("account.business.slugPlaceholder")}
                     className={`w-full rounded-2xl border px-4 py-3 text-sm ${
                       isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
                     } ${activeProfile ? "cursor-not-allowed opacity-70" : ""}`}
                   />
+                  <p className={`mt-2 text-xs ${slugError ? (isDark ? "text-red-300" : "text-red-600") : (isDark ? "text-slate-400" : "text-slate-500")}`}>
+                    {slugError || t("account.business.slugHint")}
+                  </p>
                 </div>
                 <div>
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                     {t("account.business.name")}
+                    <span className={`ml-2 text-xs ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`}>{t("account.business.requiredMark")}</span>
                   </label>
                   <input
                     type="text"
@@ -676,19 +825,39 @@ export function AccountBusinessPanel() {
                 <div>
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                     {t("account.business.category")}
+                    <span className={`ml-2 text-xs ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`}>{t("account.business.requiredMark")}</span>
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={form.category}
                     onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
                     className={`w-full rounded-2xl border px-4 py-3 text-sm ${
                       isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
                     }`}
-                  />
+                  >
+                    <option value="">{t("account.business.categoryPlaceholder")}</option>
+                    {hasCustomCategory ? (
+                      <option value={form.category}>
+                        {form.category} ({t("account.business.categoryLegacyOption")})
+                      </option>
+                    ) : null}
+                    {categoryOptionGroups.map((group) => (
+                      <optgroup key={group.moduleId} label={group.moduleLabel}>
+                        {group.options.map((option) => (
+                          <option key={`${group.moduleId}-${option.value}`} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                  <p className={`mt-2 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                    {t("account.business.categoryHint")}
+                  </p>
                 </div>
                 <div>
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                     {t("account.business.city")}
+                    <span className={`ml-2 text-xs ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`}>{t("account.business.requiredMark")}</span>
                   </label>
                   <CityPicker
                     value={form.city}
@@ -702,6 +871,7 @@ export function AccountBusinessPanel() {
                 <div>
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                     {t("account.business.description")}
+                    <span className={`ml-2 text-xs ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`}>{t("account.business.requiredMark")}</span>
                   </label>
                   <textarea
                     value={form.description}
@@ -715,6 +885,11 @@ export function AccountBusinessPanel() {
               </div>
 
               <div className="space-y-4">
+                <div>
+                  <p className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                    {t("account.business.optionalSection")}
+                  </p>
+                </div>
                 <div>
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                     {t("account.business.website")}
@@ -758,66 +933,200 @@ export function AccountBusinessPanel() {
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                     {t("account.business.logoUrl")}
                   </label>
-                  <input
-                    type="url"
-                    value={form.logo_url}
-                    onChange={(event) => setForm((current) => ({ ...current, logo_url: event.target.value }))}
-                    className={`w-full rounded-2xl border px-4 py-3 text-sm ${
-                      isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
+                  <div
+                    onDragEnter={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setDraggingField("logo_url");
+                    }}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (draggingField !== "logo_url") {
+                        setDraggingField("logo_url");
+                      }
+                    }}
+                    onDragLeave={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (event.currentTarget === event.target) {
+                        setDraggingField((current) => (current === "logo_url" ? null : current));
+                      }
+                    }}
+                    onDrop={(event) => void handleBusinessImageDrop("logo_url", event)}
+                    className={`rounded-2xl border-2 border-dashed p-4 transition-colors ${
+                      draggingField === "logo_url"
+                        ? isDark ? "border-[#4a9eff] bg-[#12233d]" : "border-blue-500 bg-blue-50"
+                        : isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-300 bg-white"
                     }`}
-                  />
+                  >
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => void handleBusinessImageInputChange("logo_url", event)}
+                      className="hidden"
+                      id="businessLogoUploadInput"
+                    />
+                    <label htmlFor="businessLogoUploadInput" className="block cursor-pointer">
+                      <div className="flex items-center gap-3">
+                        <div className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl ${isDark ? "bg-[#1a2d4c]" : "bg-slate-100"}`}>
+                          {form.logo_url ? (
+                            <img src={form.logo_url} alt={t("account.business.logoUrl")} className="h-full w-full object-cover" />
+                          ) : (
+                            <Upload className={`h-5 w-5 ${isDark ? "text-slate-300" : "text-slate-500"}`} />
+                          )}
+                        </div>
+                        <div>
+                          <p className={`text-sm font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                            {uploadingField === "logo_url" ? t("account.business.imageUploading") : t("account.business.imageUploadHint")}
+                          </p>
+                          <p className={`mt-1 text-xs ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                            {t("account.business.imageUploadFormats")}
+                          </p>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                  {uploadErrors.logo_url ? (
+                    <div className={`mt-3 rounded-2xl border p-3 text-sm ${isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-600"}`}>
+                      {uploadErrors.logo_url}
+                    </div>
+                  ) : null}
+                  {form.logo_url ? (
+                    <button
+                      type="button"
+                      onClick={() => setForm((current) => ({ ...current, logo_url: "" }))}
+                      className={`mt-3 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium ${isDark ? "bg-[#1a2d4c] text-slate-200" : "bg-slate-100 text-slate-700"}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      {t("account.business.removeImage")}
+                    </button>
+                  ) : null}
                 </div>
                 <div>
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                     {t("account.business.coverUrl")}
                   </label>
-                  <input
-                    type="url"
-                    value={form.cover_url}
-                    onChange={(event) => setForm((current) => ({ ...current, cover_url: event.target.value }))}
-                    className={`w-full rounded-2xl border px-4 py-3 text-sm ${
-                      isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
+                  <div
+                    onDragEnter={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setDraggingField("cover_url");
+                    }}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (draggingField !== "cover_url") {
+                        setDraggingField("cover_url");
+                      }
+                    }}
+                    onDragLeave={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (event.currentTarget === event.target) {
+                        setDraggingField((current) => (current === "cover_url" ? null : current));
+                      }
+                    }}
+                    onDrop={(event) => void handleBusinessImageDrop("cover_url", event)}
+                    className={`rounded-2xl border-2 border-dashed p-4 transition-colors ${
+                      draggingField === "cover_url"
+                        ? isDark ? "border-[#4a9eff] bg-[#12233d]" : "border-blue-500 bg-blue-50"
+                        : isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-300 bg-white"
                     }`}
-                  />
+                  >
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => void handleBusinessImageInputChange("cover_url", event)}
+                      className="hidden"
+                      id="businessCoverUploadInput"
+                    />
+                    <label htmlFor="businessCoverUploadInput" className="block cursor-pointer">
+                      <div className="flex items-center gap-3">
+                        <div className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl ${isDark ? "bg-[#1a2d4c]" : "bg-slate-100"}`}>
+                          {form.cover_url ? (
+                            <img src={form.cover_url} alt={t("account.business.coverUrl")} className="h-full w-full object-cover" />
+                          ) : (
+                            <Upload className={`h-5 w-5 ${isDark ? "text-slate-300" : "text-slate-500"}`} />
+                          )}
+                        </div>
+                        <div>
+                          <p className={`text-sm font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                            {uploadingField === "cover_url" ? t("account.business.imageUploading") : t("account.business.imageUploadHint")}
+                          </p>
+                          <p className={`mt-1 text-xs ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                            {t("account.business.imageUploadFormats")}
+                          </p>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                  {uploadErrors.cover_url ? (
+                    <div className={`mt-3 rounded-2xl border p-3 text-sm ${isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-600"}`}>
+                      {uploadErrors.cover_url}
+                    </div>
+                  ) : null}
+                  {form.cover_url ? (
+                    <button
+                      type="button"
+                      onClick={() => setForm((current) => ({ ...current, cover_url: "" }))}
+                      className={`mt-3 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium ${isDark ? "bg-[#1a2d4c] text-slate-200" : "bg-slate-100 text-slate-700"}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      {t("account.business.removeImage")}
+                    </button>
+                  ) : null}
                 </div>
-                <div>
-                  <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
-                    {t("account.business.tagsJson")}
-                  </label>
-                  <textarea
-                    value={form.tags_text}
-                    onChange={(event) => setForm((current) => ({ ...current, tags_text: event.target.value }))}
-                    rows={3}
-                    placeholder={t("account.business.tagsHint")}
-                    className={`w-full rounded-2xl border px-4 py-3 text-sm ${
-                      isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
-                    }`}
-                  />
-                </div>
-                <div>
-                  <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
-                    {t("account.business.serviceAreasJson")}
-                  </label>
-                  <textarea
-                    value={form.service_areas_text}
-                    onChange={(event) => setForm((current) => ({ ...current, service_areas_text: event.target.value }))}
-                    rows={3}
-                    placeholder={t("account.business.serviceAreasHint")}
-                    className={`w-full rounded-2xl border px-4 py-3 text-sm ${
-                      isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
-                    }`}
-                  />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
+                      {t("account.business.tagsJson")}
+                    </label>
+                    <textarea
+                      value={form.tags_text}
+                      onChange={(event) => setForm((current) => ({ ...current, tags_text: event.target.value }))}
+                      rows={3}
+                      placeholder={t("account.business.tagsHint")}
+                      className={`w-full rounded-2xl border px-4 py-3 text-sm ${
+                        isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
+                      {t("account.business.serviceAreasJson")}
+                    </label>
+                    <textarea
+                      value={form.service_areas_text}
+                      onChange={(event) => setForm((current) => ({ ...current, service_areas_text: event.target.value }))}
+                      rows={3}
+                      placeholder={t("account.business.serviceAreasHint")}
+                      className={`w-full rounded-2xl border px-4 py-3 text-sm ${
+                        isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
+                      }`}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
+
+            {!isFormReady ? (
+              <p className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                {t("account.business.requiredFieldsMissing")}:{" "}
+                {requiredFields
+                  .filter((field) => !field.valid)
+                  .map((field) => t(`account.business.${field.key}`))
+                  .join(", ")}
+              </p>
+            ) : null}
 
             <div className="flex justify-end">
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={!canSubmit || saveMutation.isPending}
+                disabled={!isFormReady || saveMutation.isPending}
                 className={`inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold ${
-                  !canSubmit || saveMutation.isPending ? "cursor-not-allowed opacity-60" : ""
+                  !isFormReady || saveMutation.isPending ? "cursor-not-allowed opacity-60" : ""
                 } ${
                   isDark
                     ? "bg-gradient-to-r from-[#FFD700] to-[#e6c200] text-[#0d1a2e]"

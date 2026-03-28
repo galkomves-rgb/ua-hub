@@ -8,8 +8,9 @@ import AdBanner from "@/components/AdBanner";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
 import { useGlobalCity } from "@/lib/global-preferences";
+import { fetchPublicBusinesses } from "@/lib/public-businesses";
 import { fetchPublicListings } from "@/lib/public-listings";
-import { MODULES, SAMPLE_BUSINESSES, IMAGES } from "@/lib/platform";
+import { MODULES, IMAGES } from "@/lib/platform";
 
 function normalizeCityFilter(value: string): string {
   return value === "All Spain" ? "all" : value;
@@ -22,14 +23,20 @@ export default function ModulePage() {
   const { theme } = useTheme();
   const { t } = useI18n();
   const isDark = theme === "dark";
+  const isBusiness = moduleId === "business";
 
   const mod = moduleId ? MODULES[moduleId] : null;
   const { city: globalCity, setCity: setGlobalCity } = useGlobalCity();
   const normalizedGlobalCity = normalizeCityFilter(globalCity);
+  const initialBusinessType = useMemo(() => {
+    if (!isBusiness) return "all";
+    const type = new URLSearchParams(location.search).get("type");
+    return type === "verified" || type === "premium" ? type : "all";
+  }, [isBusiness, location.search]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedCity, setSelectedCity] = useState(normalizedGlobalCity);
-  const [selectedType, setSelectedType] = useState("all");
+  const [selectedType, setSelectedType] = useState(initialBusinessType);
   const [sortBy, setSortBy] = useState("newest");
   const [showFilters, setShowFilters] = useState(false);
 
@@ -37,7 +44,12 @@ export default function ModulePage() {
     setSelectedCity(normalizeCityFilter(globalCity));
   }, [globalCity]);
 
-  const isBusiness = moduleId === "business";
+  useEffect(() => {
+    if (isBusiness) {
+      setSelectedType(initialBusinessType);
+    }
+  }, [initialBusinessType, isBusiness]);
+
   const publicListingsQuery = useQuery({
     queryKey: ["public-module-listings", moduleId, selectedCategory, selectedCity],
     queryFn: () => fetchPublicListings({
@@ -52,6 +64,16 @@ export default function ModulePage() {
     queryKey: ["public-module-listings-all", moduleId],
     queryFn: () => fetchPublicListings({ module: moduleId, limit: 100 }),
     enabled: Boolean(moduleId) && !isBusiness,
+  });
+  const publicBusinessesQuery = useQuery({
+    queryKey: ["public-businesses", selectedCity, selectedType],
+    queryFn: () =>
+      fetchPublicBusinesses({
+        city: selectedCity === "all" ? undefined : selectedCity,
+        isVerified: selectedType === "verified" ? true : undefined,
+        limit: 100,
+      }),
+    enabled: isBusiness,
   });
 
   // Filter listings
@@ -91,29 +113,39 @@ export default function ModulePage() {
 
   // Filter businesses
   const filteredBusinesses = useMemo(() => {
-    let items = [...SAMPLE_BUSINESSES];
+    let items = [...(publicBusinessesQuery.data ?? [])];
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       items = items.filter(
-        (b) => b.name.toLowerCase().includes(q) || b.description.toLowerCase().includes(q) || b.category.toLowerCase().includes(q)
+        (b) =>
+          b.business_name.toLowerCase().includes(q) ||
+          b.description.toLowerCase().includes(q) ||
+          b.category.toLowerCase().includes(q)
       );
     }
     if (selectedCity !== "all") {
       items = items.filter((b) => b.city === selectedCity);
     }
     if (selectedType === "verified") {
-      items = items.filter((b) => b.isVerified);
+      items = items.filter((b) => b.is_verified && b.verification_status === "verified");
     } else if (selectedType === "premium") {
-      items = items.filter((b) => b.isPremium);
+      items = items.filter((b) => b.is_premium);
     }
-    return items;
-  }, [searchQuery, selectedCity, selectedType]);
+    return items
+      .filter((b) => b.active_listings_count > 0)
+      .sort((a, b) => {
+        if (a.is_premium !== b.is_premium) {
+          return Number(b.is_premium) - Number(a.is_premium);
+        }
+        return b.total_views_count - a.total_views_count;
+      });
+  }, [publicBusinessesQuery.data, searchQuery, selectedCity, selectedType]);
 
   const activeCities = useMemo(() => {
     const citySet = new Set<string>();
 
     if (isBusiness) {
-      SAMPLE_BUSINESSES.forEach((business) => {
+      (publicBusinessesQuery.data ?? []).forEach((business) => {
         if (business.city?.trim()) {
           citySet.add(business.city.trim());
         }
@@ -127,7 +159,7 @@ export default function ModulePage() {
     }
 
     return Array.from(citySet).sort((a, b) => a.localeCompare(b));
-  }, [allModuleListingsQuery.data, isBusiness]);
+  }, [allModuleListingsQuery.data, isBusiness, publicBusinessesQuery.data]);
 
   if (!mod) {
     return (
@@ -428,6 +460,11 @@ export default function ModulePage() {
                 {publicListingsQuery.error instanceof Error ? publicListingsQuery.error.message : "Failed to load listings"}
               </div>
             ) : null}
+            {isBusiness && publicBusinessesQuery.isError ? (
+              <div className={`mb-4 rounded-xl border p-4 text-sm ${isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>
+                {t("home.businessesLoadError")}
+              </div>
+            ) : null}
 
             {/* Results count */}
             <p className={`text-xs mb-4 ${isDark ? "text-gray-500" : "text-gray-400"}`}>
@@ -435,13 +472,17 @@ export default function ModulePage() {
             </p>
 
             {/* Listings grid */}
-            {activeListings.length === 0 ? (
+            {isBusiness && publicBusinessesQuery.isLoading ? (
+              <div className={`text-center py-16 rounded-xl border ${isDark ? "bg-[#111d32] border-[#1a3050]" : "bg-white border-gray-200/80"}`}>
+                <p className={`text-sm ${isDark ? "text-gray-500" : "text-gray-400"}`}>{t("home.businessesLoading")}</p>
+              </div>
+            ) : activeListings.length === 0 ? (
               <div className={`text-center py-16 rounded-xl border ${isDark ? "bg-[#111d32] border-[#1a3050]" : "bg-white border-gray-200/80"}`}>
                 <p className={`text-sm ${isDark ? "text-gray-500" : "text-gray-400"}`}>{t("common.noResults")}</p>
               </div>
             ) : isBusiness ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {(filteredBusinesses as BusinessProfile[]).map((biz) => (
+                {filteredBusinesses.map((biz) => (
                   <BusinessCard key={biz.id} biz={biz} />
                 ))}
               </div>
@@ -458,6 +499,3 @@ export default function ModulePage() {
     </Layout>
   );
 }
-
-// BusinessProfile type used above via cast
-import type { BusinessProfile } from "@/lib/platform";

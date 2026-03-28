@@ -1,4 +1,5 @@
 import { getAPIBaseURL } from "@/lib/config";
+import { refreshAuthTokenIfPossible } from "@/lib/auth";
 
 export interface AccountDashboardResponse {
   active_listings_count: number;
@@ -578,6 +579,10 @@ export interface BusinessProfileResponse {
   saved_by_users_count: number;
   profile_completeness: number;
   public_preview_url: string | null;
+  google_place_id: string | null;
+  google_maps_rating: string | null;
+  google_maps_review_count: number | null;
+  google_maps_rating_updated_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -611,15 +616,25 @@ async function accountFetch<T>(
   init?: RequestInit,
   options?: { notFoundError?: string },
 ): Promise<T> {
-  const token = localStorage.getItem("auth_token");
-  const response = await fetch(`${getAPIBaseURL()}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers || {}),
-    },
-  });
+  const request = async (token: string | null) =>
+    fetch(`${getAPIBaseURL()}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(init?.headers || {}),
+      },
+    });
+
+  const initialToken = localStorage.getItem("auth_token");
+  let response = await request(initialToken);
+
+  if (response.status === 401) {
+    const refreshedToken = await refreshAuthTokenIfPossible();
+    if (refreshedToken) {
+      response = await request(refreshedToken);
+    }
+  }
 
   if (response.status === 404) {
     throw new Error(options?.notFoundError || "NOT_FOUND");

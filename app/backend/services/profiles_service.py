@@ -3,8 +3,48 @@ from core.config import settings
 from models.listings import Listings
 from models.profiles import UserProfile, BusinessProfile
 from models.saved import SavedBusiness
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import load_only
+
+
+BUSINESS_PROFILE_BASE_ATTRS = (
+    "id",
+    "owner_user_id",
+    "slug",
+    "name",
+    "logo_url",
+    "cover_url",
+    "category",
+    "city",
+    "description",
+    "contacts_json",
+    "is_verified",
+    "is_premium",
+    "tags_json",
+    "rating",
+    "website",
+    "social_links_json",
+    "service_areas_json",
+    "verification_status",
+    "verification_requested_at",
+    "verification_notes",
+    "subscription_plan",
+    "subscription_request_status",
+    "subscription_requested_plan",
+    "subscription_requested_at",
+    "subscription_renewal_date",
+    "listing_quota",
+    "created_at",
+    "updated_at",
+)
+
+BUSINESS_PROFILE_GOOGLE_ATTRS = (
+    "google_place_id",
+    "google_maps_rating",
+    "google_maps_review_count",
+    "google_maps_rating_updated_at",
+)
 
 
 class ProfileService:
@@ -12,6 +52,58 @@ class ProfileService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+        self._business_google_columns_available: bool | None = None
+
+    async def _has_business_google_columns(self) -> bool:
+        if self._business_google_columns_available is not None:
+            return self._business_google_columns_available
+
+        try:
+            bind = self.db.get_bind()
+            dialect = bind.dialect.name if bind is not None else ""
+
+            if dialect == "sqlite":
+                result = await self.db.execute(text("PRAGMA table_info(business_profiles)"))
+                column_names = {str(row[1]) for row in result.fetchall()}
+            else:
+                result = await self.db.execute(
+                    text(
+                        """
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = 'business_profiles'
+                          AND column_name IN (
+                            'google_place_id',
+                            'google_maps_rating',
+                            'google_maps_review_count',
+                            'google_maps_rating_updated_at'
+                          )
+                        """
+                    )
+                )
+                column_names = {str(row[0]) for row in result.fetchall()}
+
+            self._business_google_columns_available = all(
+                attr in column_names for attr in BUSINESS_PROFILE_GOOGLE_ATTRS
+            )
+        except Exception:
+            self._business_google_columns_available = False
+
+        return self._business_google_columns_available
+
+    async def _apply_business_profile_compat(self, query):
+        if await self._has_business_google_columns():
+            return query
+
+        return query.options(
+            load_only(*(getattr(BusinessProfile, attr) for attr in BUSINESS_PROFILE_BASE_ATTRS))
+        )
+
+    async def _refresh_business_profile(self, profile: BusinessProfile) -> None:
+        attribute_names = list(BUSINESS_PROFILE_BASE_ATTRS)
+        if await self._has_business_google_columns():
+            attribute_names.extend(BUSINESS_PROFILE_GOOGLE_ATTRS)
+        await self.db.refresh(profile, attribute_names=attribute_names)
 
     @staticmethod
     def _calculate_business_profile_completeness(profile: BusinessProfile) -> int:
@@ -33,6 +125,7 @@ class ProfileService:
         return round(completed / len(checks) * 100)
 
     async def serialize_business_profile(self, profile: BusinessProfile) -> dict:
+        has_google_columns = await self._has_business_google_columns()
         active_statuses = ["active", "published"]
         active_listings_count = await self.db.scalar(
             select(func.count(Listings.id)).where(
@@ -84,6 +177,10 @@ class ProfileService:
             "saved_by_users_count": int(saved_by_users_count or 0),
             "profile_completeness": self._calculate_business_profile_completeness(profile),
             "public_preview_url": preview_url,
+            "google_place_id": profile.google_place_id if has_google_columns else None,
+            "google_maps_rating": profile.google_maps_rating if has_google_columns else None,
+            "google_maps_review_count": profile.google_maps_review_count if has_google_columns else None,
+            "google_maps_rating_updated_at": profile.google_maps_rating_updated_at if has_google_columns else None,
             "created_at": profile.created_at,
             "updated_at": profile.updated_at,
         }
@@ -126,7 +223,7 @@ class ProfileService:
         )
         self.db.add(profile)
         await self.db.commit()
-        await self.db.refresh(profile)
+        await self._refresh_business_profile(profile)
         return profile
 
     async def get_user_profile(self, user_id: str) -> UserProfile | None:
@@ -240,21 +337,23 @@ class ProfileService:
         )
         self.db.add(profile)
         await self.db.commit()
-        await self.db.refresh(profile)
+        await self._refresh_business_profile(profile)
         return profile
 
     async def get_business_profile(self, slug: str) -> BusinessProfile | None:
         """Get business profile by slug."""
-        result = await self.db.execute(
+        query = await self._apply_business_profile_compat(
             select(BusinessProfile).where(BusinessProfile.slug == slug)
         )
+        result = await self.db.execute(query)
         return result.scalar_one_or_none()
 
     async def get_business_profiles_by_owner(self, owner_user_id: str) -> list[BusinessProfile]:
         """Get all business profiles owned by a user."""
-        result = await self.db.execute(
+        query = await self._apply_business_profile_compat(
             select(BusinessProfile).where(BusinessProfile.owner_user_id == owner_user_id)
         )
+        result = await self.db.execute(query)
         return result.scalars().all()
 
     async def get_onboarding_status(self, user_id: str) -> dict:
@@ -263,7 +362,12 @@ class ProfileService:
         has_user_profile = profile is not None
         has_business_profile = len(business_profiles) > 0
         completed = bool(profile and profile.onboarding_completed)
-        next_step = "done" if completed else "user_profile"
+        if not completed:
+            next_step = "user_profile"
+        elif profile and profile.account_type == "business" and not has_business_profile:
+            next_step = "business_profile"
+        else:
+            next_step = "done"
         return {
             "completed": completed,
             "has_user_profile": has_user_profile,
@@ -320,7 +424,7 @@ class ProfileService:
 
         profile.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
-        await self.db.refresh(profile)
+        await self._refresh_business_profile(profile)
         return profile
 
     async def request_business_verification(
@@ -341,7 +445,7 @@ class ProfileService:
         profile.verification_notes = message
         profile.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
-        await self.db.refresh(profile)
+        await self._refresh_business_profile(profile)
         return profile
 
     async def request_business_subscription_change(
@@ -363,7 +467,7 @@ class ProfileService:
         profile.subscription_requested_at = datetime.now(timezone.utc)
         profile.updated_at = datetime.now(timezone.utc)
         await self.db.commit()
-        await self.db.refresh(profile)
+        await self._refresh_business_profile(profile)
         return profile
 
     async def delete_business_profile(self, slug: str) -> bool:
@@ -394,6 +498,6 @@ class ProfileService:
         if is_verified is not None:
             query = query.where(BusinessProfile.is_verified == is_verified)
 
-        query = query.limit(limit).offset(offset)
+        query = (await self._apply_business_profile_compat(query)).limit(limit).offset(offset)
         result = await self.db.execute(query)
         return result.scalars().all()

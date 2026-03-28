@@ -24,6 +24,11 @@ interface EmailAuthResult {
   requiresEmailConfirmation: boolean;
 }
 
+interface TokenExchangeResponse {
+  token: string;
+  [key: string]: unknown;
+}
+
 export interface DevLoginOptions {
   role?: 'user' | 'admin';
   email?: string;
@@ -41,6 +46,8 @@ export interface StartOidcLoginOptions {
   method?: AuthMethod;
   mode?: AuthMode;
 }
+
+let restoreSessionPromise: Promise<string | null> | null = null;
 
 export function redirectToAuthEntry() {
   window.location.href = '/auth';
@@ -287,3 +294,17 @@ class RPApi {
 }
 
 export const authApi = new RPApi();
+
+export async function refreshAuthTokenIfPossible(): Promise<string | null> {
+  if (restoreSessionPromise) {
+    return restoreSessionPromise;
+  }
+
+  restoreSessionPromise = authApi.restoreSession().catch(() => null);
+
+  try {
+    return await restoreSessionPromise;
+  } finally {
+    restoreSessionPromise = null;
+  }
+}
