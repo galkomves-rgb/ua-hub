@@ -12,6 +12,7 @@ from asyncpg.exceptions import (
 from core.config import settings
 from sqlalchemy import DDL, text
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import DBAPIError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool
@@ -210,11 +211,42 @@ class DatabaseManager:
             except (UniqueViolationError, DuplicateTableError) as e:
                 self._initialized = True
                 logger.info(f"Duplicate table creation: {e}, ignored.")
+            except (ProgrammingError, DBAPIError) as e:
+                if self._is_duplicate_table_error(e):
+                    self._initialized = True
+                    logger.info("Duplicate table creation wrapped by SQLAlchemy, ignored: %s", e)
+                else:
+                    logger.error(f"Failed to create tables: {e}")
+                    raise
             except Exception as e:
                 logger.error(f"Failed to create tables: {e}")
                 raise
         finally:
             self._table_creation_lock.release()
+
+    @staticmethod
+    def _is_duplicate_table_error(error: Exception) -> bool:
+        """Detect duplicate table/index errors wrapped by SQLAlchemy.
+
+        Concurrent app starts can race between check-and-create steps. asyncpg
+        duplicate relation errors are often wrapped by SQLAlchemy ProgrammingError
+        or DBAPIError, so inspect both the wrapped original exception and message.
+        """
+        if isinstance(error, DuplicateTableError):
+            return True
+
+        original_error = getattr(error, "orig", None)
+        if isinstance(original_error, DuplicateTableError):
+            return True
+
+        error_message = str(original_error or error).lower()
+        duplicate_markers = (
+            'already exists',
+            'duplicate table',
+            'duplicate relation',
+            'relation "',
+        )
+        return any(marker in error_message for marker in duplicate_markers)
 
     async def repair_business_profile_google_columns(self):
         """Repair the known business_profiles Google Maps schema drift.
