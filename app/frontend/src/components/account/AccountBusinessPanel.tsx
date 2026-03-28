@@ -11,10 +11,12 @@ import {
   ShieldCheck,
   Sparkles,
   Star,
+  Trash2,
 } from "lucide-react";
 import CityPicker from "@/components/CityPicker";
 import {
   createBusinessProfile,
+  deleteBusinessProfile,
   fetchMyBusinessProfiles,
   requestBusinessSubscription,
   requestBusinessVerification,
@@ -220,6 +222,20 @@ export function AccountBusinessPanel() {
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["account-business-profiles"] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!activeProfile) {
+        throw new Error(t("account.business.empty"));
+      }
+      return deleteBusinessProfile(activeProfile.slug);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["account-business-profiles"] });
+      await queryClient.invalidateQueries({ queryKey: ["account-dashboard"] });
+      setForm(buildBusinessForm(null));
     },
   });
 
@@ -811,13 +827,43 @@ export function AccountBusinessPanel() {
               </div>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              {activeProfile ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const confirmed = window.confirm(
+                      t("account.business.deleteConfirm") ||
+                        (typeof window !== "undefined" && window.navigator.language.startsWith("es")
+                          ? "¿Seguro que quieres eliminar este perfil de negocio?"
+                          : "Ви впевнені, що хочете видалити цей бізнес-профіль?"),
+                    );
+                    if (confirmed) {
+                      deleteMutation.mutate();
+                    }
+                  }}
+                  disabled={deleteMutation.isPending || saveMutation.isPending}
+                  className={`inline-flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold ${
+                    deleteMutation.isPending || saveMutation.isPending ? "cursor-not-allowed opacity-60" : ""
+                  } ${
+                    isDark
+                      ? "border-red-900/40 bg-red-950/20 text-red-300"
+                      : "border-red-200 bg-red-50 text-red-700"
+                  }`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {t("account.business.delete")}
+                </button>
+              ) : (
+                <span />
+              )}
+
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={!canSubmit || saveMutation.isPending}
+                disabled={!canSubmit || saveMutation.isPending || deleteMutation.isPending}
                 className={`inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold ${
-                  !canSubmit || saveMutation.isPending ? "cursor-not-allowed opacity-60" : ""
+                  !canSubmit || saveMutation.isPending || deleteMutation.isPending ? "cursor-not-allowed opacity-60" : ""
                 } ${
                   isDark
                     ? "bg-gradient-to-r from-[#FFD700] to-[#e6c200] text-[#0d1a2e]"
@@ -828,6 +874,16 @@ export function AccountBusinessPanel() {
                 {saveMutation.isPending ? t("account.business.saving") : t("account.business.save")}
               </button>
             </div>
+
+            {deleteMutation.isError ? (
+              <div
+                className={`rounded-2xl border p-4 text-sm ${
+                  isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-600"
+                }`}
+              >
+                {deleteMutation.error instanceof Error ? deleteMutation.error.message : t("account.business.saveError")}
+              </div>
+            ) : null}
           </div>
         )}
       </div>

@@ -14,6 +14,27 @@ class AdminService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @staticmethod
+    def _serialize_business_profile_item(profile: BusinessProfile) -> dict:
+        return {
+            "slug": profile.slug,
+            "name": profile.name,
+            "owner_user_id": profile.owner_user_id,
+            "category": profile.category,
+            "city": profile.city,
+            "verification_status": profile.verification_status,
+            "verification_requested_at": profile.verification_requested_at,
+            "verification_notes": profile.verification_notes,
+            "subscription_plan": profile.subscription_plan,
+            "subscription_request_status": profile.subscription_request_status,
+            "subscription_requested_plan": profile.subscription_requested_plan,
+            "subscription_requested_at": profile.subscription_requested_at,
+            "is_verified": bool(profile.is_verified),
+            "is_premium": bool(profile.is_premium),
+            "created_at": profile.created_at,
+            "updated_at": profile.updated_at,
+        }
+
     async def get_overview(self) -> dict:
         moderation_pending_count = int(
             await self.db.scalar(select(func.count(Listings.id)).where(Listings.status == "moderation_pending")) or 0
@@ -38,6 +59,18 @@ class AdminService:
         )
         active_subscriptions_count = int(
             await self.db.scalar(select(func.count(BillingSubscription.id)).where(BillingSubscription.status == "active")) or 0
+        )
+        pending_business_verifications_count = int(
+            await self.db.scalar(
+                select(func.count(BusinessProfile.id)).where(BusinessProfile.verification_status == "pending")
+            )
+            or 0
+        )
+        pending_business_subscription_requests_count = int(
+            await self.db.scalar(
+                select(func.count(BusinessProfile.id)).where(BusinessProfile.subscription_request_status == "pending")
+            )
+            or 0
         )
 
         recent_pending_listings_result = await self.db.execute(
@@ -96,6 +129,34 @@ class AdminService:
             for payment in recent_payment_issues_result.scalars().all()
         ]
 
+        recent_business_requests_result = await self.db.execute(
+            select(BusinessProfile)
+            .where(
+                or_(
+                    BusinessProfile.verification_status == "pending",
+                    BusinessProfile.subscription_request_status == "pending",
+                )
+            )
+            .order_by(BusinessProfile.updated_at.desc(), BusinessProfile.created_at.desc())
+            .limit(5)
+        )
+        recent_business_requests = [
+            {
+                "slug": profile.slug,
+                "name": profile.name,
+                "owner_user_id": profile.owner_user_id,
+                "city": profile.city,
+                "verification_status": profile.verification_status,
+                "verification_requested_at": profile.verification_requested_at,
+                "subscription_plan": profile.subscription_plan,
+                "subscription_request_status": profile.subscription_request_status,
+                "subscription_requested_plan": profile.subscription_requested_plan,
+                "subscription_requested_at": profile.subscription_requested_at,
+                "updated_at": profile.updated_at,
+            }
+            for profile in recent_business_requests_result.scalars().all()
+        ]
+
         return {
             "counts": {
                 "moderation_pending_count": moderation_pending_count,
@@ -108,11 +169,114 @@ class AdminService:
                 "pending_payments_count": pending_payments_count,
                 "payment_issues_count": payment_issues_count,
                 "active_subscriptions_count": active_subscriptions_count,
+                "pending_business_verifications_count": pending_business_verifications_count,
+                "pending_business_subscription_requests_count": pending_business_subscription_requests_count,
             },
             "recent_pending_listings": recent_pending_listings,
             "recent_reports": recent_reports,
             "recent_payment_issues": recent_payment_issues,
+            "recent_business_requests": recent_business_requests,
         }
+
+    async def list_business_profiles(
+        self,
+        verification_status: str | None = None,
+        subscription_request_status: str | None = None,
+        query_text: str | None = None,
+        limit: int = 20,
+        offset: int = 0,
+    ) -> dict:
+        filters = []
+        if verification_status and verification_status != "all":
+            filters.append(BusinessProfile.verification_status == verification_status)
+        if subscription_request_status and subscription_request_status != "all":
+            filters.append(BusinessProfile.subscription_request_status == subscription_request_status)
+        if query_text:
+            search_term = f"%{query_text}%"
+            filters.append(
+                or_(
+                    BusinessProfile.slug.ilike(search_term),
+                    BusinessProfile.name.ilike(search_term),
+                    BusinessProfile.owner_user_id.ilike(search_term),
+                    BusinessProfile.city.ilike(search_term),
+                )
+            )
+
+        total_query = select(func.count(BusinessProfile.id))
+        items_query = select(BusinessProfile).order_by(BusinessProfile.updated_at.desc(), BusinessProfile.created_at.desc())
+        for condition in filters:
+            total_query = total_query.where(condition)
+            items_query = items_query.where(condition)
+
+        total = int(await self.db.scalar(total_query) or 0)
+        result = await self.db.execute(items_query.limit(limit).offset(offset))
+        items = [self._serialize_business_profile_item(profile) for profile in result.scalars().all()]
+        return {"total": total, "limit": limit, "offset": offset, "items": items}
+
+    async def review_business_verification(
+        self,
+        slug: str,
+        decision: str,
+        moderation_note: str | None,
+        admin_user_id: str | None,
+    ) -> dict | None:
+        normalized_decision = (decision or "").strip().lower()
+        if normalized_decision not in {"approved", "rejected"}:
+            raise ValueError("Unsupported verification decision")
+
+        result = await self.db.execute(select(BusinessProfile).where(BusinessProfile.slug == slug))
+        profile = result.scalar_one_or_none()
+        if not profile:
+            return None
+
+        profile.verification_status = "verified" if normalized_decision == "approved" else "rejected"
+        profile.is_verified = normalized_decision == "approved"
+        profile.verification_notes = moderation_note.strip() if moderation_note else profile.verification_notes
+        profile.updated_at = datetime.now(timezone.utc)
+
+        await self.db.commit()
+        await self.db.refresh(profile)
+        payload = self._serialize_business_profile_item(profile)
+        payload["reviewed_by"] = admin_user_id
+        return payload
+
+    async def review_business_subscription(
+        self,
+        slug: str,
+        decision: str,
+        requested_plan: str | None,
+        moderation_note: str | None,
+        admin_user_id: str | None,
+    ) -> dict | None:
+        normalized_decision = (decision or "").strip().lower()
+        if normalized_decision not in {"approved", "rejected"}:
+            raise ValueError("Unsupported subscription decision")
+
+        result = await self.db.execute(select(BusinessProfile).where(BusinessProfile.slug == slug))
+        profile = result.scalar_one_or_none()
+        if not profile:
+            return None
+
+        if normalized_decision == "approved":
+            next_plan = (requested_plan or profile.subscription_requested_plan or profile.subscription_plan or "").strip().lower()
+            if next_plan not in {"basic", "premium", "business"}:
+                raise ValueError("Unsupported subscription plan")
+            profile.subscription_plan = next_plan
+            profile.subscription_request_status = "approved"
+            profile.is_premium = next_plan in {"premium", "business"}
+        else:
+            profile.subscription_request_status = "rejected"
+
+        if moderation_note:
+            profile.verification_notes = moderation_note.strip()
+
+        profile.updated_at = datetime.now(timezone.utc)
+
+        await self.db.commit()
+        await self.db.refresh(profile)
+        payload = self._serialize_business_profile_item(profile)
+        payload["reviewed_by"] = admin_user_id
+        return payload
 
     async def list_reports(self, status: str | None = None, query_text: str | None = None, limit: int = 20, offset: int = 0) -> dict:
         filters = []

@@ -184,6 +184,8 @@ export interface AdminOverviewCounts {
   pending_payments_count: number;
   payment_issues_count: number;
   active_subscriptions_count: number;
+  pending_business_verifications_count: number;
+  pending_business_subscription_requests_count: number;
 }
 
 export interface AdminOverviewListingItem {
@@ -215,11 +217,26 @@ export interface AdminOverviewPaymentItem {
   failure_reason: string | null;
 }
 
+export interface AdminOverviewBusinessItem {
+  slug: string;
+  name: string;
+  owner_user_id: string;
+  city: string;
+  verification_status: string;
+  verification_requested_at: string | null;
+  subscription_plan: string | null;
+  subscription_request_status: string | null;
+  subscription_requested_plan: string | null;
+  subscription_requested_at: string | null;
+  updated_at: string;
+}
+
 export interface AdminOverviewResponse {
   counts: AdminOverviewCounts;
   recent_pending_listings: AdminOverviewListingItem[];
   recent_reports: AdminOverviewReportItem[];
   recent_payment_issues: AdminOverviewPaymentItem[];
+  recent_business_requests: AdminOverviewBusinessItem[];
 }
 
 export interface AdminPagedResponse<TItem> {
@@ -291,6 +308,36 @@ export interface AdminUserItem {
 
 export interface AdminUserRoleUpdatePayload {
   role: string;
+}
+
+export interface AdminBusinessProfileItem {
+  slug: string;
+  name: string;
+  owner_user_id: string;
+  category: string;
+  city: string;
+  verification_status: string;
+  verification_requested_at: string | null;
+  verification_notes: string | null;
+  subscription_plan: string | null;
+  subscription_request_status: string | null;
+  subscription_requested_plan: string | null;
+  subscription_requested_at: string | null;
+  is_verified: boolean;
+  is_premium: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminBusinessVerificationReviewPayload {
+  decision: "approved" | "rejected";
+  moderation_note?: string | null;
+}
+
+export interface AdminBusinessSubscriptionReviewPayload {
+  decision: "approved" | "rejected";
+  plan?: "basic" | "premium" | "business" | null;
+  moderation_note?: string | null;
 }
 
 export interface AdminExpirationRunResponse {
@@ -1154,6 +1201,49 @@ export function updateAdminUserRole(userId: string, payload: AdminUserRoleUpdate
   });
 }
 
+export function fetchAdminBusinessProfiles(filters?: {
+  verification_status?: string;
+  subscription_request_status?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const params = new URLSearchParams();
+  if (filters?.verification_status) {
+    params.set("verification_status", filters.verification_status);
+  }
+  if (filters?.subscription_request_status) {
+    params.set("subscription_request_status", filters.subscription_request_status);
+  }
+  if (filters?.q) {
+    params.set("q", filters.q);
+  }
+  if (typeof filters?.limit === "number") {
+    params.set("limit", String(filters.limit));
+  }
+  if (typeof filters?.offset === "number") {
+    params.set("offset", String(filters.offset));
+  }
+  const suffix = params.toString();
+  return accountFetch<AdminPagedResponse<AdminBusinessProfileItem>>(
+    `/api/v1/admin/business/profiles${suffix ? `?${suffix}` : ""}`,
+  );
+}
+
+export function reviewAdminBusinessVerification(slug: string, payload: AdminBusinessVerificationReviewPayload) {
+  return accountFetch<AdminBusinessProfileItem>(`/api/v1/admin/business/${encodeURIComponent(slug)}/verification-review`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function reviewAdminBusinessSubscription(slug: string, payload: AdminBusinessSubscriptionReviewPayload) {
+  return accountFetch<AdminBusinessProfileItem>(`/api/v1/admin/business/${encodeURIComponent(slug)}/subscription-review`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function runAdminExpirationJobs(asOf?: string) {
   const suffix = asOf ? `?as_of=${encodeURIComponent(asOf)}` : "";
   return accountFetch<AdminExpirationRunResponse>(`/api/v1/admin/monetization/run-expirations${suffix}`, {
@@ -1251,5 +1341,11 @@ export function requestBusinessSubscription(slug: string, payload: BusinessSubsc
   return accountFetch<BusinessProfileResponse>(`/api/v1/profiles/business/${slug}/subscription-request`, {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+}
+
+export function deleteBusinessProfile(slug: string) {
+  return accountFetch<{ message: string }>(`/api/v1/profiles/business/${slug}`, {
+    method: "DELETE",
   });
 }

@@ -53,6 +53,20 @@ export default function AdminOverviewPage() {
         icon: Building2,
       },
       {
+        key: "business-verification",
+        label: locale === "ua" ? "Запити верифікації бізнесу" : locale === "es" ? "Solicitudes de verificación" : "Business verification requests",
+        value: counts.pending_business_verifications_count,
+        icon: Building2,
+        to: "/admin/business",
+      },
+      {
+        key: "business-subscription",
+        label: locale === "ua" ? "Запити зміни підписки" : locale === "es" ? "Solicitudes de suscripción" : "Subscription change requests",
+        value: counts.pending_business_subscription_requests_count,
+        icon: CreditCard,
+        to: "/admin/business",
+      },
+      {
         key: "published",
         label: locale === "ua" ? "Опубліковані оголошення" : locale === "es" ? "Anuncios publicados" : "Published listings",
         value: counts.published_listings_count,
@@ -116,7 +130,7 @@ export default function AdminOverviewPage() {
       ) : null}
 
       {overviewQuery.data ? (
-        <section className="grid gap-6 xl:grid-cols-3">
+        <section className="grid gap-6 xl:grid-cols-2">
           <div className={`rounded-3xl border p-5 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
             <div className="mb-4 flex items-center justify-between gap-3">
               <h3 className={`text-lg font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
@@ -170,6 +184,31 @@ export default function AdminOverviewPage() {
                 </div>
               )) : (
                 <p className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>{locale === "ua" ? "Немає проблемних платежів." : locale === "es" ? "No hay pagos problemáticos." : "No payment issues."}</p>
+              )}
+            </div>
+          </div>
+
+          <div className={`rounded-3xl border p-5 xl:col-span-2 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className={`text-lg font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                {locale === "ua" ? "Запити бізнес-профілів" : locale === "es" ? "Solicitudes de perfiles de negocio" : "Business profile requests"}
+              </h3>
+              <Link to="/admin/business" className="text-sm font-semibold text-[#0057B8]">
+                {locale === "ua" ? "Відкрити" : locale === "es" ? "Abrir" : "Open"}
+              </Link>
+            </div>
+            <div className="space-y-3">
+              {overviewQuery.data.recent_business_requests.length > 0 ? overviewQuery.data.recent_business_requests.map((item) => (
+                <Link key={item.slug} to="/admin/business" className={`block rounded-2xl border px-4 py-3 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+                  <p className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{item.name}</p>
+                  <p className={`mt-1 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                    {item.slug} · {item.city} · verification: {item.verification_status} · subscription: {item.subscription_request_status || "-"}
+                  </p>
+                </Link>
+              )) : (
+                <p className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                  {locale === "ua" ? "Немає активних запитів бізнес-профілів." : locale === "es" ? "No hay solicitudes activas de perfiles de negocio." : "No active business profile requests."}
+                </p>
               )}
             </div>
           </div>

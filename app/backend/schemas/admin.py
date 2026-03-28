@@ -16,6 +16,8 @@ class AdminOverviewCountsResponse(BaseModel):
     pending_payments_count: int
     payment_issues_count: int
     active_subscriptions_count: int
+    pending_business_verifications_count: int
+    pending_business_subscription_requests_count: int
 
 
 class AdminOverviewListingItemResponse(BaseModel):
@@ -47,11 +49,63 @@ class AdminOverviewPaymentItemResponse(BaseModel):
     failure_reason: str | None = None
 
 
+class AdminOverviewBusinessItemResponse(BaseModel):
+    slug: str
+    name: str
+    owner_user_id: str
+    city: str
+    verification_status: str
+    verification_requested_at: datetime | None = None
+    subscription_plan: str | None = None
+    subscription_request_status: str | None = None
+    subscription_requested_plan: str | None = None
+    subscription_requested_at: datetime | None = None
+    updated_at: datetime
+
+
 class AdminOverviewResponse(BaseModel):
     counts: AdminOverviewCountsResponse
     recent_pending_listings: list[AdminOverviewListingItemResponse]
     recent_reports: list[AdminOverviewReportItemResponse]
     recent_payment_issues: list[AdminOverviewPaymentItemResponse]
+    recent_business_requests: list[AdminOverviewBusinessItemResponse]
+
+
+class AdminBusinessProfileItemResponse(BaseModel):
+    slug: str
+    name: str
+    owner_user_id: str
+    category: str
+    city: str
+    verification_status: str
+    verification_requested_at: datetime | None = None
+    verification_notes: str | None = None
+    subscription_plan: str | None = None
+    subscription_request_status: str | None = None
+    subscription_requested_plan: str | None = None
+    subscription_requested_at: datetime | None = None
+    is_verified: bool
+    is_premium: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class AdminBusinessProfilesPageResponse(BaseModel):
+    total: int
+    limit: int
+    offset: int
+    items: list[AdminBusinessProfileItemResponse]
+
+
+class AdminBusinessVerificationReviewRequest(BaseModel):
+    decision: str
+    moderation_note: str | None = None
+
+
+class AdminBusinessSubscriptionReviewRequest(BaseModel):
+    decision: str
+    plan: str | None = None
+    moderation_note: str | None = None
 
 
 class AdminModerationAuditItemResponse(BaseModel):

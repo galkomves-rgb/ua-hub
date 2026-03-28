@@ -45,6 +45,16 @@ const ADMIN_NAV_ITEMS: AdminNavItem[] = [
     icon: CreditCard,
   },
   {
+    to: "/admin/business",
+    label: { ua: "Бізнес", es: "Negocios", en: "Business" },
+    description: {
+      ua: "Верифікація і підписки",
+      es: "Verificación y suscripciones",
+      en: "Verification and subscriptions",
+    },
+    icon: ShieldCheck,
+  },
+  {
     to: "/admin/users",
     label: { ua: "Користувачі", es: "Usuarios", en: "Users" },
     description: { ua: "Ролі та профілі", es: "Roles y perfiles", en: "Roles and profiles" },
