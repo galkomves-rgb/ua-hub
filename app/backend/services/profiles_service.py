@@ -337,7 +337,7 @@ class ProfileService:
         )
         self.db.add(profile)
         await self.db.commit()
-        await self.db.refresh(profile)
+        await self._refresh_business_profile(profile)
         return profile
 
     async def get_business_profile(self, slug: str) -> BusinessProfile | None:
