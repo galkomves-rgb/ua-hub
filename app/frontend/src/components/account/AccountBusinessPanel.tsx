@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart3,
@@ -11,6 +11,8 @@ import {
   ShieldCheck,
   Sparkles,
   Star,
+  Upload,
+  X,
 } from "lucide-react";
 import CityPicker from "@/components/CityPicker";
 import {
@@ -24,6 +26,7 @@ import {
 } from "@/lib/account-api";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
+import { uploadImageFile } from "@/lib/media-storage";
 
 type BusinessFormState = {
   slug: string;
@@ -45,6 +48,7 @@ type BusinessFormState = {
 const PLAN_OPTIONS = ["basic", "premium", "business"] as const;
 
 type PlanOption = (typeof PLAN_OPTIONS)[number];
+type BusinessImageField = "logo_url" | "cover_url";
 
 const CYRILLIC_SLUG_MAP: Record<string, string> = {
   а: "a", б: "b", в: "v", г: "h", ґ: "g", д: "d", е: "e", є: "ye", ж: "zh", з: "z", и: "y", і: "i",
@@ -207,6 +211,9 @@ export function AccountBusinessPanel() {
   const [form, setForm] = useState<BusinessFormState>(() => buildBusinessForm(null));
   const [verificationNote, setVerificationNote] = useState("");
   const [targetPlan, setTargetPlan] = useState<PlanOption>("business");
+  const [draggingField, setDraggingField] = useState<BusinessImageField | null>(null);
+  const [uploadingField, setUploadingField] = useState<BusinessImageField | null>(null);
+  const [uploadErrors, setUploadErrors] = useState<Partial<Record<BusinessImageField, string>>>({});
 
   useEffect(() => {
     setForm(buildBusinessForm(activeProfile));
@@ -318,6 +325,54 @@ export function AccountBusinessPanel() {
       social_links_json: form.social_links_json.trim() || "[]",
       service_areas_json: serializeStringList(form.service_areas_text),
     });
+  };
+
+  const clearUploadError = (field: BusinessImageField) => {
+    setUploadErrors((current) => {
+      if (!current[field]) {
+        return current;
+      }
+
+      const next = { ...current };
+      delete next[field];
+      return next;
+    });
+  };
+
+  const handleBusinessImageFiles = async (field: BusinessImageField, files: File[]) => {
+    if (files.length === 0) {
+      return;
+    }
+
+    clearUploadError(field);
+    setUploadingField(field);
+
+    try {
+      const uploadedAsset = await uploadImageFile(files[0], "listing");
+      setForm((current) => ({ ...current, [field]: uploadedAsset.accessUrl }));
+    } catch (error) {
+      setUploadErrors((current) => ({
+        ...current,
+        [field]: error instanceof Error ? error.message : t("account.business.imageUploadError"),
+      }));
+    } finally {
+      setUploadingField((current) => (current === field ? null : current));
+    }
+  };
+
+  const handleBusinessImageInputChange = async (field: BusinessImageField, event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = "";
+    await handleBusinessImageFiles(field, files);
+  };
+
+  const handleBusinessImageDrop = async (field: BusinessImageField, event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setDraggingField((current) => (current === field ? null : current));
+
+    const files = Array.from(event.dataTransfer.files || []);
+    await handleBusinessImageFiles(field, files);
   };
 
   const planLabel = (plan: string | null | undefined) => {
@@ -841,27 +896,149 @@ export function AccountBusinessPanel() {
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                     {t("account.business.logoUrl")}
                   </label>
-                  <input
-                    type="url"
-                    value={form.logo_url}
-                    onChange={(event) => setForm((current) => ({ ...current, logo_url: event.target.value }))}
-                    className={`w-full rounded-2xl border px-4 py-3 text-sm ${
-                      isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
+                  <div
+                    onDragEnter={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setDraggingField("logo_url");
+                    }}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (draggingField !== "logo_url") {
+                        setDraggingField("logo_url");
+                      }
+                    }}
+                    onDragLeave={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (event.currentTarget === event.target) {
+                        setDraggingField((current) => (current === "logo_url" ? null : current));
+                      }
+                    }}
+                    onDrop={(event) => void handleBusinessImageDrop("logo_url", event)}
+                    className={`rounded-2xl border-2 border-dashed p-4 transition-colors ${
+                      draggingField === "logo_url"
+                        ? isDark ? "border-[#4a9eff] bg-[#12233d]" : "border-blue-500 bg-blue-50"
+                        : isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-300 bg-white"
                     }`}
-                  />
+                  >
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => void handleBusinessImageInputChange("logo_url", event)}
+                      className="hidden"
+                      id="businessLogoUploadInput"
+                    />
+                    <label htmlFor="businessLogoUploadInput" className="block cursor-pointer">
+                      <div className="flex items-center gap-3">
+                        <div className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl ${isDark ? "bg-[#1a2d4c]" : "bg-slate-100"}`}>
+                          {form.logo_url ? (
+                            <img src={form.logo_url} alt={t("account.business.logoUrl")} className="h-full w-full object-cover" />
+                          ) : (
+                            <Upload className={`h-5 w-5 ${isDark ? "text-slate-300" : "text-slate-500"}`} />
+                          )}
+                        </div>
+                        <div>
+                          <p className={`text-sm font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                            {uploadingField === "logo_url" ? t("account.business.imageUploading") : t("account.business.imageUploadHint")}
+                          </p>
+                          <p className={`mt-1 text-xs ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                            {t("account.business.imageUploadFormats")}
+                          </p>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                  {uploadErrors.logo_url ? (
+                    <div className={`mt-3 rounded-2xl border p-3 text-sm ${isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-600"}`}>
+                      {uploadErrors.logo_url}
+                    </div>
+                  ) : null}
+                  {form.logo_url ? (
+                    <button
+                      type="button"
+                      onClick={() => setForm((current) => ({ ...current, logo_url: "" }))}
+                      className={`mt-3 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium ${isDark ? "bg-[#1a2d4c] text-slate-200" : "bg-slate-100 text-slate-700"}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      {t("account.business.removeImage")}
+                    </button>
+                  ) : null}
                 </div>
                 <div>
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                     {t("account.business.coverUrl")}
                   </label>
-                  <input
-                    type="url"
-                    value={form.cover_url}
-                    onChange={(event) => setForm((current) => ({ ...current, cover_url: event.target.value }))}
-                    className={`w-full rounded-2xl border px-4 py-3 text-sm ${
-                      isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
+                  <div
+                    onDragEnter={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setDraggingField("cover_url");
+                    }}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (draggingField !== "cover_url") {
+                        setDraggingField("cover_url");
+                      }
+                    }}
+                    onDragLeave={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (event.currentTarget === event.target) {
+                        setDraggingField((current) => (current === "cover_url" ? null : current));
+                      }
+                    }}
+                    onDrop={(event) => void handleBusinessImageDrop("cover_url", event)}
+                    className={`rounded-2xl border-2 border-dashed p-4 transition-colors ${
+                      draggingField === "cover_url"
+                        ? isDark ? "border-[#4a9eff] bg-[#12233d]" : "border-blue-500 bg-blue-50"
+                        : isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-300 bg-white"
                     }`}
-                  />
+                  >
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(event) => void handleBusinessImageInputChange("cover_url", event)}
+                      className="hidden"
+                      id="businessCoverUploadInput"
+                    />
+                    <label htmlFor="businessCoverUploadInput" className="block cursor-pointer">
+                      <div className="flex items-center gap-3">
+                        <div className={`flex h-11 w-11 items-center justify-center overflow-hidden rounded-2xl ${isDark ? "bg-[#1a2d4c]" : "bg-slate-100"}`}>
+                          {form.cover_url ? (
+                            <img src={form.cover_url} alt={t("account.business.coverUrl")} className="h-full w-full object-cover" />
+                          ) : (
+                            <Upload className={`h-5 w-5 ${isDark ? "text-slate-300" : "text-slate-500"}`} />
+                          )}
+                        </div>
+                        <div>
+                          <p className={`text-sm font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                            {uploadingField === "cover_url" ? t("account.business.imageUploading") : t("account.business.imageUploadHint")}
+                          </p>
+                          <p className={`mt-1 text-xs ${isDark ? "text-slate-500" : "text-slate-400"}`}>
+                            {t("account.business.imageUploadFormats")}
+                          </p>
+                        </div>
+                      </div>
+                    </label>
+                  </div>
+                  {uploadErrors.cover_url ? (
+                    <div className={`mt-3 rounded-2xl border p-3 text-sm ${isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-600"}`}>
+                      {uploadErrors.cover_url}
+                    </div>
+                  ) : null}
+                  {form.cover_url ? (
+                    <button
+                      type="button"
+                      onClick={() => setForm((current) => ({ ...current, cover_url: "" }))}
+                      className={`mt-3 inline-flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium ${isDark ? "bg-[#1a2d4c] text-slate-200" : "bg-slate-100 text-slate-700"}`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      {t("account.business.removeImage")}
+                    </button>
+                  ) : null}
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div>
