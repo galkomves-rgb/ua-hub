@@ -578,6 +578,10 @@ export interface BusinessProfileResponse {
   saved_by_users_count: number;
   profile_completeness: number;
   public_preview_url: string | null;
+  google_place_id: string | null;
+  google_maps_rating: string | null;
+  google_maps_review_count: number | null;
+  google_maps_rating_updated_at: string | null;
   created_at: string;
   updated_at: string;
 }

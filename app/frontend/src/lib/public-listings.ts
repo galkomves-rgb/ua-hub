@@ -180,3 +180,15 @@ export async function fetchPublicListing(listingId: number) {
   const response = await publicFetch<PublicListingRecord>(`/api/v1/listings/${listingId}?record_view=false`);
   return mapPublicListing(response);
 }
+
+export async function fetchPublicBusinessListings(slug: string, filters?: {
+  limit?: number;
+  offset?: number;
+}) {
+  const params = new URLSearchParams();
+  params.set("limit", String(filters?.limit ?? 50));
+  params.set("offset", String(filters?.offset ?? 0));
+
+  const response = await publicFetch<PublicListingRecord[]>(`/api/v1/listings/business/${slug}?${params.toString()}`);
+  return response.map(mapPublicListing);
+}

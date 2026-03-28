@@ -84,6 +84,10 @@ class ProfileService:
             "saved_by_users_count": int(saved_by_users_count or 0),
             "profile_completeness": self._calculate_business_profile_completeness(profile),
             "public_preview_url": preview_url,
+            "google_place_id": profile.google_place_id,
+            "google_maps_rating": profile.google_maps_rating,
+            "google_maps_review_count": profile.google_maps_review_count,
+            "google_maps_rating_updated_at": profile.google_maps_rating_updated_at,
             "created_at": profile.created_at,
             "updated_at": profile.updated_at,
         }
