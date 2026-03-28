@@ -223,7 +223,7 @@ class ProfileService:
         )
         self.db.add(profile)
         await self.db.commit()
-        await self._refresh_business_profile(profile)
+        await self.db.refresh(profile)
         return profile
 
     async def get_user_profile(self, user_id: str) -> UserProfile | None:
@@ -362,7 +362,12 @@ class ProfileService:
         has_user_profile = profile is not None
         has_business_profile = len(business_profiles) > 0
         completed = bool(profile and profile.onboarding_completed)
-        next_step = "done" if completed else "user_profile"
+        if not completed:
+            next_step = "user_profile"
+        elif profile and profile.account_type == "business" and not has_business_profile:
+            next_step = "business_profile"
+        else:
+            next_step = "done"
         return {
             "completed": completed,
             "has_user_profile": has_user_profile,
