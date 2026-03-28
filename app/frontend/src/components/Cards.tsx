@@ -196,16 +196,23 @@ export function ListingCard({ listing }: { listing: ListingCardData }) {
 // ─── Business Card ───
 export function BusinessCard({ biz }: { biz: BusinessProfile }) {
   const { theme } = useTheme();
+  const { t } = useI18n();
   const isDark = theme === "dark";
   const badges = deriveBusinessLabels(biz as { isVerified?: boolean; verified?: boolean; isPremium?: boolean; premium?: boolean; rating?: number });
+  const isPremium = Boolean(biz.isPremium ?? biz.premium);
+  const isVerified = Boolean(biz.isVerified ?? biz.verified);
+  const description = biz.description || biz.shortDesc || "";
+  const googleMapsRating = typeof biz.googleMapsRating === "number" ? biz.googleMapsRating : undefined;
+  const hasGoogleMapsRating = Boolean(googleMapsRating && biz.googleMapsRatingSource);
+  const profileId = biz.slug || biz.id;
 
   return (
     <Link
-      to={`/business/${biz.id}`}
+      to={`/business/${profileId}`}
       className={`group block h-full rounded-xl border p-4 transition-all duration-200 hover:-translate-y-0.5 ${
         isDark
-          ? `bg-[#111d32] hover:shadow-lg hover:shadow-[#0057B8]/5 ${biz.premium ? "border-[#FFD700]/30 hover:border-[#FFD700]/50" : "border-[#1a3050] hover:border-[#253d5c]"}`
-          : `bg-white hover:shadow-lg hover:shadow-gray-100 ${biz.premium ? "border-amber-200 hover:border-amber-300" : "border-gray-200/80 hover:border-gray-300"}`
+          ? `bg-[#111d32] hover:shadow-lg hover:shadow-[#0057B8]/5 ${isPremium ? "border-[#FFD700]/30 hover:border-[#FFD700]/50" : "border-[#1a3050] hover:border-[#253d5c]"}`
+          : `bg-white hover:shadow-lg hover:shadow-gray-100 ${isPremium ? "border-amber-200 hover:border-amber-300" : "border-gray-200/80 hover:border-gray-300"}`
       }`}
     >
       <div className="flex h-full items-start gap-3">
@@ -229,20 +236,21 @@ export function BusinessCard({ biz }: { biz: BusinessProfile }) {
             }`}>
               {biz.name}
             </h3>
-            {biz.isVerified && <BadgeCheck className={`w-4 h-4 shrink-0 ${isDark ? "text-emerald-400" : "text-emerald-500"}`} />}
-            {biz.isPremium && <Star className={`w-3.5 h-3.5 shrink-0 ${isDark ? "text-[#FFD700]" : "text-amber-500"}`} />}
+            {isVerified && <BadgeCheck className={`w-4 h-4 shrink-0 ${isDark ? "text-emerald-400" : "text-emerald-500"}`} />}
+            {isPremium && <Star className={`w-3.5 h-3.5 shrink-0 ${isDark ? "text-[#FFD700]" : "text-amber-500"}`} />}
           </div>
           <p className={`text-xs mb-2 ${isDark ? "text-gray-500" : "text-gray-400"}`}>{biz.category}</p>
           <p className={`text-xs leading-relaxed line-clamp-2 mb-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
-            {biz.description}
+            {description}
           </p>
           <div className="mt-auto flex items-center justify-between">
             <span className={`flex items-center gap-1 text-xs ${isDark ? "text-gray-500" : "text-gray-400"}`}>
               <MapPin className="w-3 h-3" /> {biz.city}
             </span>
-            {biz.rating && (
-              <span className={`flex items-center gap-1 text-xs font-semibold ${isDark ? "text-[#FFD700]" : "text-amber-500"}`}>
-                <Star className="w-3 h-3 fill-current" /> {biz.rating}
+            {hasGoogleMapsRating && (
+              <span className={`flex items-center gap-1 text-[11px] font-semibold ${isDark ? "text-[#FFD700]" : "text-amber-500"}`}>
+                <Star className="w-3 h-3 fill-current" /> {googleMapsRating}
+                <span className={`font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>{t("biz.googleRatingSource")}</span>
               </span>
             )}
           </div>

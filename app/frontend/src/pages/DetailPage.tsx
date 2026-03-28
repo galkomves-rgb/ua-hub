@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Textarea } from "@/components/ui/textarea";
 import { createMonetizedListing, fetchMyBusinessProfiles, fetchUserProfile, reportMessagingUser, saveListing, submitListing, updateListing } from "@/lib/account-api";
 import { deriveListingLabels } from "@/lib/label-taxonomy";
+import { fetchPublicBusinessBySlug } from "@/lib/public-businesses";
 import { fetchPublicListing, fetchPublicListings } from "@/lib/public-listings";
 import { getAPIBaseURL } from "@/lib/config";
 import { useTheme } from "@/lib/ThemeContext";
@@ -22,7 +23,7 @@ import { useGlobalCity } from "@/lib/global-preferences";
 import { useAuth } from "@/contexts/AuthContext";
 import { uploadImageFile } from "@/lib/media-storage";
 import {
-  MODULES, MODULE_ORDER, SAMPLE_LISTINGS, SAMPLE_BUSINESSES,
+  MODULES, MODULE_ORDER, SAMPLE_LISTINGS,
   IMAGES,
 } from "@/lib/platform";
 
@@ -485,8 +486,19 @@ function BusinessProfilePage() {
   const isDark = theme === "dark";
   const selectedCity = normalizeCityFilter(globalCity);
 
-  const biz = SAMPLE_BUSINESSES.find((b) => b.id === bizId);
-  if (!biz) {
+  const businessQuery = useQuery({
+    queryKey: ["public-business-detail", bizId],
+    queryFn: () => fetchPublicBusinessBySlug(String(bizId)),
+    enabled: Boolean(bizId),
+  });
+  const businessListingsQuery = useQuery({
+    queryKey: ["public-business-listings", bizId, selectedCity],
+    queryFn: () => fetchPublicListings({ city: selectedCity === "all" ? undefined : selectedCity, limit: 100 }),
+    enabled: Boolean(bizId),
+  });
+
+  const biz = businessQuery.data;
+  if (!biz && businessQuery.isSuccess) {
     return (
       <Layout>
         <div className="max-w-6xl mx-auto px-4 py-16 text-center">
@@ -496,12 +508,28 @@ function BusinessProfilePage() {
     );
   }
 
-  const bizListings = SAMPLE_LISTINGS.filter(
+  if (!biz) {
+    return (
+      <Layout>
+        <div className="max-w-6xl mx-auto px-4 py-16 text-center">
+          <p className={`text-sm ${isDark ? "text-gray-500" : "text-gray-400"}`}>{t("common.loading")}</p>
+        </div>
+      </Layout>
+    );
+  }
+
+  const bizListings = (businessListingsQuery.data ?? []).filter(
     (l) =>
-      l.ownerId === biz.slug &&
+      l.ownerId === (biz.slug || biz.id) &&
       l.ownerType === "business_profile" &&
       (selectedCity === "all" || l.city === selectedCity)
   );
+  const businessDescription = biz.description || biz.shortDesc || "";
+  const isVerified = Boolean(biz.isVerified ?? biz.verified);
+  const isPremium = Boolean(biz.isPremium ?? biz.premium);
+  const googleMapsRating = typeof biz.googleMapsRating === "number" ? biz.googleMapsRating : undefined;
+  const hasGoogleMapsRating = Boolean(googleMapsRating && biz.googleMapsRatingSource);
+  const businessWebsite = biz.contacts?.website;
 
   return (
     <Layout>
@@ -523,11 +551,11 @@ function BusinessProfilePage() {
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
                     <h1 className={`text-xl font-bold ${isDark ? "text-gray-100" : "text-gray-900"}`}>{biz.name}</h1>
-                    {biz.isVerified && <BadgeCheck className={`w-5 h-5 ${isDark ? "text-emerald-400" : "text-emerald-500"}`} />}
-                    {biz.isPremium && <Star className={`w-5 h-5 ${isDark ? "text-[#FFD700]" : "text-amber-500"}`} />}
+                    {isVerified && <BadgeCheck className={`w-5 h-5 ${isDark ? "text-emerald-400" : "text-emerald-500"}`} />}
+                    {isPremium && <Star className={`w-5 h-5 ${isDark ? "text-[#FFD700]" : "text-amber-500"}`} />}
                   </div>
                   <p className={`text-sm mb-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>{biz.category}</p>
-                  <p className={`text-sm leading-relaxed ${isDark ? "text-gray-300" : "text-gray-600"}`}>{biz.description}</p>
+                  <p className={`text-sm leading-relaxed ${isDark ? "text-gray-300" : "text-gray-600"}`}>{businessDescription}</p>
                 </div>
               </div>
 
@@ -575,25 +603,32 @@ function BusinessProfilePage() {
                 <div className={`flex items-center gap-2 text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
                   <MapPin className="w-4 h-4 shrink-0" /> {biz.city}, {t("detail.countrySpain")}
                 </div>
-                <div className={`flex items-center gap-2 text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
-                  <Phone className="w-4 h-4 shrink-0" /> +34 XXX XXX XXX
-                </div>
-                <div className={`flex items-center gap-2 text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
-                  <Mail className="w-4 h-4 shrink-0" /> info@{biz.name.toLowerCase().replace(/\s/g, "")}.es
-                </div>
-                <div className={`flex items-center gap-2 text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
-                  <Globe className="w-4 h-4 shrink-0" /> www.{biz.name.toLowerCase().replace(/\s/g, "")}.es
-                </div>
+                {biz.contacts?.phone ? (
+                  <div className={`flex items-center gap-2 text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                    <Phone className="w-4 h-4 shrink-0" /> {biz.contacts.phone}
+                  </div>
+                ) : null}
+                {biz.contacts?.email ? (
+                  <div className={`flex items-center gap-2 text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                    <Mail className="w-4 h-4 shrink-0" /> {biz.contacts.email}
+                  </div>
+                ) : null}
+                {businessWebsite ? (
+                  <div className={`flex items-center gap-2 text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                    <Globe className="w-4 h-4 shrink-0" /> {businessWebsite}
+                  </div>
+                ) : null}
               </div>
             </div>
 
-            {biz.rating && (
+            {hasGoogleMapsRating && (
               <div className={`rounded-xl border p-4 ${isDark ? "bg-[#111d32] border-[#1a3050]" : "bg-white border-gray-200/80"}`}>
                 <div className="flex items-center gap-2">
                   <Star className={`w-5 h-5 fill-current ${isDark ? "text-[#FFD700]" : "text-amber-500"}`} />
-                  <span className={`text-lg font-bold ${isDark ? "text-gray-100" : "text-gray-900"}`}>{biz.rating}</span>
+                  <span className={`text-lg font-bold ${isDark ? "text-gray-100" : "text-gray-900"}`}>{googleMapsRating}</span>
                   <span className={`text-xs ${isDark ? "text-gray-500" : "text-gray-400"}`}>/ 5.0</span>
                 </div>
+                <p className={`mt-1 text-xs ${isDark ? "text-gray-500" : "text-gray-400"}`}>{t("biz.googleRatingSource")}</p>
               </div>
             )}
           </aside>

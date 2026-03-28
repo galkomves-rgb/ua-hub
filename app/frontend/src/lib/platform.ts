@@ -78,19 +78,25 @@ export interface UserProfile {
 
 export interface BusinessProfile {
   id: string;
-  ownerUserId: string;
-  slug: string;
+  ownerUserId?: string;
+  slug?: string;
   name: string;
   logo?: string;
   cover?: string;
   category: string;
   city: string;
-  description: string;
+  description?: string;
+  shortDesc?: string;
   contacts: { phone?: string; email?: string; website?: string };
-  isVerified: boolean;
-  isPremium: boolean;
+  isVerified?: boolean;
+  verified?: boolean;
+  isPremium?: boolean;
+  premium?: boolean;
   tags: string[];
   rating?: number;
+  googleMapsRating?: number;
+  googleMapsRatingSource?: string;
+  activeListingsCount?: number;
   createdAt: string;
   updatedAt: string;
 }

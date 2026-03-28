@@ -9,7 +9,9 @@ import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
 import { useGlobalCity } from "@/lib/global-preferences";
 import { fetchPublicListings } from "@/lib/public-listings";
-import { MODULES, SAMPLE_BUSINESSES, IMAGES } from "@/lib/platform";
+import { fetchPublicBusinesses } from "@/lib/public-businesses";
+import { MODULES, IMAGES } from "@/lib/platform";
+import type { BusinessProfile } from "@/lib/platform";
 
 function normalizeCityFilter(value: string): string {
   return value === "All Spain" ? "all" : value;
@@ -53,6 +55,16 @@ export default function ModulePage() {
     queryFn: () => fetchPublicListings({ module: moduleId, limit: 100 }),
     enabled: Boolean(moduleId) && !isBusiness,
   });
+  const publicBusinessesQuery = useQuery({
+    queryKey: ["public-module-businesses", selectedCity],
+    queryFn: () => fetchPublicBusinesses({ city: selectedCity === "all" ? undefined : selectedCity, limit: 100 }),
+    enabled: isBusiness,
+  });
+  const allBusinessesQuery = useQuery({
+    queryKey: ["public-module-businesses-all"],
+    queryFn: () => fetchPublicBusinesses({ limit: 100 }),
+    enabled: isBusiness,
+  });
 
   // Filter listings
   const filteredListings = useMemo(() => {
@@ -91,29 +103,26 @@ export default function ModulePage() {
 
   // Filter businesses
   const filteredBusinesses = useMemo(() => {
-    let items = [...SAMPLE_BUSINESSES];
+    let items = [...(publicBusinessesQuery.data ?? [])];
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       items = items.filter(
-        (b) => b.name.toLowerCase().includes(q) || b.description.toLowerCase().includes(q) || b.category.toLowerCase().includes(q)
+        (b) => b.name.toLowerCase().includes(q) || (b.description || b.shortDesc || "").toLowerCase().includes(q) || b.category.toLowerCase().includes(q)
       );
     }
-    if (selectedCity !== "all") {
-      items = items.filter((b) => b.city === selectedCity);
-    }
     if (selectedType === "verified") {
-      items = items.filter((b) => b.isVerified);
+      items = items.filter((b) => Boolean(b.isVerified ?? b.verified));
     } else if (selectedType === "premium") {
-      items = items.filter((b) => b.isPremium);
+      items = items.filter((b) => Boolean(b.isPremium ?? b.premium));
     }
     return items;
-  }, [searchQuery, selectedCity, selectedType]);
+  }, [publicBusinessesQuery.data, searchQuery, selectedType]);
 
   const activeCities = useMemo(() => {
     const citySet = new Set<string>();
 
     if (isBusiness) {
-      SAMPLE_BUSINESSES.forEach((business) => {
+      (allBusinessesQuery.data ?? []).forEach((business) => {
         if (business.city?.trim()) {
           citySet.add(business.city.trim());
         }
@@ -127,7 +136,7 @@ export default function ModulePage() {
     }
 
     return Array.from(citySet).sort((a, b) => a.localeCompare(b));
-  }, [allModuleListingsQuery.data, isBusiness]);
+  }, [allBusinessesQuery.data, allModuleListingsQuery.data, isBusiness]);
 
   if (!mod) {
     return (
@@ -428,6 +437,11 @@ export default function ModulePage() {
                 {publicListingsQuery.error instanceof Error ? publicListingsQuery.error.message : "Failed to load listings"}
               </div>
             ) : null}
+            {isBusiness && publicBusinessesQuery.isError ? (
+              <div className={`mb-4 rounded-xl border p-4 text-sm ${isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>
+                {publicBusinessesQuery.error instanceof Error ? publicBusinessesQuery.error.message : "Failed to load businesses"}
+              </div>
+            ) : null}
 
             {/* Results count */}
             <p className={`text-xs mb-4 ${isDark ? "text-gray-500" : "text-gray-400"}`}>
@@ -458,6 +472,3 @@ export default function ModulePage() {
     </Layout>
   );
 }
-
-// BusinessProfile type used above via cast
-import type { BusinessProfile } from "@/lib/platform";

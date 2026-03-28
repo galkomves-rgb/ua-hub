@@ -62,7 +62,17 @@ function SegmentButton({
   );
 }
 
-function PricingCard({ card }: { card: PricingCardConfig }) {
+function PricingCard({
+  card,
+  selected,
+  onSelect,
+  requiresSelection,
+}: {
+  card: PricingCardConfig;
+  selected: boolean;
+  onSelect: () => void;
+  requiresSelection: boolean;
+}) {
   const { theme } = useTheme();
   const { t, locale } = useI18n();
   const { user } = useAuth();
@@ -76,10 +86,32 @@ function PricingCard({ card }: { card: PricingCardConfig }) {
         ? t(card.prominentLabelKey)
         : null;
 
+  const handlePrimaryAction = () => {
+    if (requiresSelection && !selected) {
+      onSelect();
+      return;
+    }
+    navigate(resolveCtaHref(card.ctaTarget, Boolean(user)));
+  };
+
   return (
     <article
+      role={requiresSelection ? "button" : undefined}
+      tabIndex={requiresSelection ? 0 : -1}
+      aria-pressed={requiresSelection ? selected : undefined}
+      onClick={requiresSelection ? onSelect : undefined}
+      onKeyDown={requiresSelection ? (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      } : undefined}
       className={`rounded-3xl border p-5 md:p-6 ${
-        card.recommended
+        selected
+          ? isDark
+            ? "border-[#FFD700] bg-[#11203a] ring-2 ring-[#FFD700]/30"
+            : "border-[#0057B8] bg-white ring-2 ring-blue-200"
+          : card.recommended
           ? isDark
             ? "border-[#FFD700]/40 bg-[#11203a] ring-1 ring-[#FFD700]/20"
             : "border-[#0057B8] bg-white ring-1 ring-blue-100"
@@ -93,7 +125,11 @@ function PricingCard({ card }: { card: PricingCardConfig }) {
           <h3 className={`text-lg font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{t(card.titleKey)}</h3>
           <p className={`mt-2 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t(card.subtitleKey)}</p>
         </div>
-        {card.recommended ? (
+        {selected ? (
+          <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${isDark ? "bg-emerald-500/15 text-emerald-300" : "bg-emerald-50 text-emerald-700"}`}>
+            {t("pricing.card.selected")}
+          </span>
+        ) : card.recommended ? (
           <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${isDark ? "bg-[#FFD700]/15 text-[#FFD700]" : "bg-blue-50 text-[#0057B8]"}`}>
             {t("pricing.badge.recommended")}
           </span>
@@ -128,9 +164,12 @@ function PricingCard({ card }: { card: PricingCardConfig }) {
 
       <button
         type="button"
-        onClick={() => navigate(resolveCtaHref(card.ctaTarget, Boolean(user)))}
+        onClick={(event) => {
+          event.stopPropagation();
+          handlePrimaryAction();
+        }}
         className={`mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold ${
-          card.recommended
+          selected || card.recommended
             ? isDark
               ? "bg-[#FFD700] text-[#0d1a2e]"
               : "bg-[#0057B8] text-white"
@@ -139,7 +178,7 @@ function PricingCard({ card }: { card: PricingCardConfig }) {
               : "bg-slate-100 text-slate-700 hover:bg-slate-200"
         }`}
       >
-        {t(card.ctaKey)}
+        {requiresSelection && !selected ? t("pricing.card.selectFirst") : t(card.ctaKey)}
         <ChevronRight className="h-4 w-4" />
       </button>
     </article>
@@ -151,11 +190,21 @@ export default function PricingPage() {
   const { t, locale } = useI18n();
   const isDark = theme === "dark";
   const [segment, setSegment] = useState<PricingSegmentId>("individuals");
+  const [selectedPaidCardId, setSelectedPaidCardId] = useState<Record<"business" | "agencies", string>>({
+    business: PRICING_SEGMENTS.find((item) => item.id === "business")?.cards[0]?.id ?? "",
+    agencies: PRICING_SEGMENTS.find((item) => item.id === "agencies")?.cards[0]?.id ?? "",
+  });
 
   const activeSegment = useMemo(
     () => PRICING_SEGMENTS.find((item) => item.id === segment) ?? PRICING_SEGMENTS[0],
     [segment],
   );
+  const requiresSelection = segment === "business" || segment === "agencies";
+  const selectedCardId = segment === "business"
+    ? selectedPaidCardId.business
+    : segment === "agencies"
+      ? selectedPaidCardId.agencies
+      : "";
 
   return (
     <Layout>
@@ -208,7 +257,22 @@ export default function PricingPage() {
 
         <section className={`mt-8 grid gap-4 ${segment === "agencies" ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
           {activeSegment.cards.map((card) => (
-            <PricingCard key={card.id} card={card} />
+            <PricingCard
+              key={card.id}
+              card={card}
+              selected={Boolean(requiresSelection && selectedCardId === card.id)}
+              requiresSelection={requiresSelection}
+              onSelect={() => {
+                if (!requiresSelection) {
+                  return;
+                }
+                setSelectedPaidCardId((current) => (
+                  segment === "business"
+                    ? { ...current, business: card.id }
+                    : { ...current, agencies: card.id }
+                ));
+              }}
+            />
           ))}
         </section>
 

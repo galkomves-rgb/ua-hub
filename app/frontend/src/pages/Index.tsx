@@ -9,7 +9,8 @@ import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
 import { useGlobalCity } from "@/lib/global-preferences";
 import { fetchPublicListings } from "@/lib/public-listings";
-import { MODULES, MODULE_ORDER, SAMPLE_BUSINESSES, IMAGES } from "@/lib/platform";
+import { fetchPublicBusinesses } from "@/lib/public-businesses";
+import { MODULES, MODULE_ORDER, IMAGES } from "@/lib/platform";
 
 export default function HomePage() {
   const { theme } = useTheme();
@@ -18,12 +19,13 @@ export default function HomePage() {
   const isDark = theme === "dark";
 
   const selectedCity = globalCity === "All Spain" ? "all" : globalCity;
-  const cityFilteredBusinesses = selectedCity === "all"
-    ? SAMPLE_BUSINESSES
-    : SAMPLE_BUSINESSES.filter((business) => business.city === selectedCity);
   const listingsQuery = useQuery({
     queryKey: ["public-home-listings", selectedCity],
     queryFn: () => fetchPublicListings({ city: selectedCity === "all" ? undefined : selectedCity, limit: 100 }),
+  });
+  const businessesQuery = useQuery({
+    queryKey: ["public-home-businesses", selectedCity],
+    queryFn: () => fetchPublicBusinesses({ city: selectedCity === "all" ? undefined : selectedCity, isVerified: true, limit: 8 }),
   });
   const cityFilteredListings = listingsQuery.data ?? [];
 
@@ -32,9 +34,10 @@ export default function HomePage() {
     [cityFilteredListings],
   );
   const upcomingEvents = cityFilteredListings.filter((l) => l.module === "events").slice(0, 3);
-  const verifiedBusinesses = cityFilteredBusinesses
-    .filter((b) => (b as { isVerified?: boolean; verified?: boolean }).isVerified || (b as { verified?: boolean }).verified)
-    .slice(0, 4);
+  const verifiedBusinesses = useMemo(
+    () => (businessesQuery.data ?? []).filter((business) => Boolean(business.isVerified ?? business.verified)).slice(0, 4),
+    [businessesQuery.data],
+  );
   const latestListings = cityFilteredListings.slice(0, 6);
 
   return (
@@ -133,6 +136,11 @@ export default function HomePage() {
         {/* ─── Verified Businesses ─── */}
         <section>
           <SectionHeader title={t("home.businesses")} linkTo="/business" linkLabel={t("common.showAll")} />
+          {businessesQuery.isError ? (
+            <div className={`mb-4 rounded-xl border p-4 text-sm ${isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-700"}`}>
+              {businessesQuery.error instanceof Error ? businessesQuery.error.message : "Failed to load businesses"}
+            </div>
+          ) : null}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {verifiedBusinesses.map((biz) => (
               <BusinessCard key={biz.id} biz={biz} />

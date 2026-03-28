@@ -53,6 +53,23 @@ test("pricing page shows exactly two business plans and three agency plans", asy
   await expect(page.getByRole("heading", { name: "Agency Pro" })).toHaveCount(1);
 });
 
+test("paid pricing cards can be selected and primary action follows selected card", async ({ page }) => {
+  await openPricing(page, "en");
+
+  await page.getByRole("button", { name: "For professionals & business" }).click();
+
+  const presenceCard = page.locator("article").filter({ has: page.getByRole("heading", { name: "Business Presence" }) }).first();
+  const priorityCard = page.locator("article").filter({ has: page.getByRole("heading", { name: "Business Priority" }) }).first();
+
+  await expect(presenceCard.getByText("Selected")).toBeVisible();
+  await expect(priorityCard.getByRole("button", { name: "Select plan" })).toBeVisible();
+
+  await priorityCard.click();
+  await expect(priorityCard.getByText("Selected")).toBeVisible();
+  await expect(priorityCard.getByRole("button", { name: "Get priority visibility" })).toBeVisible();
+  await expect(presenceCard.getByRole("button", { name: "Select plan" })).toBeVisible();
+});
+
 test("pricing page major copy follows the selected locale without mixed-language fragments", async ({ page }) => {
   await openPricing(page, "ua");
   await expect(page.getByRole("button", { name: "Для людей" })).toBeVisible();
