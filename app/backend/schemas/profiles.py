@@ -114,6 +114,10 @@ class BusinessProfileResponse(BusinessProfileBase):
     saved_by_users_count: int = 0
     profile_completeness: int = 0
     public_preview_url: str | None = None
+    google_place_id: str | None = None
+    google_maps_rating: str | None = None
+    google_maps_review_count: int | None = None
+    google_maps_rating_updated_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

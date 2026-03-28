@@ -207,3 +207,29 @@ async def test_onboarding_status_reflects_profile_and_business_progress(db_sessi
         "account_type": "business",
         "next_step": "done",
     }
+
+
+@pytest.mark.asyncio
+async def test_create_user_profile_persists_profile(db_session):
+    service = ProfileService(db_session)
+
+    profile = await service.create_user_profile(
+        user_id="user-99",
+        name="Iryna",
+        city="Valencia",
+        bio="Designer",
+        preferred_language="ua",
+        account_type="business",
+        onboarding_completed=True,
+        is_public_profile=True,
+        show_as_public_author=True,
+        allow_marketing_emails=False,
+    )
+
+    assert profile.user_id == "user-99"
+    assert profile.name == "Iryna"
+    assert profile.account_type == "business"
+
+    saved = await service.get_user_profile("user-99")
+    assert saved is not None
+    assert saved.city == "Valencia"

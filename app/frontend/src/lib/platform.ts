@@ -77,20 +77,32 @@ export interface UserProfile {
 }
 
 export interface BusinessProfile {
-  id: string;
+  id: string | number;
   ownerUserId: string;
-  slug: string;
+  slug?: string;
   name: string;
+  business_name?: string;
   logo?: string;
+  logo_url?: string | null;
   cover?: string;
+  cover_url?: string | null;
   category: string;
   city: string;
   description: string;
   contacts: { phone?: string; email?: string; website?: string };
-  isVerified: boolean;
-  isPremium: boolean;
+  isVerified?: boolean;
+  is_verified?: boolean;
+  verified?: boolean;
+  isPremium?: boolean;
+  is_premium?: boolean;
+  premium?: boolean;
   tags: string[];
   rating?: number;
+  google_place_id?: string | null;
+  google_maps_rating?: string | null;
+  google_maps_review_count?: number | null;
+  active_listings_count?: number;
+  listing_quota?: number | null;
   createdAt: string;
   updatedAt: string;
 }

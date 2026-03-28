@@ -31,6 +31,11 @@ function resolveCtaHref(target: PricingCardConfig["ctaTarget"], isAuthenticated:
   return "/account?tab=billing";
 }
 
+function getDefaultSelectedCardId(segmentId: PricingSegmentId) {
+  const segment = PRICING_SEGMENTS.find((item) => item.id === segmentId);
+  return segment?.cards.find((card) => card.recommended)?.id ?? segment?.cards[0]?.id ?? "";
+}
+
 function SegmentButton({
   active,
   label,
@@ -62,7 +67,17 @@ function SegmentButton({
   );
 }
 
-function PricingCard({ card }: { card: PricingCardConfig }) {
+function PricingCard({
+  card,
+  selected,
+  selectable,
+  onSelect,
+}: {
+  card: PricingCardConfig;
+  selected: boolean;
+  selectable: boolean;
+  onSelect: () => void;
+}) {
   const { theme } = useTheme();
   const { t, locale } = useI18n();
   const { user } = useAuth();
@@ -78,15 +93,29 @@ function PricingCard({ card }: { card: PricingCardConfig }) {
 
   return (
     <article
-      className={`rounded-3xl border p-5 md:p-6 ${
-        card.recommended
+      role={selectable ? "radio" : undefined}
+      aria-checked={selectable ? selected : undefined}
+      tabIndex={selectable ? 0 : undefined}
+      onClick={selectable ? onSelect : undefined}
+      onKeyDown={selectable ? (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onSelect();
+        }
+      } : undefined}
+      className={`rounded-3xl border p-5 md:p-6 transition-all ${
+        selected
+          ? isDark
+            ? "border-[#FFD700] bg-[#11203a] ring-2 ring-[#FFD700]/30"
+            : "border-[#0057B8] bg-white ring-2 ring-blue-200"
+          : card.recommended
           ? isDark
             ? "border-[#FFD700]/40 bg-[#11203a] ring-1 ring-[#FFD700]/20"
             : "border-[#0057B8] bg-white ring-1 ring-blue-100"
           : isDark
             ? "border-[#22416b] bg-[#11203a]"
             : "border-slate-200 bg-white"
-      }`}
+      } ${selectable ? "cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0057B8]/40" : ""}`}
     >
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
@@ -128,9 +157,14 @@ function PricingCard({ card }: { card: PricingCardConfig }) {
 
       <button
         type="button"
-        onClick={() => navigate(resolveCtaHref(card.ctaTarget, Boolean(user)))}
+        onClick={() => {
+          if (selectable) {
+            onSelect();
+          }
+          navigate(resolveCtaHref(card.ctaTarget, Boolean(user)));
+        }}
         className={`mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold ${
-          card.recommended
+          selected || card.recommended
             ? isDark
               ? "bg-[#FFD700] text-[#0d1a2e]"
               : "bg-[#0057B8] text-white"
@@ -151,11 +185,18 @@ export default function PricingPage() {
   const { t, locale } = useI18n();
   const isDark = theme === "dark";
   const [segment, setSegment] = useState<PricingSegmentId>("individuals");
+  const [selectedCards, setSelectedCards] = useState<Record<PricingSegmentId, string>>({
+    individuals: getDefaultSelectedCardId("individuals"),
+    business: getDefaultSelectedCardId("business"),
+    agencies: getDefaultSelectedCardId("agencies"),
+  });
 
   const activeSegment = useMemo(
     () => PRICING_SEGMENTS.find((item) => item.id === segment) ?? PRICING_SEGMENTS[0],
     [segment],
   );
+  const selectableCards = segment === "business" || segment === "agencies";
+  const selectedCardId = selectedCards[segment] || getDefaultSelectedCardId(segment);
 
   return (
     <Layout>
@@ -206,9 +247,19 @@ export default function PricingPage() {
           </section>
         ) : null}
 
-        <section className={`mt-8 grid gap-4 ${segment === "agencies" ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
+        <section
+          role={selectableCards ? "radiogroup" : undefined}
+          aria-label={selectableCards ? t(activeSegment.labelKey) : undefined}
+          className={`mt-8 grid gap-4 ${segment === "agencies" ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}
+        >
           {activeSegment.cards.map((card) => (
-            <PricingCard key={card.id} card={card} />
+            <PricingCard
+              key={card.id}
+              card={card}
+              selectable={selectableCards}
+              selected={selectableCards ? card.id === selectedCardId : Boolean(card.recommended)}
+              onSelect={() => setSelectedCards((current) => ({ ...current, [segment]: card.id }))}
+            />
           ))}
         </section>
 

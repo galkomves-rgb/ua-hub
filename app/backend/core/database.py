@@ -12,6 +12,7 @@ from asyncpg.exceptions import (
 from core.config import settings
 from sqlalchemy import DDL, text
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import DBAPIError, ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy.pool import NullPool
@@ -210,11 +211,140 @@ class DatabaseManager:
             except (UniqueViolationError, DuplicateTableError) as e:
                 self._initialized = True
                 logger.info(f"Duplicate table creation: {e}, ignored.")
+            except (ProgrammingError, DBAPIError) as e:
+                if self._is_duplicate_table_error(e):
+                    self._initialized = True
+                    logger.info("Duplicate table creation wrapped by SQLAlchemy, ignored: %s", e)
+                else:
+                    logger.error(f"Failed to create tables: {e}")
+                    raise
             except Exception as e:
                 logger.error(f"Failed to create tables: {e}")
                 raise
         finally:
             self._table_creation_lock.release()
+
+    @staticmethod
+    def _is_duplicate_table_error(error: Exception) -> bool:
+        """Detect duplicate table/index errors wrapped by SQLAlchemy.
+
+        Concurrent app starts can race between check-and-create steps. asyncpg
+        duplicate relation errors are often wrapped by SQLAlchemy ProgrammingError
+        or DBAPIError, so inspect both the wrapped original exception and message.
+        """
+        if isinstance(error, DuplicateTableError):
+            return True
+
+        original_error = getattr(error, "orig", None)
+        if isinstance(original_error, DuplicateTableError):
+            return True
+
+        error_message = str(original_error or error).lower()
+        duplicate_markers = (
+            'already exists',
+            'duplicate table',
+            'duplicate relation',
+            'relation "',
+        )
+        return any(marker in error_message for marker in duplicate_markers)
+
+    async def repair_business_profile_google_columns(self):
+        """Repair the known business_profiles Google Maps schema drift.
+
+        Production may have an older business_profiles table created before the
+        Google Maps columns were added to the ORM model. `create_all()` does not
+        alter existing tables, so we repair only this known drift explicitly.
+        """
+        if not self.engine:
+            logger.error("Database engine not initialized")
+            raise RuntimeError("Database engine not initialized")
+
+        try:
+            existing_tables = await self._get_existing_tables()
+            if "business_profiles" not in existing_tables:
+                logger.debug("business_profiles table not found, skipping Google column repair")
+                return
+
+            existing_columns = await self._get_table_columns("business_profiles")
+            existing_column_names = {column["name"] for column in existing_columns}
+            target_column_names = {
+                "google_place_id",
+                "google_maps_rating",
+                "google_maps_review_count",
+                "google_maps_rating_updated_at",
+            }
+
+            if target_column_names.issubset(existing_column_names):
+                logger.debug("business_profiles Google columns already present")
+                return
+
+            model_columns = self._get_model_columns("business_profiles")
+            missing_columns = [
+                column for column in model_columns if column["name"] in target_column_names - existing_column_names
+            ]
+
+            if not missing_columns:
+                logger.debug("No missing business_profiles Google columns detected")
+                return
+
+            logger.info(
+                "🔧 Repairing missing business_profiles Google columns: %s",
+                [column["name"] for column in missing_columns],
+            )
+            await self._add_missing_columns("business_profiles", missing_columns)
+        except Exception as e:
+            logger.error(f"Failed to repair business_profiles Google columns: {e}")
+            raise
+
+    async def repair_business_profile_workflow_columns(self):
+        """Repair known business_profiles workflow schema drift.
+
+        Some deployed environments were created before workflow fields were added
+        to the ORM model (verification/subscription request metadata). Missing
+        columns can break profile create/update and account fetch flows.
+        """
+        if not self.engine:
+            logger.error("Database engine not initialized")
+            raise RuntimeError("Database engine not initialized")
+
+        try:
+            existing_tables = await self._get_existing_tables()
+            if "business_profiles" not in existing_tables:
+                logger.debug("business_profiles table not found, skipping workflow column repair")
+                return
+
+            existing_columns = await self._get_table_columns("business_profiles")
+            existing_column_names = {column["name"] for column in existing_columns}
+            target_column_names = {
+                "verification_requested_at",
+                "verification_notes",
+                "subscription_request_status",
+                "subscription_requested_plan",
+                "subscription_requested_at",
+                "subscription_renewal_date",
+            }
+
+            if target_column_names.issubset(existing_column_names):
+                logger.debug("business_profiles workflow columns already present")
+                return
+
+            model_columns = self._get_model_columns("business_profiles")
+            missing_columns = [
+                column for column in model_columns if column["name"] in target_column_names - existing_column_names
+            ]
+
+            if not missing_columns:
+                logger.debug("No missing business_profiles workflow columns detected")
+                return
+
+            logger.info(
+                "🔧 Repairing missing business_profiles workflow columns: %s",
+                [column["name"] for column in missing_columns],
+            )
+            await self._add_missing_columns("business_profiles", missing_columns)
+        except Exception as e:
+            logger.error(f"Failed to repair business_profiles workflow columns: {e}")
+            raise
 
     async def check_and_repair_existing_tables(self):
         """Check and fix the structure of existing tables, adding only the missing fields."""
