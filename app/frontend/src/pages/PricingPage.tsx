@@ -7,6 +7,13 @@ import { PRICING_ADDONS, PRICING_ALWAYS_FREE_ITEM_KEYS, PRICING_SEGMENTS, type P
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
 
+function getInitialSelectedCardIds() {
+  return {
+    business: PRICING_SEGMENTS.find((item) => item.id === "business")?.cards[0]?.id ?? "",
+    agencies: PRICING_SEGMENTS.find((item) => item.id === "agencies")?.cards[0]?.id ?? "",
+  } satisfies Record<"business" | "agencies", string>;
+}
+
 function formatMoney(amount: number, currency: string, locale: "ua" | "es" | "en") {
   try {
     const formatterLocale = locale === "ua" ? "uk-UA" : locale === "es" ? "es-ES" : "en-GB";
@@ -67,16 +74,20 @@ function PricingCard({
   selected,
   onSelect,
   requiresSelection,
+  onPrimaryAction,
+  onSelectNext,
+  onSelectPrevious,
 }: {
   card: PricingCardConfig;
   selected: boolean;
   onSelect: () => void;
   requiresSelection: boolean;
+  onPrimaryAction: () => void;
+  onSelectNext?: () => void;
+  onSelectPrevious?: () => void;
 }) {
   const { theme } = useTheme();
   const { t, locale } = useI18n();
-  const { user } = useAuth();
-  const navigate = useNavigate();
   const isDark = theme === "dark";
 
   const prominentValue =
@@ -86,44 +97,53 @@ function PricingCard({
         ? t(card.prominentLabelKey)
         : null;
 
-  const handlePrimaryAction = () => {
-    if (requiresSelection && !selected) {
-      onSelect();
-      return;
-    }
-    navigate(resolveCtaHref(card.ctaTarget, Boolean(user)));
-  };
-
   return (
     <article
-      role={requiresSelection ? "button" : undefined}
-      tabIndex={requiresSelection ? 0 : -1}
-      aria-pressed={requiresSelection ? selected : undefined}
+      role={requiresSelection ? "radio" : undefined}
+      tabIndex={requiresSelection ? (selected ? 0 : -1) : -1}
+      aria-checked={requiresSelection ? selected : undefined}
+      aria-label={requiresSelection ? t(card.titleKey) : undefined}
+      aria-describedby={requiresSelection ? `${card.id}-pricing-description` : undefined}
       onClick={requiresSelection ? onSelect : undefined}
       onKeyDown={requiresSelection ? (event) => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onSelect();
+          return;
+        }
+        if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+          event.preventDefault();
+          onSelectNext?.();
+          return;
+        }
+        if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+          event.preventDefault();
+          onSelectPrevious?.();
         }
       } : undefined}
-      className={`rounded-3xl border p-5 md:p-6 ${
+      className={`rounded-3xl border p-5 transition-all duration-150 md:p-6 ${
         selected
           ? isDark
-            ? "border-[#FFD700] bg-[#11203a] ring-2 ring-[#FFD700]/30"
-            : "border-[#0057B8] bg-white ring-2 ring-blue-200"
+            ? "border-[#FFD700] bg-[#11203a] shadow-[0_0_0_3px_rgba(255,215,0,0.18)]"
+            : "border-[#0057B8] bg-white shadow-[0_0_0_3px_rgba(0,87,184,0.14)]"
           : card.recommended
           ? isDark
-            ? "border-[#FFD700]/40 bg-[#11203a] ring-1 ring-[#FFD700]/20"
-            : "border-[#0057B8] bg-white ring-1 ring-blue-100"
+            ? "border-[#FFD700]/40 bg-[#11203a]"
+            : "border-[#0057B8] bg-white"
           : isDark
             ? "border-[#22416b] bg-[#11203a]"
             : "border-slate-200 bg-white"
-      }`}
+      } ${requiresSelection
+        ? isDark
+          ? "cursor-pointer hover:border-[#4a9eff] focus:outline-none focus-visible:border-[#FFD700]"
+          : "cursor-pointer hover:border-[#0057B8] focus:outline-none focus-visible:border-[#0057B8]"
+        : ""}`}
+      data-selected={selected ? "true" : "false"}
     >
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className={`text-lg font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{t(card.titleKey)}</h3>
-          <p className={`mt-2 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t(card.subtitleKey)}</p>
+          <p id={`${card.id}-pricing-description`} className={`mt-2 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t(card.subtitleKey)}</p>
         </div>
         {selected ? (
           <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${isDark ? "bg-emerald-500/15 text-emerald-300" : "bg-emerald-50 text-emerald-700"}`}>
@@ -166,16 +186,21 @@ function PricingCard({
         type="button"
         onClick={(event) => {
           event.stopPropagation();
-          handlePrimaryAction();
+          if (requiresSelection && !selected) {
+            onSelect();
+            return;
+          }
+          onPrimaryAction();
         }}
-        className={`mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold ${
+        aria-label={requiresSelection && !selected ? `${t("pricing.card.selectFirst")}: ${t(card.titleKey)}` : t(card.ctaKey)}
+        className={`mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition-colors ${
           selected || card.recommended
             ? isDark
-              ? "bg-[#FFD700] text-[#0d1a2e]"
-              : "bg-[#0057B8] text-white"
+              ? "bg-[#FFD700] text-[#0d1a2e] hover:bg-[#ffe45c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FFD700]"
+              : "bg-[#0057B8] text-white hover:bg-[#00489a] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0057B8]"
             : isDark
-              ? "bg-[#1a2d4c] text-slate-100 hover:bg-[#21385f]"
-              : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+              ? "bg-[#1a2d4c] text-slate-100 hover:bg-[#21385f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4a9eff]"
+              : "bg-slate-100 text-slate-700 hover:bg-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0057B8]"
         }`}
       >
         {requiresSelection && !selected ? t("pricing.card.selectFirst") : t(card.ctaKey)}
@@ -188,12 +213,11 @@ function PricingCard({
 export default function PricingPage() {
   const { theme } = useTheme();
   const { t, locale } = useI18n();
+  const { user } = useAuth();
+  const navigate = useNavigate();
   const isDark = theme === "dark";
   const [segment, setSegment] = useState<PricingSegmentId>("individuals");
-  const [selectedPaidCardId, setSelectedPaidCardId] = useState<Record<"business" | "agencies", string>>({
-    business: PRICING_SEGMENTS.find((item) => item.id === "business")?.cards[0]?.id ?? "",
-    agencies: PRICING_SEGMENTS.find((item) => item.id === "agencies")?.cards[0]?.id ?? "",
-  });
+  const [selectedPaidCardId, setSelectedPaidCardId] = useState<Record<"business" | "agencies", string>>(getInitialSelectedCardIds);
 
   const activeSegment = useMemo(
     () => PRICING_SEGMENTS.find((item) => item.id === segment) ?? PRICING_SEGMENTS[0],
@@ -205,6 +229,13 @@ export default function PricingPage() {
     : segment === "agencies"
       ? selectedPaidCardId.agencies
       : "";
+  const selectedCard = requiresSelection
+    ? activeSegment.cards.find((card) => card.id === selectedCardId) ?? activeSegment.cards[0]
+    : null;
+
+  const handleSelectedPlanAction = (card: PricingCardConfig) => {
+    navigate(resolveCtaHref(card.ctaTarget, Boolean(user)));
+  };
 
   return (
     <Layout>
@@ -255,13 +286,38 @@ export default function PricingPage() {
           </section>
         ) : null}
 
-        <section className={`mt-8 grid gap-4 ${segment === "agencies" ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
-          {activeSegment.cards.map((card) => (
+        <section
+          className={`mt-8 grid gap-4 ${segment === "agencies" ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}
+          role={requiresSelection ? "radiogroup" : undefined}
+          aria-label={requiresSelection ? `${t("pricing.selection.groupLabel")}: ${t(activeSegment.labelKey)}` : undefined}
+        >
+          {activeSegment.cards.map((card, index) => (
             <PricingCard
               key={card.id}
               card={card}
               selected={Boolean(requiresSelection && selectedCardId === card.id)}
               requiresSelection={requiresSelection}
+              onPrimaryAction={() => handleSelectedPlanAction(card)}
+              onSelectPrevious={requiresSelection
+                ? () => {
+                  const previousCard = activeSegment.cards[(index - 1 + activeSegment.cards.length) % activeSegment.cards.length];
+                  setSelectedPaidCardId((current) => (
+                    segment === "business"
+                      ? { ...current, business: previousCard.id }
+                      : { ...current, agencies: previousCard.id }
+                  ));
+                }
+                : undefined}
+              onSelectNext={requiresSelection
+                ? () => {
+                  const nextCard = activeSegment.cards[(index + 1) % activeSegment.cards.length];
+                  setSelectedPaidCardId((current) => (
+                    segment === "business"
+                      ? { ...current, business: nextCard.id }
+                      : { ...current, agencies: nextCard.id }
+                  ));
+                }
+                : undefined}
               onSelect={() => {
                 if (!requiresSelection) {
                   return;
@@ -275,6 +331,32 @@ export default function PricingPage() {
             />
           ))}
         </section>
+
+        {requiresSelection && selectedCard ? (
+          <section className={`mt-5 rounded-3xl border p-5 md:p-6 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${isDark ? "text-slate-500" : "text-slate-500"}`}>
+                  {t("pricing.selection.current")}
+                </p>
+                <h2 className={`mt-1 text-xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{t(selectedCard.titleKey)}</h2>
+                <p className={`mt-1 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t(selectedCard.subtitleKey)}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleSelectedPlanAction(selectedCard)}
+                className={`inline-flex items-center justify-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold transition-colors ${
+                  isDark
+                    ? "bg-[#FFD700] text-[#0d1a2e] hover:bg-[#ffe45c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FFD700]"
+                    : "bg-[#0057B8] text-white hover:bg-[#00489a] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0057B8]"
+                }`}
+              >
+                {t(selectedCard.ctaKey)}
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+          </section>
+        ) : null}
 
         {segment === "individuals" ? (
           <section className={`mt-8 rounded-3xl border p-5 md:p-6 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>

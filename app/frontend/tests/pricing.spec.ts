@@ -39,18 +39,20 @@ test("pricing page shows exactly two business plans and three agency plans", asy
   await openPricing(page, "en");
 
   await page.getByRole("button", { name: "For professionals & business" }).click();
-  await expect(page.getByRole("heading", { name: "Business Presence" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Business Priority" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Business Presence" })).toHaveCount(1);
-  await expect(page.getByRole("heading", { name: "Business Priority" })).toHaveCount(1);
+  const businessGroup = page.getByRole("radiogroup", { name: "Plan selection: For professionals & business" });
+  await expect(businessGroup.getByRole("radio", { name: "Business Presence" })).toBeVisible();
+  await expect(businessGroup.getByRole("radio", { name: "Business Priority" })).toBeVisible();
+  await expect(businessGroup.getByRole("radio", { name: "Business Presence" })).toHaveCount(1);
+  await expect(businessGroup.getByRole("radio", { name: "Business Priority" })).toHaveCount(1);
 
   await page.getByRole("button", { name: "For agencies" }).click();
-  await expect(page.getByRole("heading", { name: "Agency Starter" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Agency Growth" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Agency Pro" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Agency Starter" })).toHaveCount(1);
-  await expect(page.getByRole("heading", { name: "Agency Growth" })).toHaveCount(1);
-  await expect(page.getByRole("heading", { name: "Agency Pro" })).toHaveCount(1);
+  const agencyGroup = page.getByRole("radiogroup", { name: "Plan selection: For agencies" });
+  await expect(agencyGroup.getByRole("radio", { name: "Agency Starter" })).toBeVisible();
+  await expect(agencyGroup.getByRole("radio", { name: "Agency Growth" })).toBeVisible();
+  await expect(agencyGroup.getByRole("radio", { name: "Agency Pro" })).toBeVisible();
+  await expect(agencyGroup.getByRole("radio", { name: "Agency Starter" })).toHaveCount(1);
+  await expect(agencyGroup.getByRole("radio", { name: "Agency Growth" })).toHaveCount(1);
+  await expect(agencyGroup.getByRole("radio", { name: "Agency Pro" })).toHaveCount(1);
 });
 
 test("paid pricing cards can be selected and primary action follows selected card", async ({ page }) => {
@@ -58,16 +60,27 @@ test("paid pricing cards can be selected and primary action follows selected car
 
   await page.getByRole("button", { name: "For professionals & business" }).click();
 
+  await expect(page.getByRole("radiogroup", { name: "Plan selection: For professionals & business" })).toBeVisible();
+
   const presenceCard = page.locator("article").filter({ has: page.getByRole("heading", { name: "Business Presence" }) }).first();
   const priorityCard = page.locator("article").filter({ has: page.getByRole("heading", { name: "Business Priority" }) }).first();
+  const presenceRadio = page.getByRole("radio", { name: "Business Presence" });
+  const priorityRadio = page.getByRole("radio", { name: "Business Priority" });
 
   await expect(presenceCard.getByText("Selected")).toBeVisible();
+  await expect(presenceRadio).toHaveAttribute("aria-checked", "true");
+  await expect(priorityRadio).toHaveAttribute("aria-checked", "false");
   await expect(priorityCard.getByRole("button", { name: "Select plan" })).toBeVisible();
+  await expect(page.getByText("Current selection")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start your presence" }).last()).toBeVisible();
 
   await priorityCard.click();
   await expect(priorityCard.getByText("Selected")).toBeVisible();
+  await expect(priorityRadio).toHaveAttribute("aria-checked", "true");
+  await expect(presenceRadio).toHaveAttribute("aria-checked", "false");
   await expect(priorityCard.getByRole("button", { name: "Get priority visibility" })).toBeVisible();
   await expect(presenceCard.getByRole("button", { name: "Select plan" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Get priority visibility" }).last()).toBeVisible();
 });
 
 test("pricing page major copy follows the selected locale without mixed-language fragments", async ({ page }) => {
