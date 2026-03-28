@@ -4,9 +4,11 @@ Revision ID: add_profiles_and_update_listings
 Revises: 4d2b749fda2c
 Create Date: 2024-01-01 00:00:00.000000
 
+
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.engine import Inspector
 
 # revision identifiers, used by Alembic.
 revision = 'add_profiles_and_update_listings'
@@ -15,48 +17,58 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade() -> None:
-    # Create user_profiles table
-    op.create_table(
-        'user_profiles',
-        sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('user_id', sa.String(), nullable=False),
-        sa.Column('name', sa.String(length=255), nullable=False),
-        sa.Column('avatar_url', sa.String(length=1024), nullable=True),
-        sa.Column('city', sa.String(length=100), nullable=False),
-        sa.Column('bio', sa.String(length=500), nullable=False),
-        sa.Column('preferred_language', sa.String(length=10), server_default='ua', nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
-        sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('user_id'),
-    )
-    op.create_index(op.f('ix_user_profiles_user_id'), 'user_profiles', ['user_id'], unique=True)
+def _table_exists(inspector: Inspector, table_name: str) -> bool:
+    """Return True if *table_name* already exists in the current schema."""
+    return table_name in inspector.get_table_names()
 
-    # Create business_profiles table
-    op.create_table(
-        'business_profiles',
-        sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('owner_user_id', sa.String(), nullable=False),
-        sa.Column('slug', sa.String(length=100), nullable=False),
-        sa.Column('name', sa.String(length=255), nullable=False),
-        sa.Column('logo_url', sa.String(length=1024), nullable=True),
-        sa.Column('cover_url', sa.String(length=1024), nullable=True),
-        sa.Column('category', sa.String(length=100), nullable=False),
-        sa.Column('city', sa.String(length=100), nullable=False),
-        sa.Column('description', sa.Text(), nullable=False),
-        sa.Column('contacts_json', sa.String(length=1000), server_default='{}', nullable=False),
-        sa.Column('is_verified', sa.Boolean(), server_default='false', nullable=False),
-        sa.Column('is_premium', sa.Boolean(), server_default='false', nullable=False),
-        sa.Column('tags_json', sa.String(length=500), server_default='[]', nullable=False),
-        sa.Column('rating', sa.String(length=10), server_default='0', nullable=False),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
-        sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('slug'),
-    )
-    op.create_index(op.f('ix_business_profiles_owner_user_id'), 'business_profiles', ['owner_user_id'])
-    op.create_index(op.f('ix_business_profiles_slug'), 'business_profiles', ['slug'], unique=True)
+
+def upgrade() -> None:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+
+    # Create user_profiles table only when it does not already exist
+    if not _table_exists(inspector, 'user_profiles'):
+        op.create_table(
+            'user_profiles',
+            sa.Column('id', sa.Integer(), nullable=False),
+            sa.Column('user_id', sa.String(), nullable=False),
+            sa.Column('name', sa.String(length=255), nullable=False),
+            sa.Column('avatar_url', sa.String(length=1024), nullable=True),
+            sa.Column('city', sa.String(length=100), nullable=False),
+            sa.Column('bio', sa.String(length=500), nullable=False),
+            sa.Column('preferred_language', sa.String(length=10), server_default='ua', nullable=False),
+            sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+            sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+            sa.PrimaryKeyConstraint('id'),
+            sa.UniqueConstraint('user_id'),
+        )
+        op.create_index(op.f('ix_user_profiles_user_id'), 'user_profiles', ['user_id'], unique=True)
+
+    # Create business_profiles table only when it does not already exist
+    if not _table_exists(inspector, 'business_profiles'):
+        op.create_table(
+            'business_profiles',
+            sa.Column('id', sa.Integer(), nullable=False),
+            sa.Column('owner_user_id', sa.String(), nullable=False),
+            sa.Column('slug', sa.String(length=100), nullable=False),
+            sa.Column('name', sa.String(length=255), nullable=False),
+            sa.Column('logo_url', sa.String(length=1024), nullable=True),
+            sa.Column('cover_url', sa.String(length=1024), nullable=True),
+            sa.Column('category', sa.String(length=100), nullable=False),
+            sa.Column('city', sa.String(length=100), nullable=False),
+            sa.Column('description', sa.Text(), nullable=False),
+            sa.Column('contacts_json', sa.String(length=1000), server_default='{}', nullable=False),
+            sa.Column('is_verified', sa.Boolean(), server_default='false', nullable=False),
+            sa.Column('is_premium', sa.Boolean(), server_default='false', nullable=False),
+            sa.Column('tags_json', sa.String(length=500), server_default='[]', nullable=False),
+            sa.Column('rating', sa.String(length=10), server_default='0', nullable=False),
+            sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
+            sa.Column('updated_at', sa.DateTime(timezone=True), nullable=False),
+            sa.PrimaryKeyConstraint('id'),
+            sa.UniqueConstraint('slug'),
+        )
+        op.create_index(op.f('ix_business_profiles_owner_user_id'), 'business_profiles', ['owner_user_id'])
+        op.create_index(op.f('ix_business_profiles_slug'), 'business_profiles', ['slug'], unique=True)
 
     # Update listings table in batch mode so SQLite validation can run locally too.
     with op.batch_alter_table('listings') as batch_op:
@@ -103,9 +115,14 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Drop profile tables
-    op.drop_table('business_profiles')
-    op.drop_table('user_profiles')
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+
+    # Drop profile tables only if they exist (mirrors the conditional create in upgrade)
+    if _table_exists(inspector, 'business_profiles'):
+        op.drop_table('business_profiles')
+    if _table_exists(inspector, 'user_profiles'):
+        op.drop_table('user_profiles')
 
     with op.batch_alter_table('listings') as batch_op:
         batch_op.drop_column('updated_at')
