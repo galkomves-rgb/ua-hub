@@ -119,6 +119,19 @@ function formatDate(value: string | null) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(date);
 }
 
+function getReadableErrorMessage(error: unknown, fallback: string) {
+  if (!(error instanceof Error)) {
+    return fallback;
+  }
+
+  const message = error.message.trim();
+  if (!message || message === "Failed to fetch" || message === "NetworkError when attempting to fetch resource.") {
+    return fallback;
+  }
+
+  return message;
+}
+
 function VerificationBadge({ status }: { status: string }) {
   const { theme } = useTheme();
   const { t } = useI18n();
@@ -352,7 +365,7 @@ export function AccountBusinessPanel() {
             }`}
           >
             <p className={isDark ? "text-red-300" : "text-red-600"}>
-              {businessQuery.error instanceof Error ? businessQuery.error.message : t("account.loadError")}
+              {getReadableErrorMessage(businessQuery.error, t("account.loadError"))}
             </p>
             <button
               type="button"
@@ -382,7 +395,7 @@ export function AccountBusinessPanel() {
                   isDark ? "border-red-900/40 bg-red-950/20 text-red-300" : "border-red-200 bg-red-50 text-red-600"
                 }`}
               >
-                {saveMutation.error instanceof Error ? saveMutation.error.message : t("account.business.saveError")}
+                {getReadableErrorMessage(saveMutation.error, t("account.business.saveError"))}
               </div>
             ) : null}
 
@@ -582,8 +595,8 @@ export function AccountBusinessPanel() {
                     </p>
                     {subscriptionMutation.isError ? (
                       <p className={`mt-3 text-sm ${isDark ? "text-red-300" : "text-red-600"}`}>
-                        {subscriptionMutation.error instanceof Error
-                          ? subscriptionMutation.error.message
+                      {subscriptionMutation.error instanceof Error
+                          ? getReadableErrorMessage(subscriptionMutation.error, t("account.business.saveError"))
                           : t("account.business.saveError")}
                       </p>
                     ) : null}
@@ -636,7 +649,7 @@ export function AccountBusinessPanel() {
                   {verifyMutation.isError ? (
                     <p className={`mt-3 text-sm ${isDark ? "text-red-300" : "text-red-600"}`}>
                       {verifyMutation.error instanceof Error
-                        ? verifyMutation.error.message
+                        ? getReadableErrorMessage(verifyMutation.error, t("account.business.saveError"))
                         : t("account.business.saveError")}
                     </p>
                   ) : null}
