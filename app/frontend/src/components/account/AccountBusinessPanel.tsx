@@ -27,6 +27,7 @@ import {
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
 import { uploadImageFile } from "@/lib/media-storage";
+import { MODULES } from "@/lib/platform";
 
 type BusinessFormState = {
   slug: string;
@@ -291,6 +292,24 @@ export function AccountBusinessPanel() {
     { key: "description", valid: form.description.trim().length > 0 },
   ];
   const isFormReady = canSubmit && !slugError;
+  const categoryOptionGroups = useMemo(() => {
+    return Object.entries(MODULES)
+      .filter(([moduleId]) => moduleId !== "business")
+      .map(([moduleId, moduleConfig]) => ({
+        moduleId,
+        moduleLabel: t(`mod.${moduleId}`),
+        options: moduleConfig.categories.map((category) => ({
+          value: category.labelKey,
+          label: category.labelKey,
+        })),
+      }))
+      .filter((group) => group.options.length > 0);
+  }, [t]);
+  const categoryValues = useMemo(
+    () => new Set(categoryOptionGroups.flatMap((group) => group.options.map((option) => option.value))),
+    [categoryOptionGroups],
+  );
+  const hasCustomCategory = form.category.trim().length > 0 && !categoryValues.has(form.category.trim());
 
   const canRequestVerification = Boolean(
     activeProfile && activeProfile.verification_status !== "pending" && activeProfile.verification_status !== "verified",
@@ -808,14 +827,32 @@ export function AccountBusinessPanel() {
                     {t("account.business.category")}
                     <span className={`ml-2 text-xs ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`}>{t("account.business.requiredMark")}</span>
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={form.category}
                     onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
                     className={`w-full rounded-2xl border px-4 py-3 text-sm ${
                       isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
                     }`}
-                  />
+                  >
+                    <option value="">{t("account.business.categoryPlaceholder")}</option>
+                    {hasCustomCategory ? (
+                      <option value={form.category}>
+                        {form.category} ({t("account.business.categoryLegacyOption")})
+                      </option>
+                    ) : null}
+                    {categoryOptionGroups.map((group) => (
+                      <optgroup key={group.moduleId} label={group.moduleLabel}>
+                        {group.options.map((option) => (
+                          <option key={`${group.moduleId}-${option.value}`} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                  <p className={`mt-2 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                    {t("account.business.categoryHint")}
+                  </p>
                 </div>
                 <div>
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
