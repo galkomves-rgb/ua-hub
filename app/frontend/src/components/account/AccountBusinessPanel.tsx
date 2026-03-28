@@ -46,6 +46,28 @@ const PLAN_OPTIONS = ["basic", "premium", "business"] as const;
 
 type PlanOption = (typeof PLAN_OPTIONS)[number];
 
+const CYRILLIC_SLUG_MAP: Record<string, string> = {
+  а: "a", б: "b", в: "v", г: "h", ґ: "g", д: "d", е: "e", є: "ye", ж: "zh", з: "z", и: "y", і: "i",
+  ї: "yi", й: "y", к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u",
+  ф: "f", х: "kh", ц: "ts", ч: "ch", ш: "sh", щ: "shch", ь: "", ю: "yu", я: "ya",
+};
+
+function slugifyBusinessValue(value: string): string {
+  const transliterated = value
+    .trim()
+    .toLowerCase()
+    .split("")
+    .map((char) => CYRILLIC_SLUG_MAP[char] ?? char)
+    .join("");
+
+  return transliterated
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-");
+}
+
 function buildBusinessForm(profile: BusinessProfileResponse | null): BusinessFormState {
   const contacts = safeParseRecord(profile?.contacts_json);
 
@@ -125,6 +147,9 @@ function getReadableErrorMessage(error: unknown, fallback: string) {
   }
 
   const message = error.message.trim();
+  if (message.includes("slug: String should match pattern")) {
+    return fallback;
+  }
   if (!message || message === "Failed to fetch" || message === "NetworkError when attempting to fetch resource.") {
     return fallback;
   }
@@ -241,9 +266,24 @@ export function AccountBusinessPanel() {
       form.slug.trim().length > 0 &&
       form.name.trim().length > 0 &&
       form.category.trim().length > 0 &&
+      form.city.trim().length > 0 &&
       form.description.trim().length > 0
     );
-  }, [form.category, form.description, form.name, form.slug]);
+  }, [form.category, form.city, form.description, form.name, form.slug]);
+
+  const slugValue = form.slug.trim();
+  const slugNormalized = slugifyBusinessValue(slugValue);
+  const slugError = !activeProfile && slugValue.length > 0 && slugValue !== slugNormalized
+    ? t("account.business.slugInvalid")
+    : null;
+  const requiredFields = [
+    { key: "slug", valid: slugValue.length > 0 && !slugError },
+    { key: "name", valid: form.name.trim().length > 0 },
+    { key: "category", valid: form.category.trim().length > 0 },
+    { key: "city", valid: form.city.trim().length > 0 },
+    { key: "description", valid: form.description.trim().length > 0 },
+  ];
+  const isFormReady = canSubmit && !slugError;
 
   const canRequestVerification = Boolean(
     activeProfile && activeProfile.verification_status !== "pending" && activeProfile.verification_status !== "verified",
@@ -256,12 +296,12 @@ export function AccountBusinessPanel() {
   );
 
   const handleSave = () => {
-    if (!canSubmit) {
+    if (!isFormReady) {
       return;
     }
 
     saveMutation.mutate({
-      slug: form.slug.trim(),
+      slug: slugNormalized,
       name: form.name.trim(),
       category: form.category.trim(),
       city: form.city.trim(),
@@ -657,25 +697,47 @@ export function AccountBusinessPanel() {
               </>
             ) : null}
 
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div
+              className={`rounded-2xl border p-4 text-sm ${
+                isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-400" : "border-slate-200 bg-slate-50 text-slate-600"
+              }`}
+            >
+              <p className={`font-medium ${isDark ? "text-slate-200" : "text-slate-800"}`}>
+                {t("account.business.requiredFieldsTitle")}
+              </p>
+              <p className="mt-1">{t("account.business.requiredFieldsHint")}</p>
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2">
               <div className="space-y-4">
+                <div>
+                  <p className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                    {t("account.business.requiredSection")}
+                  </p>
+                </div>
                 <div>
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                     {t("account.business.slug")}
+                    <span className={`ml-2 text-xs ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`}>{t("account.business.requiredMark")}</span>
                   </label>
                   <input
                     type="text"
                     value={form.slug}
-                    onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
+                    onChange={(event) => setForm((current) => ({ ...current, slug: slugifyBusinessValue(event.target.value) }))}
                     disabled={Boolean(activeProfile)}
+                    placeholder={t("account.business.slugPlaceholder")}
                     className={`w-full rounded-2xl border px-4 py-3 text-sm ${
                       isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
                     } ${activeProfile ? "cursor-not-allowed opacity-70" : ""}`}
                   />
+                  <p className={`mt-2 text-xs ${slugError ? (isDark ? "text-red-300" : "text-red-600") : (isDark ? "text-slate-400" : "text-slate-500")}`}>
+                    {slugError || t("account.business.slugHint")}
+                  </p>
                 </div>
                 <div>
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                     {t("account.business.name")}
+                    <span className={`ml-2 text-xs ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`}>{t("account.business.requiredMark")}</span>
                   </label>
                   <input
                     type="text"
@@ -689,6 +751,7 @@ export function AccountBusinessPanel() {
                 <div>
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                     {t("account.business.category")}
+                    <span className={`ml-2 text-xs ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`}>{t("account.business.requiredMark")}</span>
                   </label>
                   <input
                     type="text"
@@ -702,6 +765,7 @@ export function AccountBusinessPanel() {
                 <div>
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                     {t("account.business.city")}
+                    <span className={`ml-2 text-xs ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`}>{t("account.business.requiredMark")}</span>
                   </label>
                   <CityPicker
                     value={form.city}
@@ -715,6 +779,7 @@ export function AccountBusinessPanel() {
                 <div>
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                     {t("account.business.description")}
+                    <span className={`ml-2 text-xs ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`}>{t("account.business.requiredMark")}</span>
                   </label>
                   <textarea
                     value={form.description}
@@ -728,6 +793,11 @@ export function AccountBusinessPanel() {
               </div>
 
               <div className="space-y-4">
+                <div>
+                  <p className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                    {t("account.business.optionalSection")}
+                  </p>
+                </div>
                 <div>
                   <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
                     {t("account.business.website")}
@@ -793,44 +863,56 @@ export function AccountBusinessPanel() {
                     }`}
                   />
                 </div>
-                <div>
-                  <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
-                    {t("account.business.tagsJson")}
-                  </label>
-                  <textarea
-                    value={form.tags_text}
-                    onChange={(event) => setForm((current) => ({ ...current, tags_text: event.target.value }))}
-                    rows={3}
-                    placeholder={t("account.business.tagsHint")}
-                    className={`w-full rounded-2xl border px-4 py-3 text-sm ${
-                      isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
-                    }`}
-                  />
-                </div>
-                <div>
-                  <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
-                    {t("account.business.serviceAreasJson")}
-                  </label>
-                  <textarea
-                    value={form.service_areas_text}
-                    onChange={(event) => setForm((current) => ({ ...current, service_areas_text: event.target.value }))}
-                    rows={3}
-                    placeholder={t("account.business.serviceAreasHint")}
-                    className={`w-full rounded-2xl border px-4 py-3 text-sm ${
-                      isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
-                    }`}
-                  />
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
+                      {t("account.business.tagsJson")}
+                    </label>
+                    <textarea
+                      value={form.tags_text}
+                      onChange={(event) => setForm((current) => ({ ...current, tags_text: event.target.value }))}
+                      rows={3}
+                      placeholder={t("account.business.tagsHint")}
+                      className={`w-full rounded-2xl border px-4 py-3 text-sm ${
+                        isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className={`mb-2 block text-sm font-medium ${isDark ? "text-slate-200" : "text-slate-700"}`}>
+                      {t("account.business.serviceAreasJson")}
+                    </label>
+                    <textarea
+                      value={form.service_areas_text}
+                      onChange={(event) => setForm((current) => ({ ...current, service_areas_text: event.target.value }))}
+                      rows={3}
+                      placeholder={t("account.business.serviceAreasHint")}
+                      className={`w-full rounded-2xl border px-4 py-3 text-sm ${
+                        isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
+                      }`}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
+
+            {!isFormReady ? (
+              <p className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                {t("account.business.requiredFieldsMissing")}:{" "}
+                {requiredFields
+                  .filter((field) => !field.valid)
+                  .map((field) => t(`account.business.${field.key}`))
+                  .join(", ")}
+              </p>
+            ) : null}
 
             <div className="flex justify-end">
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={!canSubmit || saveMutation.isPending}
+                disabled={!isFormReady || saveMutation.isPending}
                 className={`inline-flex items-center gap-2 rounded-2xl px-5 py-3 text-sm font-semibold ${
-                  !canSubmit || saveMutation.isPending ? "cursor-not-allowed opacity-60" : ""
+                  !isFormReady || saveMutation.isPending ? "cursor-not-allowed opacity-60" : ""
                 } ${
                   isDark
                     ? "bg-gradient-to-r from-[#FFD700] to-[#e6c200] text-[#0d1a2e]"
