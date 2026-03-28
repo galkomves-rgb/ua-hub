@@ -8,6 +8,7 @@ import {
   Plus, Upload, Eye, Check, Shield, Users, TrendingUp, BadgeCheck, X,
 } from "lucide-react";
 import CityPicker from "@/components/CityPicker";
+import InternationalPhoneInput from "@/components/InternationalPhoneInput";
 import Layout from "@/components/Layout";
 import { ListingCard, SectionHeader } from "@/components/Cards";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -17,6 +18,7 @@ import { deriveListingLabels } from "@/lib/label-taxonomy";
 import { fetchPublicBusinessBySlug } from "@/lib/public-businesses";
 import { fetchPublicListing, fetchPublicListings } from "@/lib/public-listings";
 import { getAPIBaseURL } from "@/lib/config";
+import { normalizeStoredPhoneValue } from "@/lib/phone-utils";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
 import { useGlobalCity } from "@/lib/global-preferences";
@@ -641,7 +643,7 @@ function BusinessProfilePage() {
 // ─── Create Listing ───
 function CreateListingPage() {
   const { theme } = useTheme();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { user } = useAuth();
   const isDark = theme === "dark";
   const navigate = useNavigate();
@@ -852,7 +854,7 @@ function CreateListingPage() {
         owner_id: effectiveOwnerId,
         images_json: JSON.stringify(formData.images),
         meta_json: JSON.stringify({
-          contact: formData.contact,
+          contact: normalizeStoredPhoneValue(formData.contact, locale),
           google_maps_url: formData.googleMapsUrl,
         }),
       };
@@ -1146,18 +1148,17 @@ function CreateListingPage() {
             <div className="space-y-4">
               <h2 className={`text-sm font-bold mb-2 ${isDark ? "text-gray-200" : "text-gray-800"}`}>{t("create.step5")}</h2>
               <div>
-                <label className={`text-xs font-medium mb-1 block ${isDark ? "text-gray-400" : "text-gray-500"}`}>{t("create.fieldContact")} *</label>
-                <input
+                <label className={`text-xs font-medium mb-1 block ${isDark ? "text-gray-400" : "text-gray-500"}`}>{t("create.fieldPhone")} *</label>
+                <InternationalPhoneInput
                   value={formData.contact}
-                  onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
-                  className={`w-full h-10 px-3 text-sm rounded-lg border focus:outline-none ${
-                    isDark ? "bg-[#0d1a2e] border-[#1a3050] text-gray-200 focus:border-[#4a9eff]" : "bg-gray-50 border-gray-200 text-gray-700 focus:border-blue-400"
-                  }`}
-                  placeholder={t("create.contactPlaceholder")}
+                  onChange={(value) => setFormData({ ...formData, contact: value })}
+                  buttonClassName={isDark ? "border-[#1a3050] bg-[#0d1a2e] text-gray-200 hover:bg-[#12233d]" : "border-gray-200 bg-gray-50 text-gray-700 hover:bg-white"}
+                  inputClassName={isDark ? "border-[#1a3050] bg-[#0d1a2e] text-gray-200 placeholder:text-gray-500 focus:border-[#4a9eff]" : "border-gray-200 bg-gray-50 text-gray-700 placeholder:text-gray-400 focus:border-blue-400"}
+                  placeholder={t("phoneInput.numberPlaceholder")}
                 />
               </div>
               <p className={`text-xs ${isDark ? "text-gray-500" : "text-gray-400"}`}>
-                {t("create.labelsHint")}
+                {t("create.phoneHint")}
               </p>
             </div>
           )}
