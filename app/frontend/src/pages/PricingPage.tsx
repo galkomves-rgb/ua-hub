@@ -97,6 +97,46 @@ function PricingCard({
         ? t(card.prominentLabelKey)
         : null;
 
+  const cardStateClass = selected
+    ? isDark
+      ? "border-[#FFD700] bg-[#11203a] shadow-[0_18px_45px_rgba(6,15,31,0.45),0_0_0_3px_rgba(255,215,0,0.18)]"
+      : "border-[#0057B8] bg-white shadow-[0_18px_40px_rgba(15,23,42,0.12),0_0_0_3px_rgba(0,87,184,0.14)]"
+    : card.recommended
+      ? isDark
+        ? "border-[#FFD700]/60 bg-[#11203a] shadow-[0_14px_34px_rgba(6,15,31,0.32)]"
+        : "border-amber-400 bg-white shadow-[0_14px_32px_rgba(245,158,11,0.14)]"
+      : isDark
+        ? "border-[#22416b] bg-[#11203a]"
+        : "border-slate-200 bg-white";
+
+  const cardInteractionClass = selected
+    ? "translate-y-[-4px]"
+    : card.recommended
+      ? isDark
+        ? "hover:-translate-y-1 hover:border-[#FFD700] hover:shadow-[0_18px_36px_rgba(6,15,31,0.36)]"
+        : "hover:-translate-y-1 hover:border-amber-500 hover:shadow-[0_18px_34px_rgba(245,158,11,0.18)]"
+      : isDark
+        ? "hover:-translate-y-1 hover:border-[#4a9eff] hover:shadow-[0_16px_36px_rgba(6,15,31,0.32)]"
+        : "hover:-translate-y-1 hover:border-[#0057B8]/55 hover:shadow-[0_16px_34px_rgba(15,23,42,0.08)]";
+
+  const focusClass = requiresSelection
+    ? isDark
+      ? "cursor-pointer focus:outline-none focus-visible:border-[#FFD700] focus-visible:ring-4 focus-visible:ring-[#FFD700]/15"
+      : "cursor-pointer focus:outline-none focus-visible:border-[#0057B8] focus-visible:ring-4 focus-visible:ring-[#0057B8]/10"
+    : "";
+
+  const ctaClass = selected || (!requiresSelection && card.recommended)
+    ? isDark
+      ? "bg-[#FFD700] text-[#0d1a2e] hover:bg-[#ffe45c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FFD700]"
+      : "bg-[#0057B8] text-white hover:bg-[#00489a] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0057B8]"
+    : card.recommended
+      ? isDark
+        ? "border border-[#FFD700]/50 bg-[#FFD700]/10 text-[#FFD700] hover:bg-[#FFD700]/18 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FFD700]"
+        : "border border-amber-400 bg-amber-50 text-amber-700 hover:bg-amber-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500"
+      : isDark
+        ? "bg-[#1a2d4c] text-slate-100 hover:bg-[#21385f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4a9eff]"
+        : "bg-slate-100 text-slate-700 hover:bg-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0057B8]";
+
   return (
     <article
       role={requiresSelection ? "radio" : undefined}
@@ -121,39 +161,30 @@ function PricingCard({
           onSelectPrevious?.();
         }
       } : undefined}
-      className={`rounded-3xl border p-5 transition-all duration-150 md:p-6 ${
-        selected
-          ? isDark
-            ? "border-[#FFD700] bg-[#11203a] shadow-[0_0_0_3px_rgba(255,215,0,0.18)]"
-            : "border-[#0057B8] bg-white shadow-[0_0_0_3px_rgba(0,87,184,0.14)]"
-          : card.recommended
-          ? isDark
-            ? "border-[#FFD700]/40 bg-[#11203a]"
-            : "border-[#0057B8] bg-white"
-          : isDark
-            ? "border-[#22416b] bg-[#11203a]"
-            : "border-slate-200 bg-white"
-      } ${requiresSelection
-        ? isDark
-          ? "cursor-pointer hover:border-[#4a9eff] focus:outline-none focus-visible:border-[#FFD700]"
-          : "cursor-pointer hover:border-[#0057B8] focus:outline-none focus-visible:border-[#0057B8]"
-        : ""}`}
+      className={`relative overflow-hidden rounded-3xl border p-5 transition-[transform,border-color,box-shadow,background-color] duration-200 md:p-6 ${cardStateClass} ${cardInteractionClass} ${focusClass}`}
       data-selected={selected ? "true" : "false"}
     >
+      {card.recommended ? (
+        <div className={`absolute inset-x-0 top-0 h-1 ${isDark ? "bg-[#FFD700]" : "bg-amber-400"}`} aria-hidden="true" />
+      ) : null}
+
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className={`text-lg font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{t(card.titleKey)}</h3>
           <p id={`${card.id}-pricing-description`} className={`mt-2 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t(card.subtitleKey)}</p>
         </div>
-        {selected ? (
-          <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${isDark ? "bg-emerald-500/15 text-emerald-300" : "bg-emerald-50 text-emerald-700"}`}>
-            {t("pricing.card.selected")}
-          </span>
-        ) : card.recommended ? (
-          <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${isDark ? "bg-[#FFD700]/15 text-[#FFD700]" : "bg-blue-50 text-[#0057B8]"}`}>
-            {t("pricing.badge.recommended")}
-          </span>
-        ) : null}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {card.recommended ? (
+            <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${isDark ? "bg-[#FFD700]/15 text-[#FFD700]" : "bg-amber-50 text-amber-700"}`}>
+              {t("pricing.badge.recommended")}
+            </span>
+          ) : null}
+          {selected ? (
+            <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${isDark ? "bg-emerald-500/15 text-emerald-300" : "bg-emerald-50 text-emerald-700"}`}>
+              {t("pricing.card.selected")}
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <div className="mb-4">
@@ -193,15 +224,7 @@ function PricingCard({
           onPrimaryAction();
         }}
         aria-label={requiresSelection && !selected ? `${t("pricing.card.selectFirst")}: ${t(card.titleKey)}` : t(card.ctaKey)}
-        className={`mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition-colors ${
-          selected || card.recommended
-            ? isDark
-              ? "bg-[#FFD700] text-[#0d1a2e] hover:bg-[#ffe45c] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FFD700]"
-              : "bg-[#0057B8] text-white hover:bg-[#00489a] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0057B8]"
-            : isDark
-              ? "bg-[#1a2d4c] text-slate-100 hover:bg-[#21385f] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4a9eff]"
-              : "bg-slate-100 text-slate-700 hover:bg-slate-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#0057B8]"
-        }`}
+        className={`mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition-colors ${ctaClass}`}
       >
         {requiresSelection && !selected ? t("pricing.card.selectFirst") : t(card.ctaKey)}
         <ChevronRight className="h-4 w-4" />

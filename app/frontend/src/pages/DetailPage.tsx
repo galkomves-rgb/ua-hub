@@ -40,6 +40,14 @@ function normalizeExternalUrl(value: string) {
   return `https://${value}`;
 }
 
+function isLikelyMobileDevice() {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  return window.matchMedia("(pointer: coarse)").matches || window.matchMedia("(max-width: 768px)").matches;
+}
+
 // ─── Listing Detail ───
 function ListingDetail() {
   const params = useParams();
@@ -539,6 +547,19 @@ function BusinessProfilePage() {
   const googleMapsRating = typeof biz.googleMapsRating === "number" ? biz.googleMapsRating : undefined;
   const hasGoogleMapsRating = Boolean(googleMapsRating && biz.googleMapsRatingSource);
   const businessWebsite = biz.contacts?.website;
+  const isMobileDevice = isLikelyMobileDevice();
+  const primaryContactHref = biz.contacts?.phone && isMobileDevice
+    ? `tel:${biz.contacts.phone}`
+    : biz.contacts?.email && !isMobileDevice
+      ? `mailto:${biz.contacts.email}`
+      : biz.contacts?.phone
+        ? `tel:${biz.contacts.phone}`
+        : biz.contacts?.email
+          ? `mailto:${biz.contacts.email}`
+          : businessWebsite
+            ? normalizeExternalUrl(businessWebsite)
+            : null;
+  const shouldOpenContactInNewTab = Boolean(primaryContactHref && /^https?:\/\//i.test(primaryContactHref));
 
   return (
     <Layout>
@@ -580,15 +601,22 @@ function BusinessProfilePage() {
               </div>
 
               {/* CTA */}
-              <div className="flex gap-3 mt-5">
-                <button className={`h-10 px-6 rounded-lg text-sm font-semibold transition-all active:scale-[0.98] ${
-                  isDark
-                    ? "bg-gradient-to-r from-[#FFD700] to-[#e6c200] text-[#0d1a2e]"
-                    : "bg-gradient-to-r from-[#0057B8] to-[#0070E0] text-white"
-                }`}>
-                  {t("card.contact")}
-                </button>
-              </div>
+              {primaryContactHref ? (
+                <div className="flex gap-3 mt-5">
+                  <a
+                    href={primaryContactHref}
+                    target={shouldOpenContactInNewTab ? "_blank" : undefined}
+                    rel={shouldOpenContactInNewTab ? "noreferrer" : undefined}
+                    className={`inline-flex h-10 items-center justify-center px-6 rounded-lg text-sm font-semibold transition-all active:scale-[0.98] ${
+                      isDark
+                        ? "bg-gradient-to-r from-[#FFD700] to-[#e6c200] text-[#0d1a2e]"
+                        : "bg-gradient-to-r from-[#0057B8] to-[#0070E0] text-white"
+                    }`}
+                  >
+                    {t("card.contact")}
+                  </a>
+                </div>
+              ) : null}
             </div>
 
             {/* Business listings */}
