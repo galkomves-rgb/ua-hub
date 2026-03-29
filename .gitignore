@@ -8,6 +8,8 @@ vite.config.ts.timestamp-*
 .git.worktree.bak
 app/backend/routers/listings_clean.py.bak
 app/backend/.env
+app/backend/.env.local
 app/backend/.env.staging
 app/frontend/.env
+app/frontend/.env.local
 app/frontend/.env.staging
