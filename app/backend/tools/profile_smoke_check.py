@@ -34,7 +34,6 @@ async def main() -> None:
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://testserver") as client:
         payload = {
-            "slug": "test-biz",
             "name": "Test Biz",
             "category": "services",
             "city": "Kyiv",
@@ -56,7 +55,9 @@ async def main() -> None:
         print("my:", r2.status_code, len(r2.json()) if r2.status_code == 200 else r2.text)
 
         payload["name"] = "Updated Biz"
-        r3 = await client.put("/api/v1/profiles/business/test-biz", json=payload)
+        created_slug = r1.json().get("slug") if r1.status_code == 200 else "test-biz"
+
+        r3 = await client.put(f"/api/v1/profiles/business/{created_slug}", json=payload)
         print("update:", r3.status_code, r3.json().get("name") if r3.status_code == 200 else r3.text)
 
         r4 = await client.post("/api/v1/profiles/business", json=payload)

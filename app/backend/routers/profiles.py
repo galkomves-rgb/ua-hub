@@ -172,14 +172,18 @@ async def create_business_profile(
     """Create a new business profile for authenticated user."""
     service = ProfileService(db)
 
-    # Check if slug already exists
-    existing = await service.get_business_profile(profile_data.slug)
-    if existing:
-        raise HTTPException(status_code=400, detail="Business slug already exists")
+    requested_slug = profile_data.slug.strip() if profile_data.slug else None
+    if requested_slug:
+        existing = await service.get_business_profile(requested_slug)
+        if existing:
+            raise HTTPException(status_code=400, detail="Business slug already exists")
+        slug = requested_slug
+    else:
+        slug = await service.generate_unique_business_slug(profile_data.name)
 
     profile = await service.create_business_profile(
         owner_user_id=user_id,
-        slug=profile_data.slug,
+        slug=slug,
         name=profile_data.name,
         category=profile_data.category,
         city=profile_data.city,

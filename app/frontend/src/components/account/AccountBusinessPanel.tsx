@@ -436,7 +436,6 @@ export function AccountBusinessPanel() {
 
   const canSubmit = useMemo(() => {
     return (
-      form.slug.trim().length > 0 &&
       form.name.trim().length > 0 &&
       form.category.trim().length > 0 &&
       form.city.trim().length > 0 &&
@@ -447,7 +446,7 @@ export function AccountBusinessPanel() {
         form.website.trim().length > 0
       )
     );
-  }, [form.category, form.city, form.contact_email, form.contact_phone, form.description, form.name, form.slug, form.website]);
+  }, [form.category, form.city, form.contact_email, form.contact_phone, form.description, form.name, form.website]);
 
   const canRequestVerification = Boolean(
     activeProfile && activeProfile.verification_status !== "pending" && activeProfile.verification_status !== "verified",
@@ -465,7 +464,6 @@ export function AccountBusinessPanel() {
     }
 
     saveMutation.mutate({
-      slug: form.slug.trim(),
       name: form.name.trim(),
       category: form.category.trim(),
       city: form.city.trim(),
@@ -926,16 +924,14 @@ export function AccountBusinessPanel() {
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
               <div className="space-y-3">
                 <div>
-                  <FieldLabel label={t("account.business.slug")} requirement="required" isDark={isDark} requiredLabel={t("common.required")} optionalLabel={t("common.optional")} />
-                  <input
-                    type="text"
-                    value={form.slug}
-                    onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
-                    disabled={Boolean(activeProfile)}
-                    className={`w-full rounded-2xl border px-4 py-3 text-sm ${
-                      isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"
-                    } ${activeProfile ? "cursor-not-allowed opacity-70" : ""}`}
-                  />
+                  <FieldLabel label={t("account.business.slug")} requirement="optional" isDark={isDark} requiredLabel={t("common.required")} optionalLabel={t("common.optional")} />
+                  <div className={`rounded-2xl border px-4 py-3 text-sm ${
+                    isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-slate-50 text-slate-900"
+                  }`}>
+                    {activeProfile
+                      ? (previewUrl || `/business/${activeProfile.slug}`)
+                      : t("account.business.slugAutoValue")}
+                  </div>
                   <p className={`mt-1.5 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t("account.business.slugHint")}</p>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2">

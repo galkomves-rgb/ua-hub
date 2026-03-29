@@ -74,7 +74,7 @@ class BusinessProfileBase(BaseModel):
 class BusinessProfileCreate(BusinessProfileBase):
     """Schema for creating a business profile."""
 
-    pass
+    slug: str | None = Field(None, min_length=1, max_length=100, pattern="^[a-z0-9-]+$")
 
 
 class BusinessProfileUpdate(BaseModel):

@@ -1,3 +1,5 @@
+import re
+import unicodedata
 from datetime import datetime, timezone
 from core.config import settings
 from models.listings import Listings
@@ -5,6 +7,49 @@ from models.profiles import UserProfile, BusinessProfile
 from models.saved import SavedBusiness
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+CYRILLIC_SLUG_TRANSLATION = str.maketrans(
+    {
+        "а": "a",
+        "б": "b",
+        "в": "v",
+        "г": "h",
+        "ґ": "g",
+        "д": "d",
+        "е": "e",
+        "є": "ye",
+        "ж": "zh",
+        "з": "z",
+        "и": "y",
+        "і": "i",
+        "ї": "yi",
+        "й": "i",
+        "к": "k",
+        "л": "l",
+        "м": "m",
+        "н": "n",
+        "о": "o",
+        "п": "p",
+        "р": "r",
+        "с": "s",
+        "т": "t",
+        "у": "u",
+        "ф": "f",
+        "х": "kh",
+        "ц": "ts",
+        "ч": "ch",
+        "ш": "sh",
+        "щ": "shch",
+        "ь": "",
+        "ю": "yu",
+        "я": "ya",
+        "ъ": "",
+        "ы": "y",
+        "э": "e",
+        "ё": "yo",
+    }
+)
 
 
 class ProfileService:
@@ -31,6 +76,29 @@ class ProfileService:
         ]
         completed = sum(1 for item in checks if item)
         return round(completed / len(checks) * 100)
+
+    @staticmethod
+    def _slugify_business_value(value: str) -> str:
+        translated = value.lower().translate(CYRILLIC_SLUG_TRANSLATION)
+        normalized = unicodedata.normalize("NFKD", translated)
+        ascii_only = normalized.encode("ascii", "ignore").decode("ascii")
+        slug = re.sub(r"[^a-z0-9]+", "-", ascii_only).strip("-")
+        slug = re.sub(r"-{2,}", "-", slug)
+        slug = slug[:100].strip("-")
+        return slug or "business"
+
+    async def generate_unique_business_slug(self, name: str) -> str:
+        base_slug = self._slugify_business_value(name)
+        candidate = base_slug
+        suffix = 2
+
+        while await self.get_business_profile(candidate):
+            suffix_token = f"-{suffix}"
+            trimmed_base = base_slug[: max(1, 100 - len(suffix_token))].rstrip("-") or "business"
+            candidate = f"{trimmed_base}{suffix_token}"
+            suffix += 1
+
+        return candidate
 
     async def serialize_business_profile(self, profile: BusinessProfile) -> dict:
         active_statuses = ["active", "published"]

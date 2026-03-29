@@ -630,7 +630,7 @@ export interface BusinessProfileResponse {
 }
 
 export interface BusinessProfilePayload {
-  slug: string;
+  slug?: string;
   name: string;
   category: string;
   city: string;
