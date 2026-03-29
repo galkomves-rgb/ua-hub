@@ -1,11 +1,23 @@
+import asyncio
 import logging
 import os
 import time
+from pathlib import Path
 
+from alembic import command
+from alembic.config import Config
 from core.database import db_manager
 from sqlalchemy import text
 
 logger = logging.getLogger(__name__)
+
+
+def _run_alembic_upgrade() -> None:
+    backend_root = Path(__file__).resolve().parents[1]
+    alembic_ini_path = backend_root / "alembic.ini"
+    config = Config(str(alembic_ini_path))
+    config.set_main_option("script_location", str(backend_root / "alembic"))
+    command.upgrade(config, "head")
 
 
 async def check_database_health() -> bool:
@@ -36,6 +48,9 @@ async def initialize_database():
     try:
         logger.info("🔧 Starting database initialization...")
         await db_manager.init_db()
+        logger.info("🔧 Running Alembic migrations...")
+        await asyncio.to_thread(_run_alembic_upgrade)
+        logger.info("🔧 Alembic migrations completed")
         logger.info("🔧 Database connection initialized, now creating tables if tables not exist...")
         await db_manager.create_tables()
         logger.info("🔧 Table creation completed")
