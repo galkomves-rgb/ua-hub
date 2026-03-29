@@ -106,6 +106,37 @@ class AdminBusinessSubscriptionReviewRequest(BaseModel):
     decision: str
     plan: str | None = None
     moderation_note: str | None = None
+    manual_override: bool = False
+
+
+class AdminBusinessRelatedPaymentItemResponse(BaseModel):
+    id: int
+    title: str
+    product_code: str
+    status: str
+    entitlement_status: str | None = None
+    amount_total: float
+    currency: str
+    created_at: datetime
+    paid_at: datetime | None = None
+    period_end: datetime | None = None
+    receipt_url: str | None = None
+    invoice_url: str | None = None
+    failure_reason: str | None = None
+
+
+class AdminBusinessProfileDetailResponse(AdminBusinessProfileItemResponse):
+    owner_email: str | None = None
+    description: str
+    logo_url: str | None = None
+    cover_url: str | None = None
+    contacts_json: str | None = None
+    tags_json: str | None = None
+    website: str | None = None
+    social_links_json: str | None = None
+    service_areas_json: str | None = None
+    public_preview_url: str | None = None
+    related_payments: list[AdminBusinessRelatedPaymentItemResponse] = []
 
 
 class AdminModerationAuditItemResponse(BaseModel):

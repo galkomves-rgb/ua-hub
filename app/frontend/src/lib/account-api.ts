@@ -329,6 +329,36 @@ export interface AdminBusinessProfileItem {
   updated_at: string;
 }
 
+export interface AdminBusinessRelatedPaymentItem {
+  id: number;
+  title: string;
+  product_code: string;
+  status: string;
+  entitlement_status: string | null;
+  amount_total: number;
+  currency: string;
+  created_at: string;
+  paid_at: string | null;
+  period_end: string | null;
+  receipt_url: string | null;
+  invoice_url: string | null;
+  failure_reason: string | null;
+}
+
+export interface AdminBusinessProfileDetail extends AdminBusinessProfileItem {
+  owner_email: string | null;
+  description: string;
+  logo_url: string | null;
+  cover_url: string | null;
+  contacts_json: string | null;
+  tags_json: string | null;
+  website: string | null;
+  social_links_json: string | null;
+  service_areas_json: string | null;
+  public_preview_url: string | null;
+  related_payments: AdminBusinessRelatedPaymentItem[];
+}
+
 export interface AdminBusinessVerificationReviewPayload {
   decision: "approved" | "rejected";
   moderation_note?: string | null;
@@ -338,6 +368,7 @@ export interface AdminBusinessSubscriptionReviewPayload {
   decision: "approved" | "rejected";
   plan?: "basic" | "premium" | "business" | null;
   moderation_note?: string | null;
+  manual_override?: boolean;
 }
 
 export interface AdminExpirationRunResponse {
@@ -1235,6 +1266,10 @@ export function reviewAdminBusinessVerification(slug: string, payload: AdminBusi
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function fetchAdminBusinessProfileDetail(slug: string) {
+  return accountFetch<AdminBusinessProfileDetail>(`/api/v1/admin/business/${encodeURIComponent(slug)}`);
 }
 
 export function reviewAdminBusinessSubscription(slug: string, payload: AdminBusinessSubscriptionReviewPayload) {

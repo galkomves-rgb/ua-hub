@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from dependencies.auth import get_admin_user
 from dependencies.database import get_db_session
 from schemas.admin import (
+    AdminBusinessProfileDetailResponse,
     AdminBusinessProfileItemResponse,
     AdminBusinessProfilesPageResponse,
     AdminBusinessSubscriptionReviewRequest,
@@ -119,6 +120,18 @@ async def get_admin_business_profiles(
     )
 
 
+@router.get("/business/{slug}", response_model=AdminBusinessProfileDetailResponse)
+async def get_admin_business_profile_detail(
+    slug: str,
+    _admin_user: UserResponse = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    item = await AdminService(db).get_business_profile_detail(slug)
+    if not item:
+        raise HTTPException(status_code=404, detail="Business profile not found")
+    return item
+
+
 @router.post("/business/{slug}/verification-review", response_model=AdminBusinessProfileItemResponse)
 async def review_admin_business_verification(
     slug: str,
@@ -153,6 +166,7 @@ async def review_admin_business_subscription(
             decision=payload.decision,
             requested_plan=payload.plan,
             moderation_note=payload.moderation_note,
+            manual_override=payload.manual_override,
             admin_user_id=str(admin_user.id),
         )
     except ValueError as exc:

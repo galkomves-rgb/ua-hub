@@ -224,3 +224,111 @@ async def test_admin_billing_list_and_override(api_client: AsyncClient, db_sessi
     assert overridden["status"] == "paid"
     assert overridden["entitlement_status"] == "active"
     assert overridden["paid_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_admin_business_detail_includes_full_profile_and_related_payments(api_client: AsyncClient, db_session: AsyncSession):
+    now = datetime.now(timezone.utc)
+    db_session.add(User(id="user-1", email="owner@example.com", role="user", created_at=now))
+    await db_session.flush()
+    business = BusinessProfile(
+        owner_user_id="user-1",
+        slug="crypto-risk-app",
+        name="Crypto Risk App",
+        category="digital",
+        city="Torrevieja",
+        description="desc",
+        logo_url="https://example.com/logo.png",
+        cover_url="https://example.com/cover.png",
+        contacts_json='{"email":"owner@example.com","website":"https://example.com"}',
+        tags_json='["crypto","trading"]',
+        website="https://example.com",
+        social_links_json='["https://instagram.com/example"]',
+        service_areas_json='["Torrevieja","Alicante"]',
+        verification_status="pending",
+        subscription_request_status="pending",
+        subscription_requested_plan="premium",
+        subscription_requested_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(business)
+    await db_session.flush()
+    db_session.add(
+        BillingPayment(
+            user_id="user-1",
+            business_profile_id=business.id,
+            provider="stripe",
+            product_code="business_priority",
+            product_type="business_subscription",
+            target_type="business_profile",
+            title="Business Priority",
+            status="paid",
+            entitlement_status="active",
+            amount_total=Decimal("19.99"),
+            currency="eur",
+            checkout_mode="subscription",
+            receipt_url="https://example.com/receipt",
+            invoice_url="https://example.com/invoice",
+            metadata_json="{}",
+            created_at=now,
+            paid_at=now,
+        )
+    )
+    await db_session.commit()
+
+    response = await api_client.get("/api/v1/admin/business/crypto-risk-app")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["owner_email"] == "owner@example.com"
+    assert payload["logo_url"] == "https://example.com/logo.png"
+    assert payload["contacts_json"] == '{"email":"owner@example.com","website":"https://example.com"}'
+    assert payload["public_preview_url"].endswith("/business/crypto-risk-app")
+    assert len(payload["related_payments"]) == 1
+    assert payload["related_payments"][0]["status"] == "paid"
+
+
+@pytest.mark.asyncio
+async def test_admin_subscription_review_requires_payment_or_manual_override(api_client: AsyncClient, db_session: AsyncSession):
+    now = datetime.now(timezone.utc)
+    db_session.add(User(id="user-1", email="owner@example.com", role="user", created_at=now))
+    db_session.add(
+        BusinessProfile(
+            owner_user_id="user-1",
+            slug="biz-1",
+            name="Biz One",
+            category="legal",
+            city="Madrid",
+            description="desc",
+            subscription_request_status="pending",
+            subscription_requested_plan="premium",
+            subscription_requested_at=now,
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    await db_session.commit()
+
+    response = await api_client.post(
+        "/api/v1/admin/business/biz-1/subscription-review",
+        json={"decision": "approved", "plan": "premium"},
+    )
+
+    assert response.status_code == 400
+    assert "successful payment" in response.json()["detail"]
+
+    manual_response = await api_client.post(
+        "/api/v1/admin/business/biz-1/subscription-review",
+        json={
+            "decision": "approved",
+            "plan": "premium",
+            "manual_override": True,
+            "moderation_note": "User provided bank transfer confirmation after Stripe outage",
+        },
+    )
+
+    assert manual_response.status_code == 200
+    payload = manual_response.json()
+    assert payload["subscription_plan"] == "premium"
+    assert payload["subscription_request_status"] == "approved"

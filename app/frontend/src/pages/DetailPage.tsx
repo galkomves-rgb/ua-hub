@@ -33,6 +33,13 @@ function normalizeCityFilter(value: string): string {
   return value === "All Spain" ? "all" : value;
 }
 
+function normalizeExternalUrl(value: string) {
+  if (/^https?:\/\//i.test(value) || value.startsWith("/")) {
+    return value;
+  }
+  return `https://${value}`;
+}
+
 // ─── Listing Detail ───
 function ListingDetail() {
   const params = useParams();
@@ -536,7 +543,9 @@ function BusinessProfilePage() {
   return (
     <Layout>
       {/* Cover */}
-      <div className={`w-full h-32 ${isDark ? "bg-gradient-to-r from-[#0057B8]/30 to-[#FFD700]/10" : "bg-gradient-to-r from-blue-100 to-yellow-50"}`} />
+      <div className={`w-full h-32 overflow-hidden ${biz.cover ? "" : isDark ? "bg-gradient-to-r from-[#0057B8]/30 to-[#FFD700]/10" : "bg-gradient-to-r from-blue-100 to-yellow-50"}`}>
+        {biz.cover ? <img src={biz.cover} alt={biz.name} className="h-full w-full object-cover" /> : null}
+      </div>
 
       <div className="max-w-6xl mx-auto px-4 -mt-8">
         <div className="flex flex-col lg:flex-row gap-6">
@@ -545,10 +554,10 @@ function BusinessProfilePage() {
             {/* Profile header */}
             <div className={`rounded-xl border p-5 mb-4 ${isDark ? "bg-[#111d32] border-[#1a3050]" : "bg-white border-gray-200/80"}`}>
               <div className="flex items-start gap-4">
-                <div className={`w-16 h-16 rounded-xl flex items-center justify-center text-2xl font-bold shrink-0 ${
+                <div className={`w-16 h-16 overflow-hidden rounded-xl flex items-center justify-center text-2xl font-bold shrink-0 ${
                   isDark ? "bg-[#1a2a40] text-[#4a9eff]" : "bg-blue-50 text-[#0057B8]"
                 }`}>
-                  {biz.name.charAt(0)}
+                  {biz.logo ? <img src={biz.logo} alt={biz.name} className="h-full w-full object-cover" /> : biz.name.charAt(0)}
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
@@ -606,19 +615,19 @@ function BusinessProfilePage() {
                   <MapPin className="w-4 h-4 shrink-0" /> {biz.city}, {t("detail.countrySpain")}
                 </div>
                 {biz.contacts?.phone ? (
-                  <div className={`flex items-center gap-2 text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                  <a href={`tel:${biz.contacts.phone}`} className={`flex items-center gap-2 text-sm break-all hover:underline ${isDark ? "text-gray-300" : "text-gray-600"}`}>
                     <Phone className="w-4 h-4 shrink-0" /> {biz.contacts.phone}
-                  </div>
+                  </a>
                 ) : null}
                 {biz.contacts?.email ? (
-                  <div className={`flex items-center gap-2 text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                  <a href={`mailto:${biz.contacts.email}`} className={`flex items-center gap-2 text-sm break-all hover:underline ${isDark ? "text-gray-300" : "text-gray-600"}`}>
                     <Mail className="w-4 h-4 shrink-0" /> {biz.contacts.email}
-                  </div>
+                  </a>
                 ) : null}
                 {businessWebsite ? (
-                  <div className={`flex items-center gap-2 text-sm ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                  <a href={normalizeExternalUrl(businessWebsite)} target="_blank" rel="noreferrer" className={`flex items-center gap-2 text-sm break-all hover:underline ${isDark ? "text-gray-300" : "text-gray-600"}`}>
                     <Globe className="w-4 h-4 shrink-0" /> {businessWebsite}
-                  </div>
+                  </a>
                 ) : null}
               </div>
             </div>

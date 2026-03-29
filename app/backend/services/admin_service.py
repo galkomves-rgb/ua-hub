@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 
+from core.config import settings
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +14,11 @@ from models.profiles import BusinessProfile, UserProfile
 class AdminService:
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _build_public_preview_url(slug: str) -> str:
+        frontend_base = (getattr(settings, "frontend_url", "") or "").rstrip("/")
+        return f"{frontend_base}/business/{slug}" if frontend_base else f"/business/{slug}"
 
     @staticmethod
     def _serialize_business_profile_item(profile: BusinessProfile) -> dict:
@@ -34,6 +40,78 @@ class AdminService:
             "created_at": profile.created_at,
             "updated_at": profile.updated_at,
         }
+
+    @staticmethod
+    def _serialize_business_related_payment(payment: BillingPayment) -> dict:
+        return {
+            "id": payment.id,
+            "title": payment.title,
+            "product_code": payment.product_code,
+            "status": payment.status,
+            "entitlement_status": payment.entitlement_status,
+            "amount_total": float(payment.amount_total),
+            "currency": payment.currency,
+            "created_at": payment.created_at,
+            "paid_at": payment.paid_at,
+            "period_end": payment.period_end,
+            "receipt_url": payment.receipt_url,
+            "invoice_url": payment.invoice_url,
+            "failure_reason": payment.failure_reason,
+        }
+
+    async def _list_business_related_payments(self, business_profile_id: int, limit: int = 6) -> list[BillingPayment]:
+        result = await self.db.execute(
+            select(BillingPayment)
+            .where(
+                BillingPayment.business_profile_id == business_profile_id,
+                BillingPayment.product_type == "business_subscription",
+            )
+            .order_by(BillingPayment.created_at.desc(), BillingPayment.id.desc())
+            .limit(limit)
+        )
+        return result.scalars().all()
+
+    @staticmethod
+    def _has_paid_payment_evidence(profile: BusinessProfile, payments: list[BillingPayment]) -> bool:
+        requested_at = profile.subscription_requested_at
+        for payment in payments:
+            if payment.status != "paid":
+                continue
+            payment_effective_at = payment.paid_at or payment.created_at
+            if not requested_at or (payment_effective_at and payment_effective_at >= requested_at):
+                return True
+        return False
+
+    async def get_business_profile_detail(self, slug: str) -> dict | None:
+        result = await self.db.execute(
+            select(BusinessProfile, User.email)
+            .outerjoin(User, User.id == BusinessProfile.owner_user_id)
+            .where(BusinessProfile.slug == slug)
+        )
+        row = result.one_or_none()
+        if not row:
+            return None
+
+        profile, owner_email = row
+        related_payments = await self._list_business_related_payments(profile.id)
+
+        payload = self._serialize_business_profile_item(profile)
+        payload.update(
+            {
+                "owner_email": owner_email,
+                "description": profile.description,
+                "logo_url": profile.logo_url,
+                "cover_url": profile.cover_url,
+                "contacts_json": profile.contacts_json or "{}",
+                "tags_json": profile.tags_json or "[]",
+                "website": profile.website,
+                "social_links_json": profile.social_links_json or "[]",
+                "service_areas_json": profile.service_areas_json or "[]",
+                "public_preview_url": self._build_public_preview_url(profile.slug),
+                "related_payments": [self._serialize_business_related_payment(payment) for payment in related_payments],
+            }
+        )
+        return payload
 
     async def get_overview(self) -> dict:
         moderation_pending_count = int(
@@ -246,6 +324,7 @@ class AdminService:
         decision: str,
         requested_plan: str | None,
         moderation_note: str | None,
+        manual_override: bool,
         admin_user_id: str | None,
     ) -> dict | None:
         normalized_decision = (decision or "").strip().lower()
@@ -261,8 +340,15 @@ class AdminService:
             next_plan = (requested_plan or profile.subscription_requested_plan or profile.subscription_plan or "").strip().lower()
             if next_plan not in {"basic", "premium", "business"}:
                 raise ValueError("Unsupported subscription plan")
+            related_payments = await self._list_business_related_payments(profile.id)
+            if manual_override and not (moderation_note or "").strip():
+                raise ValueError("Manual subscription activation requires a moderation note")
+            if not manual_override and not self._has_paid_payment_evidence(profile, related_payments):
+                raise ValueError("Paid business subscription requires a successful payment or explicit manual override")
             profile.subscription_plan = next_plan
             profile.subscription_request_status = "approved"
+            profile.subscription_requested_plan = None
+            profile.subscription_requested_at = None
             profile.is_premium = next_plan in {"premium", "business"}
         else:
             profile.subscription_request_status = "rejected"

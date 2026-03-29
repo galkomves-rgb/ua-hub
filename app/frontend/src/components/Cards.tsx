@@ -216,11 +216,14 @@ export function BusinessCard({ biz }: { biz: BusinessProfile }) {
       }`}
     >
       <div className="flex h-full items-start gap-3">
-        {/* Logo placeholder */}
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg font-bold shrink-0 ${
+        <div className={`w-12 h-12 overflow-hidden rounded-xl flex items-center justify-center text-lg font-bold shrink-0 ${
           isDark ? "bg-[#1a2a40] text-[#4a9eff]" : "bg-blue-50 text-[#0057B8]"
         }`}>
-          {biz.name.charAt(0)}
+          {biz.logo ? (
+            <img src={biz.logo} alt={biz.name} className="h-full w-full object-cover" />
+          ) : (
+            biz.name.charAt(0)
+          )}
         </div>
         <div className="min-w-0 flex flex-1 flex-col">
           {badges.length > 0 && (
@@ -243,16 +246,32 @@ export function BusinessCard({ biz }: { biz: BusinessProfile }) {
           <p className={`text-xs leading-relaxed line-clamp-2 mb-2 ${isDark ? "text-gray-400" : "text-gray-500"}`}>
             {description}
           </p>
+          {biz.tags.length > 0 ? (
+            <div className="mb-3 flex flex-wrap gap-1.5">
+              {biz.tags.slice(0, 3).map((tag) => (
+                <span
+                  key={`${biz.id}-${tag}`}
+                  className={`rounded-full px-2 py-1 text-[10px] font-medium ${isDark ? "bg-[#1a2a40] text-slate-300" : "bg-slate-50 text-slate-600"}`}
+                >
+                  #{tag}
+                </span>
+              ))}
+            </div>
+          ) : null}
           <div className="mt-auto flex items-center justify-between">
             <span className={`flex items-center gap-1 text-xs ${isDark ? "text-gray-500" : "text-gray-400"}`}>
               <MapPin className="w-3 h-3" /> {biz.city}
             </span>
-            {hasGoogleMapsRating && (
+            {hasGoogleMapsRating ? (
               <span className={`flex items-center gap-1 text-[11px] font-semibold ${isDark ? "text-[#FFD700]" : "text-amber-500"}`}>
                 <Star className="w-3 h-3 fill-current" /> {googleMapsRating}
                 <span className={`font-medium ${isDark ? "text-gray-400" : "text-gray-500"}`}>{t("biz.googleRatingSource")}</span>
               </span>
-            )}
+            ) : biz.activeListingsCount ? (
+              <span className={`text-[11px] font-medium ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                {biz.activeListingsCount} {t("biz.listings")}
+              </span>
+            ) : null}
           </div>
         </div>
       </div>
