@@ -39,6 +39,9 @@ class AdminService:
             "verification_status": profile.verification_status,
             "verification_requested_at": profile.verification_requested_at,
             "verification_notes": profile.verification_notes,
+            "is_suspended": bool(profile.is_suspended),
+            "suspended_at": profile.suspended_at,
+            "suspension_reason": profile.suspension_reason,
             "subscription_plan": profile.subscription_plan,
             "subscription_request_status": profile.subscription_request_status,
             "subscription_requested_plan": profile.subscription_requested_plan,
@@ -134,6 +137,9 @@ class AdminService:
         total_listings_count = int(await self.db.scalar(select(func.count(Listings.id))) or 0)
         total_users_count = int(await self.db.scalar(select(func.count(User.id))) or 0)
         total_business_profiles_count = int(await self.db.scalar(select(func.count(BusinessProfile.id))) or 0)
+        suspended_business_profiles_count = int(
+            await self.db.scalar(select(func.count(BusinessProfile.id)).where(BusinessProfile.is_suspended.is_(True))) or 0
+        )
         open_reports_count = int(
             await self.db.scalar(select(func.count(MessageReport.id)).where(MessageReport.status == "pending")) or 0
         )
@@ -251,6 +257,7 @@ class AdminService:
                 "total_listings_count": total_listings_count,
                 "total_users_count": total_users_count,
                 "total_business_profiles_count": total_business_profiles_count,
+                "suspended_business_profiles_count": suspended_business_profiles_count,
                 "open_reports_count": open_reports_count,
                 "pending_payments_count": pending_payments_count,
                 "payment_issues_count": payment_issues_count,
@@ -268,6 +275,7 @@ class AdminService:
         self,
         verification_status: str | None = None,
         subscription_request_status: str | None = None,
+        visibility_status: str | None = None,
         query_text: str | None = None,
         limit: int = 20,
         offset: int = 0,
@@ -277,6 +285,10 @@ class AdminService:
             filters.append(BusinessProfile.verification_status == verification_status)
         if subscription_request_status and subscription_request_status != "all":
             filters.append(BusinessProfile.subscription_request_status == subscription_request_status)
+        if visibility_status == "suspended":
+            filters.append(BusinessProfile.is_suspended.is_(True))
+        elif visibility_status == "active":
+            filters.append(BusinessProfile.is_suspended.is_(False))
         if query_text:
             search_term = f"%{query_text}%"
             filters.append(
@@ -371,6 +383,120 @@ class AdminService:
         payload = self._serialize_business_profile_item(profile)
         payload["reviewed_by"] = admin_user_id
         return payload
+
+    async def update_business_visibility(
+        self,
+        slug: str,
+        action: str,
+        moderation_note: str | None,
+        admin_user_id: str | None,
+    ) -> dict | None:
+        normalized_action = (action or "").strip().lower()
+        if normalized_action not in {"suspend", "restore", "delete"}:
+            raise ValueError("Unsupported business visibility action")
+
+        result = await self.db.execute(select(BusinessProfile).where(BusinessProfile.slug == slug))
+        profile = result.scalar_one_or_none()
+        if not profile:
+            return None
+
+        note = (moderation_note or "").strip() or None
+        now = datetime.now(timezone.utc)
+
+        if normalized_action == "suspend":
+            if not note:
+                raise ValueError("Suspending a business profile requires a moderation note")
+            profile.is_suspended = True
+            profile.suspended_at = now
+            profile.suspension_reason = note
+            profile.updated_at = now
+            await self.db.commit()
+            await self.db.refresh(profile)
+            return {
+                "slug": profile.slug,
+                "deleted": False,
+                "is_suspended": True,
+                "suspended_at": profile.suspended_at,
+                "suspension_reason": profile.suspension_reason,
+                "reviewed_by": admin_user_id,
+            }
+
+        if normalized_action == "restore":
+            profile.is_suspended = False
+            profile.suspended_at = None
+            profile.suspension_reason = None
+            profile.updated_at = now
+            await self.db.commit()
+            await self.db.refresh(profile)
+            return {
+                "slug": profile.slug,
+                "deleted": False,
+                "is_suspended": False,
+                "suspended_at": None,
+                "suspension_reason": None,
+                "reviewed_by": admin_user_id,
+            }
+
+        linked_listings = await self.db.execute(
+            select(Listings).where(
+                Listings.owner_type == "business_profile",
+                Listings.owner_id == profile.slug,
+            )
+        )
+        for listing in linked_listings.scalars().all():
+            await self.db.delete(listing)
+        await self.db.delete(profile)
+        await self.db.commit()
+        return {
+            "slug": slug,
+            "deleted": True,
+            "is_suspended": False,
+            "suspended_at": None,
+            "suspension_reason": note,
+            "reviewed_by": admin_user_id,
+        }
+
+    async def update_listing_visibility(
+        self,
+        listing_id: int,
+        action: str,
+        moderation_note: str | None,
+        admin_user_id: str | None,
+    ) -> dict | None:
+        normalized_action = (action or "").strip().lower()
+        if normalized_action not in {"archive", "restore", "delete"}:
+            raise ValueError("Unsupported listing visibility action")
+
+        result = await self.db.execute(select(Listings).where(Listings.id == listing_id))
+        listing = result.scalar_one_or_none()
+        if not listing:
+            return None
+
+        note = (moderation_note or "").strip() or None
+        if normalized_action == "archive":
+            if listing.status == "archived":
+                raise ValueError("Listing is already archived")
+            listing.status = "archived"
+            if note:
+                listing.moderation_reason = note
+            listing.updated_at = datetime.now(timezone.utc)
+            await self.db.commit()
+            await self.db.refresh(listing)
+            return {"id": listing.id, "deleted": False, "status": listing.status, "reviewed_by": admin_user_id}
+
+        if normalized_action == "restore":
+            if listing.status != "archived":
+                raise ValueError("Only archived listings can be restored")
+            listing.status = "published"
+            listing.moderation_reason = None
+            listing.updated_at = datetime.now(timezone.utc)
+            await self.db.commit()
+            await self.db.refresh(listing)
+            return {"id": listing.id, "deleted": False, "status": listing.status, "reviewed_by": admin_user_id}
+
+        await self.db.delete(listing)
+        await self.db.commit()
+        return {"id": listing_id, "deleted": True, "status": None, "reviewed_by": admin_user_id}
 
     async def list_reports(self, status: str | None = None, query_text: str | None = None, limit: int = 20, offset: int = 0) -> dict:
         filters = []

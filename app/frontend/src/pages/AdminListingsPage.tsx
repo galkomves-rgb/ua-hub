@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ClipboardList, Eye, Search, ShieldAlert, Sparkles } from "lucide-react";
-import { Link } from "react-router-dom";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ClipboardList, Eye, Search, ShieldAlert, Sparkles, Trash2 } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
+import { toast } from "sonner";
 import AdminPagination from "@/components/admin/AdminPagination";
-import { fetchAdminListings } from "@/lib/account-api";
+import { fetchAdminListings, updateAdminListingVisibility } from "@/lib/account-api";
 import { MODULES } from "@/lib/platform";
 import { useTheme } from "@/lib/ThemeContext";
 import { useI18n } from "@/lib/i18n";
@@ -36,16 +37,35 @@ export default function AdminListingsPage() {
   const { theme } = useTheme();
   const { locale, t } = useI18n();
   const isDark = theme === "dark";
-  const [status, setStatus] = useState<(typeof STATUS_OPTIONS)[number]>("all");
-  const [module, setModule] = useState<(typeof MODULE_OPTIONS)[number]>("all");
-  const [ownerType, setOwnerType] = useState<(typeof OWNER_OPTIONS)[number]>("all");
-  const [searchText, setSearchText] = useState("");
-  const [sort, setSort] = useState<"newest" | "oldest" | "views_desc" | "expires_soon">("newest");
+  const queryClient = useQueryClient();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialStatus = (searchParams.get("status") as (typeof STATUS_OPTIONS)[number] | null) ?? "all";
+  const initialModule = (searchParams.get("module") as (typeof MODULE_OPTIONS)[number] | null) ?? "all";
+  const initialOwner = (searchParams.get("owner_type") as (typeof OWNER_OPTIONS)[number] | null) ?? "all";
+  const initialSort = (searchParams.get("sort") as "newest" | "oldest" | "views_desc" | "expires_soon" | null) ?? "newest";
+  const initialQuery = searchParams.get("q") ?? "";
+  const [status, setStatus] = useState<(typeof STATUS_OPTIONS)[number]>(STATUS_OPTIONS.includes(initialStatus) ? initialStatus : "all");
+  const [module, setModule] = useState<(typeof MODULE_OPTIONS)[number]>(MODULE_OPTIONS.includes(initialModule) ? initialModule : "all");
+  const [ownerType, setOwnerType] = useState<(typeof OWNER_OPTIONS)[number]>(OWNER_OPTIONS.includes(initialOwner) ? initialOwner : "all");
+  const [searchText, setSearchText] = useState(initialQuery);
+  const [sort, setSort] = useState<"newest" | "oldest" | "views_desc" | "expires_soon">(initialSort);
   const [offset, setOffset] = useState(0);
 
   useEffect(() => {
     setOffset(0);
   }, [status, module, ownerType, searchText, sort]);
+
+  useEffect(() => {
+    const params = new URLSearchParams();
+    params.set("status", status);
+    params.set("module", module);
+    params.set("owner_type", ownerType);
+    params.set("sort", sort);
+    if (searchText.trim()) {
+      params.set("q", searchText.trim());
+    }
+    setSearchParams(params, { replace: true });
+  }, [module, ownerType, searchText, setSearchParams, sort, status]);
 
   const listingsQuery = useQuery({
     queryKey: ["admin-listings-catalog", status, module, ownerType, searchText, sort, offset],
@@ -69,6 +89,25 @@ export default function AdminListingsPage() {
     published: items.filter((item) => item.status === "published").length,
     promoted: items.filter((item) => item.is_promoted || item.is_featured).length,
   }), [items, page?.total]);
+
+  const visibilityMutation = useMutation({
+    mutationFn: ({ listingId, action }: { listingId: number; action: "archive" | "restore" | "delete" }) =>
+      updateAdminListingVisibility(listingId, { action }),
+    onSuccess: async (_response, variables) => {
+      await queryClient.invalidateQueries({ queryKey: ["admin-listings-catalog"] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
+      toast.success(
+        variables.action === "delete"
+          ? (locale === "ua" ? "Оголошення видалено" : locale === "es" ? "Anuncio eliminado" : "Listing deleted")
+          : variables.action === "restore"
+            ? (locale === "ua" ? "Показ оголошення відновлено" : locale === "es" ? "Visibilidad restaurada" : "Listing visibility restored")
+            : (locale === "ua" ? "Показ оголошення призупинено" : locale === "es" ? "Visibilidad suspendida" : "Listing visibility suspended"),
+      );
+    },
+    onError: (error) => {
+      toast.error(error instanceof Error ? error.message : "Request failed");
+    },
+  });
 
   return (
     <div className="space-y-5">
@@ -204,6 +243,39 @@ export default function AdminListingsPage() {
                         {locale === "ua" ? "Відкрити модерацію" : locale === "es" ? "Abrir moderación" : "Open moderation"}
                       </Link>
                     ) : null}
+                    {item.status === "archived" ? (
+                      <button
+                        type="button"
+                        disabled={visibilityMutation.isPending}
+                        onClick={() => visibilityMutation.mutate({ listingId: item.id, action: "restore" })}
+                        className={`inline-flex rounded-2xl px-3 py-2 text-sm font-semibold ${isDark ? "bg-emerald-900/30 text-emerald-300" : "bg-emerald-50 text-emerald-700"} ${visibilityMutation.isPending ? "cursor-not-allowed opacity-60" : ""}`}
+                      >
+                        {locale === "ua" ? "Відновити показ" : locale === "es" ? "Restaurar visibilidad" : "Restore visibility"}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={visibilityMutation.isPending}
+                        onClick={() => visibilityMutation.mutate({ listingId: item.id, action: "archive" })}
+                        className={`inline-flex rounded-2xl px-3 py-2 text-sm font-semibold ${isDark ? "bg-amber-900/30 text-amber-300" : "bg-amber-50 text-amber-700"} ${visibilityMutation.isPending ? "cursor-not-allowed opacity-60" : ""}`}
+                      >
+                        {locale === "ua" ? "Призупинити показ" : locale === "es" ? "Suspender visibilidad" : "Suspend visibility"}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      disabled={visibilityMutation.isPending}
+                      onClick={() => {
+                        if (!window.confirm(locale === "ua" ? `Видалити оголошення #${item.id}?` : locale === "es" ? `¿Eliminar anuncio #${item.id}?` : `Delete listing #${item.id}?`)) {
+                          return;
+                        }
+                        visibilityMutation.mutate({ listingId: item.id, action: "delete" });
+                      }}
+                      className={`inline-flex items-center gap-2 rounded-2xl px-3 py-2 text-sm font-semibold ${isDark ? "bg-red-900/30 text-red-300" : "bg-red-50 text-red-700"} ${visibilityMutation.isPending ? "cursor-not-allowed opacity-60" : ""}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      {locale === "ua" ? "Видалити" : locale === "es" ? "Eliminar" : "Delete"}
+                    </button>
                   </div>
                 </div>
               </div>

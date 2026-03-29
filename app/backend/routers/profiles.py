@@ -208,7 +208,7 @@ async def get_business_profile(
 ):
     """Get business profile by slug."""
     service = ProfileService(db)
-    profile = await service.get_business_profile(slug)
+    profile = await service.get_public_business_profile(slug)
 
     if not profile:
         raise HTTPException(status_code=404, detail="Business profile not found")
@@ -224,6 +224,9 @@ async def track_business_profile_event(
 ):
     """Track public business profile interactions for analytics."""
     service = ProfileService(db)
+    existing = await service.get_public_business_profile(slug)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Business profile not found")
     profile = await service.record_business_profile_event(slug, payload.event_type)
     if not profile:
         raise HTTPException(status_code=404, detail="Business profile not found")

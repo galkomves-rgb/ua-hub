@@ -11,6 +11,7 @@ from core.database import Base
 from dependencies.auth import get_admin_user, get_current_user_id
 from dependencies.database import get_db_session
 from models.billing import BillingPayment
+from models.profiles import BusinessProfile
 from routers.listings import admin_router as listings_admin_router
 from routers.listings import router as listings_router
 from schemas.auth import UserResponse
@@ -86,11 +87,13 @@ async def create_listing(
         subcategory=None,
         region=None,
         images_json="[]",
-        meta_json="{}",
+        meta_json='{"_pricing_policy":"always_free"}',
     )
     listing.status = status
     await db_session.commit()
     await db_session.refresh(listing)
+    if listing.created_at and listing.created_at.tzinfo is None:
+        listing.created_at = listing.created_at.replace(tzinfo=timezone.utc)
     return listing
 
 
@@ -240,3 +243,55 @@ async def test_moderation_audit_is_recorded(api_client: AsyncClient, db_session:
     assert payload[0]["to_status"] == "rejected"
     assert payload[0]["notes"] == "Wrong category"
     assert payload[0]["metadata"]["next_badges"] == ["featured"]
+
+
+@pytest.mark.asyncio
+async def test_suspended_business_hides_public_business_listings(api_client: AsyncClient, db_session: AsyncSession):
+    now = datetime.now(timezone.utc)
+    db_session.add(
+        BusinessProfile(
+            owner_user_id=TEST_USER_ID,
+            slug="suspended-biz",
+            name="Suspended Biz",
+            category="services",
+            city="Madrid",
+            description="desc",
+            is_suspended=True,
+            suspended_at=now,
+            suspension_reason="Reports under investigation",
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    await db_session.commit()
+
+    listing = await ListingsService(db_session).create_listing(
+        user_id=TEST_USER_ID,
+        module="services",
+        category="services",
+        title="Business listing",
+        description="Long enough description",
+        city="Madrid",
+        owner_type="business_profile",
+        owner_id="suspended-biz",
+        pricing_tier="free",
+        visibility="standard",
+        ranking_score=0,
+        expiry_date=now + timedelta(days=7),
+        price=None,
+        currency="EUR",
+        subcategory=None,
+        region=None,
+        images_json="[]",
+        meta_json="{}",
+    )
+    listing.status = "published"
+    await db_session.commit()
+    await db_session.refresh(listing)
+
+    detail_response = await api_client.get(f"/api/v1/listings/{listing.id}")
+    assert detail_response.status_code == 404
+
+    business_response = await api_client.get("/api/v1/listings/business/suspended-biz")
+    assert business_response.status_code == 200
+    assert business_response.json() == []

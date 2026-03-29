@@ -28,6 +28,24 @@ class ListingsService:
         self.db = db
 
     @staticmethod
+    def _apply_public_business_visibility(query):
+        return (
+            query.outerjoin(
+                BusinessProfile,
+                and_(
+                    Listings.owner_type == "business_profile",
+                    Listings.owner_id == BusinessProfile.slug,
+                ),
+            ).where(
+                or_(
+                    Listings.owner_type != "business_profile",
+                    BusinessProfile.id.is_(None),
+                    BusinessProfile.is_suspended.is_(False),
+                )
+            )
+        )
+
+    @staticmethod
     def _parse_badges(raw_value: str | None) -> list[str]:
         if not raw_value:
             return []
@@ -186,6 +204,16 @@ class ListingsService:
             await self._attach_public_author_metadata([listing])
         return listing
 
+    async def is_listing_publicly_visible(self, listing: Listings) -> bool:
+        if listing.owner_type != "business_profile":
+            return True
+
+        result = await self.db.execute(
+            select(BusinessProfile.is_suspended).where(BusinessProfile.slug == listing.owner_id)
+        )
+        is_suspended = result.scalar_one_or_none()
+        return not bool(is_suspended)
+
     async def list_listings(
         self,
         module: str = None,
@@ -217,6 +245,7 @@ class ListingsService:
         if filters:
             query = query.where(and_(*filters))
 
+        query = self._apply_public_business_visibility(query)
         query = query.order_by(desc(Listings.ranking_score), desc(Listings.created_at)).limit(limit).offset(offset)
         result = await self.db.execute(query)
         listings = result.scalars().all()
@@ -434,6 +463,7 @@ class ListingsService:
         if city:
             query = query.where(Listings.city == city)
 
+        query = self._apply_public_business_visibility(query)
         query = query.order_by(desc(Listings.ranking_score), desc(Listings.created_at)).limit(limit).offset(offset)
         result = await self.db.execute(query)
         listings = result.scalars().all()
@@ -517,6 +547,7 @@ class ListingsService:
         if module:
             query = query.where(Listings.module == module)
 
+        query = self._apply_public_business_visibility(query)
         query = query.order_by(desc(Listings.ranking_score), desc(Listings.created_at)).limit(limit)
         result = await self.db.execute(query)
         listings = result.scalars().all()
@@ -535,6 +566,7 @@ class ListingsService:
             )
         )
 
+        query = self._apply_public_business_visibility(query)
         query = query.order_by(desc(Listings.ranking_score), desc(Listings.created_at)).limit(limit).offset(offset)
         result = await self.db.execute(query)
         listings = result.scalars().all()

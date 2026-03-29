@@ -183,6 +183,7 @@ export interface AdminOverviewCounts {
   total_listings_count: number;
   total_users_count: number;
   total_business_profiles_count: number;
+  suspended_business_profiles_count: number;
   open_reports_count: number;
   pending_payments_count: number;
   payment_issues_count: number;
@@ -322,6 +323,9 @@ export interface AdminBusinessProfileItem {
   verification_status: string;
   verification_requested_at: string | null;
   verification_notes: string | null;
+  is_suspended: boolean;
+  suspended_at: string | null;
+  suspension_reason: string | null;
   subscription_plan: string | null;
   subscription_request_status: string | null;
   subscription_requested_plan: string | null;
@@ -372,6 +376,30 @@ export interface AdminBusinessSubscriptionReviewPayload {
   plan?: BusinessSubscriptionPlan | null;
   moderation_note?: string | null;
   manual_override?: boolean;
+}
+
+export interface AdminBusinessVisibilityPayload {
+  action: "suspend" | "restore" | "delete";
+  moderation_note?: string | null;
+}
+
+export interface AdminBusinessVisibilityResponse {
+  slug: string;
+  deleted: boolean;
+  is_suspended: boolean;
+  suspended_at: string | null;
+  suspension_reason: string | null;
+}
+
+export interface AdminListingVisibilityPayload {
+  action: "archive" | "restore" | "delete";
+  moderation_note?: string | null;
+}
+
+export interface AdminListingVisibilityResponse {
+  id: number;
+  deleted: boolean;
+  status: ListingManagementStatus | null;
 }
 
 export interface AdminExpirationRunResponse {
@@ -944,7 +972,7 @@ export function fetchMyListings(filters?: {
   if (filters?.status) {
     params.set("status", filters.status);
   }
-  if (filters?.module) {
+  if (filters?.module && filters.module !== "all") {
     params.set("module", filters.module);
   }
   if (filters?.q) {
@@ -1253,6 +1281,7 @@ export function updateAdminUserRole(userId: string, payload: AdminUserRoleUpdate
 export function fetchAdminBusinessProfiles(filters?: {
   verification_status?: string;
   subscription_request_status?: string;
+  visibility_status?: string;
   q?: string;
   limit?: number;
   offset?: number;
@@ -1263,6 +1292,9 @@ export function fetchAdminBusinessProfiles(filters?: {
   }
   if (filters?.subscription_request_status) {
     params.set("subscription_request_status", filters.subscription_request_status);
+  }
+  if (filters?.visibility_status) {
+    params.set("visibility_status", filters.visibility_status);
   }
   if (filters?.q) {
     params.set("q", filters.q);
@@ -1292,6 +1324,20 @@ export function fetchAdminBusinessProfileDetail(slug: string) {
 
 export function reviewAdminBusinessSubscription(slug: string, payload: AdminBusinessSubscriptionReviewPayload) {
   return accountFetch<AdminBusinessProfileItem>(`/api/v1/admin/business/${encodeURIComponent(slug)}/subscription-review`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateAdminBusinessVisibility(slug: string, payload: AdminBusinessVisibilityPayload) {
+  return accountFetch<AdminBusinessVisibilityResponse>(`/api/v1/admin/business/${encodeURIComponent(slug)}/visibility`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function updateAdminListingVisibility(listingId: number, payload: AdminListingVisibilityPayload) {
+  return accountFetch<AdminListingVisibilityResponse>(`/api/v1/admin/listings/${listingId}/visibility`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

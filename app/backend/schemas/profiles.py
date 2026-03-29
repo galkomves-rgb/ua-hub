@@ -100,6 +100,9 @@ class BusinessProfileResponse(BusinessProfileBase):
     owner_user_id: str
     is_verified: bool = False
     is_premium: bool = False
+    is_suspended: bool = False
+    suspended_at: datetime | None = None
+    suspension_reason: str | None = None
     verification_status: str = "unverified"
     verification_requested_at: datetime | None = None
     verification_notes: str | None = None

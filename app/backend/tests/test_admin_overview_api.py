@@ -202,6 +202,7 @@ async def test_admin_overview_returns_aggregated_counts(api_client: AsyncClient,
     assert body["counts"]["rejected_listings_count"] == 1
     assert body["counts"]["published_listings_count"] == 1
     assert body["counts"]["total_users_count"] == 2
+    assert body["counts"]["suspended_business_profiles_count"] == 0
     assert body["counts"]["open_reports_count"] == 1
     assert body["counts"]["pending_payments_count"] == 1
     assert body["counts"]["payment_issues_count"] == 1
