@@ -39,6 +39,9 @@ class AdminService:
             "verification_status": profile.verification_status,
             "verification_requested_at": profile.verification_requested_at,
             "verification_notes": profile.verification_notes,
+            "is_suspended": bool(profile.is_suspended),
+            "suspended_at": profile.suspended_at,
+            "suspension_reason": profile.suspension_reason,
             "subscription_plan": profile.subscription_plan,
             "subscription_request_status": profile.subscription_request_status,
             "subscription_requested_plan": profile.subscription_requested_plan,
@@ -268,6 +271,7 @@ class AdminService:
         self,
         verification_status: str | None = None,
         subscription_request_status: str | None = None,
+        visibility_status: str | None = None,
         query_text: str | None = None,
         limit: int = 20,
         offset: int = 0,
@@ -277,6 +281,10 @@ class AdminService:
             filters.append(BusinessProfile.verification_status == verification_status)
         if subscription_request_status and subscription_request_status != "all":
             filters.append(BusinessProfile.subscription_request_status == subscription_request_status)
+        if visibility_status == "active":
+            filters.append(BusinessProfile.is_suspended.is_(False))
+        elif visibility_status == "suspended":
+            filters.append(BusinessProfile.is_suspended.is_(True))
         if query_text:
             search_term = f"%{query_text}%"
             filters.append(
@@ -298,6 +306,65 @@ class AdminService:
         result = await self.db.execute(items_query.limit(limit).offset(offset))
         items = [self._serialize_business_profile_item(profile) for profile in result.scalars().all()]
         return {"total": total, "limit": limit, "offset": offset, "items": items}
+
+    async def update_business_visibility(
+        self,
+        slug: str,
+        action: str,
+        moderation_note: str | None,
+        admin_user_id: str | None,
+    ) -> dict | None:
+        normalized_action = (action or "").strip().lower()
+        if normalized_action not in {"suspend", "restore", "delete"}:
+            raise ValueError("Unsupported business visibility action")
+
+        result = await self.db.execute(select(BusinessProfile).where(BusinessProfile.slug == slug))
+        profile = result.scalar_one_or_none()
+        if not profile:
+            return None
+
+        now = datetime.now(timezone.utc)
+        note = moderation_note.strip() if moderation_note else None
+
+        if normalized_action == "delete":
+            listings_result = await self.db.execute(
+                select(Listings).where(
+                    Listings.owner_type == "business_profile",
+                    Listings.owner_id == profile.slug,
+                )
+            )
+            for listing in listings_result.scalars().all():
+                await self.db.delete(listing)
+            await self.db.flush()
+            await self.db.delete(profile)
+            await self.db.commit()
+            return {
+                "slug": slug,
+                "deleted": True,
+                "is_suspended": False,
+                "suspended_at": None,
+                "suspension_reason": note or f"deleted_by:{admin_user_id}" if admin_user_id else note,
+            }
+
+        if normalized_action == "suspend":
+            profile.is_suspended = True
+            profile.suspended_at = now
+            profile.suspension_reason = note
+        else:
+            profile.is_suspended = False
+            profile.suspended_at = None
+            profile.suspension_reason = None
+
+        profile.updated_at = now
+        await self.db.commit()
+        await self.db.refresh(profile)
+        return {
+            "slug": profile.slug,
+            "deleted": False,
+            "is_suspended": bool(profile.is_suspended),
+            "suspended_at": profile.suspended_at,
+            "suspension_reason": profile.suspension_reason,
+        }
 
     async def review_business_verification(
         self,

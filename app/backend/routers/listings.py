@@ -4,7 +4,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from dependencies.auth import get_admin_user, get_current_user_id
 from dependencies.database import get_db_session
 from schemas.auth import UserResponse
-from schemas.admin import AdminModerationAuditItemResponse, AdminPagedListingsResponse
+from schemas.admin import (
+    AdminListingPromotionRequest,
+    AdminListingPromotionResponse,
+    AdminListingVisibilityRequest,
+    AdminListingVisibilityResponse,
+    AdminModerationAuditItemResponse,
+    AdminPagedListingsResponse,
+)
 from schemas.listings import (
     ListingActionResponse,
     ListingCreate,
@@ -181,6 +188,8 @@ async def get_listing(
     listing = await service.get_listing(listing_id)
 
     if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    if not await service.is_listing_publicly_visible(listing):
         raise HTTPException(status_code=404, detail="Listing not found")
 
     if record_view:
@@ -398,6 +407,50 @@ async def moderate_listing(
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
 
+    return listing
+
+
+@admin_router.post("/{listing_id}/visibility", response_model=AdminListingVisibilityResponse)
+async def update_admin_listing_visibility(
+    listing_id: int,
+    payload: AdminListingVisibilityRequest,
+    admin_user: UserResponse = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    service = ListingsService(db)
+    try:
+        listing = await service.admin_update_listing_visibility(
+            listing_id=listing_id,
+            action=payload.action,
+            moderation_note=payload.moderation_note,
+            actor_user_id=admin_user.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
+    return listing
+
+
+@admin_router.post("/{listing_id}/promotion", response_model=AdminListingPromotionResponse)
+async def update_admin_listing_promotion(
+    listing_id: int,
+    payload: AdminListingPromotionRequest,
+    admin_user: UserResponse = Depends(get_admin_user),
+    db: AsyncSession = Depends(get_db_session),
+):
+    service = ListingsService(db)
+    try:
+        listing = await service.admin_update_listing_promotion(
+            listing_id=listing_id,
+            mode=payload.mode,
+            moderation_note=payload.moderation_note,
+            actor_user_id=admin_user.id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not listing:
+        raise HTTPException(status_code=404, detail="Listing not found")
     return listing
 
 

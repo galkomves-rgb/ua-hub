@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from core.database import Base
 from dependencies.auth import get_current_user_id
 from dependencies.database import get_db_session
+from models.profiles import BusinessProfile
 from routers.profiles import router as profiles_router
 
 
@@ -119,3 +120,45 @@ async def test_business_profile_events_update_public_analytics(api_client: Async
     assert payload["phone_clicks_count"] == 1
     assert payload["email_clicks_count"] == 0
     assert payload["website_clicks_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_suspended_business_profile_is_hidden_from_public_endpoints(api_client: AsyncClient, db_session: AsyncSession):
+    create_response = await api_client.post(
+        "/api/v1/profiles/business",
+        json={
+            "name": "Hidden Biz",
+            "category": "services",
+            "city": "Kyiv",
+            "description": "desc",
+            "logo_url": None,
+            "cover_url": None,
+            "contacts_json": "{}",
+            "tags_json": "[]",
+            "rating": "0",
+            "website": None,
+            "social_links_json": "[]",
+            "service_areas_json": "[]",
+        },
+    )
+    assert create_response.status_code == 200
+    slug = create_response.json()["slug"]
+
+    profile = await db_session.get(BusinessProfile, 1)
+    assert profile is not None
+    profile.is_suspended = True
+    profile.suspension_reason = "Admin review"
+    await db_session.commit()
+
+    detail_response = await api_client.get(f"/api/v1/profiles/business/{slug}")
+    assert detail_response.status_code == 404
+
+    list_response = await api_client.get("/api/v1/profiles/business")
+    assert list_response.status_code == 200
+    assert list_response.json()["items"] == []
+
+    event_response = await api_client.post(
+        f"/api/v1/profiles/business/{slug}/events",
+        json={"event_type": "profile_view"},
+    )
+    assert event_response.status_code == 404

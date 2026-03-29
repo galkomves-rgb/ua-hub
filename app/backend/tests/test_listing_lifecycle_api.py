@@ -86,9 +86,11 @@ async def create_listing(
         subcategory=None,
         region=None,
         images_json="[]",
-        meta_json="{}",
+        meta_json='{"_pricing_policy":"always_free"}',
     )
     listing.status = status
+    if listing.created_at and listing.created_at.tzinfo is None:
+        listing.created_at = listing.created_at.replace(tzinfo=timezone.utc)
     await db_session.commit()
     await db_session.refresh(listing)
     return listing
@@ -216,6 +218,42 @@ async def test_admin_catalog_filters_listings(api_client: AsyncClient, db_sessio
     assert payload["items"][0]["title"] == rejected_listing.title
     assert payload["items"][0]["status"] == "rejected"
     assert published_listing.id != rejected_listing.id
+
+
+@pytest.mark.asyncio
+async def test_admin_can_update_listing_visibility_and_promotion(api_client: AsyncClient, db_session: AsyncSession):
+    listing = await create_listing(db_session, status="published", title="Promoted listing")
+
+    promotion_response = await api_client.post(
+        f"/api/v1/admin/listings/{listing.id}/promotion",
+        json={"mode": "featured"},
+    )
+    assert promotion_response.status_code == 200
+    promoted = promotion_response.json()
+    assert promoted["visibility"] == "featured"
+    assert promoted["is_featured"] is True
+    assert promoted["is_promoted"] is True
+
+    archive_response = await api_client.post(
+        f"/api/v1/admin/listings/{listing.id}/visibility",
+        json={"action": "archive"},
+    )
+    assert archive_response.status_code == 200
+    assert archive_response.json() == {"id": listing.id, "deleted": False, "status": "archived"}
+
+    restore_response = await api_client.post(
+        f"/api/v1/admin/listings/{listing.id}/visibility",
+        json={"action": "restore"},
+    )
+    assert restore_response.status_code == 200
+    assert restore_response.json() == {"id": listing.id, "deleted": False, "status": "published"}
+
+    delete_response = await api_client.post(
+        f"/api/v1/admin/listings/{listing.id}/visibility",
+        json={"action": "delete"},
+    )
+    assert delete_response.status_code == 200
+    assert delete_response.json() == {"id": listing.id, "deleted": True, "status": None}
 
 
 @pytest.mark.asyncio

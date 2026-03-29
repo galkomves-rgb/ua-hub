@@ -8,7 +8,13 @@ from models.listings import Listings, ModerationAuditLog
 from models.messages import Messages
 from models.profiles import BusinessProfile, UserProfile
 from models.saved import SavedListing
-from services.monetization import MonetizationService, PaymentRequiredError
+from services.monetization import (
+    LISTING_VISIBILITY_BOOSTED,
+    LISTING_VISIBILITY_FEATURED,
+    LISTING_VISIBILITY_STANDARD,
+    MonetizationService,
+    PaymentRequiredError,
+)
 
 
 LISTING_STATUS_DRAFT = "draft"
@@ -26,6 +32,24 @@ class ListingsService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    @staticmethod
+    def _apply_public_business_visibility(query):
+        return (
+            query.outerjoin(
+                BusinessProfile,
+                and_(
+                    Listings.owner_type == "business_profile",
+                    Listings.owner_id == BusinessProfile.slug,
+                ),
+            ).where(
+                or_(
+                    Listings.owner_type != "business_profile",
+                    BusinessProfile.id.is_(None),
+                    BusinessProfile.is_suspended.is_(False),
+                )
+            )
+        )
 
     @staticmethod
     def _parse_badges(raw_value: str | None) -> list[str]:
@@ -186,6 +210,16 @@ class ListingsService:
             await self._attach_public_author_metadata([listing])
         return listing
 
+    async def is_listing_publicly_visible(self, listing: Listings) -> bool:
+        if listing.owner_type != "business_profile":
+            return True
+
+        result = await self.db.execute(
+            select(BusinessProfile.is_suspended).where(BusinessProfile.slug == listing.owner_id)
+        )
+        is_suspended = result.scalar_one_or_none()
+        return not bool(is_suspended)
+
     async def list_listings(
         self,
         module: str = None,
@@ -217,6 +251,7 @@ class ListingsService:
         if filters:
             query = query.where(and_(*filters))
 
+        query = self._apply_public_business_visibility(query)
         query = query.order_by(desc(Listings.ranking_score), desc(Listings.created_at)).limit(limit).offset(offset)
         result = await self.db.execute(query)
         listings = result.scalars().all()
@@ -434,6 +469,7 @@ class ListingsService:
         if city:
             query = query.where(Listings.city == city)
 
+        query = self._apply_public_business_visibility(query)
         query = query.order_by(desc(Listings.ranking_score), desc(Listings.created_at)).limit(limit).offset(offset)
         result = await self.db.execute(query)
         listings = result.scalars().all()
@@ -517,6 +553,7 @@ class ListingsService:
         if module:
             query = query.where(Listings.module == module)
 
+        query = self._apply_public_business_visibility(query)
         query = query.order_by(desc(Listings.ranking_score), desc(Listings.created_at)).limit(limit)
         result = await self.db.execute(query)
         listings = result.scalars().all()
@@ -535,6 +572,7 @@ class ListingsService:
             )
         )
 
+        query = self._apply_public_business_visibility(query)
         query = query.order_by(desc(Listings.ranking_score), desc(Listings.created_at)).limit(limit).offset(offset)
         result = await self.db.execute(query)
         listings = result.scalars().all()
@@ -585,6 +623,137 @@ class ListingsService:
     async def boost_listing(self, listing_id: int) -> Listings | None:
         """Direct listing boosts are disabled; use paid billing checkout instead."""
         return None
+
+    async def admin_update_listing_visibility(
+        self,
+        listing_id: int,
+        action: str,
+        moderation_note: str | None = None,
+        actor_user_id: str | None = None,
+    ) -> dict | None:
+        listing = await self.get_listing(listing_id)
+        if not listing:
+            return None
+
+        normalized_action = (action or "").strip().lower()
+        if normalized_action not in {"archive", "restore", "delete"}:
+            raise ValueError("Unsupported listing visibility action")
+
+        previous_status = listing.status
+        if normalized_action == "delete":
+            await self._log_moderation_audit(
+                listing_id=listing.id,
+                actor_user_id=actor_user_id,
+                action="admin_deleted",
+                from_status=previous_status,
+                to_status=None,
+                notes=moderation_note.strip() if moderation_note else None,
+            )
+            await self.db.flush()
+            await self.db.delete(listing)
+            await self.db.commit()
+            return {"id": listing_id, "deleted": True, "status": None}
+
+        if normalized_action == "archive":
+            if listing.status == LISTING_STATUS_ARCHIVED:
+                raise ValueError("Listing is already archived")
+            listing.status = LISTING_STATUS_ARCHIVED
+        elif normalized_action == "restore":
+            if listing.status not in {LISTING_STATUS_ARCHIVED, LISTING_STATUS_REJECTED, LISTING_STATUS_EXPIRED}:
+                raise ValueError("Only archived, rejected, or expired listings can be restored")
+            listing.status = LISTING_STATUS_PUBLISHED
+            listing.moderation_reason = None
+
+        listing.updated_at = datetime.now(timezone.utc)
+        await self._log_moderation_audit(
+            listing_id=listing.id,
+            actor_user_id=actor_user_id,
+            action=f"admin_{normalized_action}",
+            from_status=previous_status,
+            to_status=listing.status,
+            notes=moderation_note.strip() if moderation_note else None,
+        )
+        await self.db.commit()
+        await self.db.refresh(listing)
+        return {"id": listing.id, "deleted": False, "status": listing.status}
+
+    async def admin_update_listing_promotion(
+        self,
+        listing_id: int,
+        mode: str,
+        moderation_note: str | None = None,
+        actor_user_id: str | None = None,
+    ) -> dict | None:
+        listing = await self.get_listing(listing_id)
+        if not listing:
+            return None
+
+        normalized_mode = (mode or "").strip().lower()
+        if normalized_mode not in {"standard", "boosted", "featured"}:
+            raise ValueError("Unsupported promotion mode")
+        if listing.status not in {LISTING_STATUS_PUBLISHED, LISTING_STATUS_ACTIVE, LISTING_STATUS_ARCHIVED}:
+            raise ValueError("Only published, active, or archived listings can be reprioritized")
+
+        previous_visibility = listing.visibility
+        previous_featured = bool(listing.is_featured)
+        previous_promoted = bool(listing.is_promoted)
+        previous_rank = int(listing.ranking_score or 0)
+
+        base_rank = 0
+        if listing.pricing_tier == "business" and listing.owner_type == "business_profile":
+            monetization = MonetizationService(self.db)
+            business = await monetization.get_business_profile(listing.user_id, listing.owner_id)
+            if business:
+                subscription = await monetization.get_active_subscription(business.id)
+                if subscription:
+                    product = monetization.get_product(subscription.plan_code)
+                    if product:
+                        base_rank = int(product.get("priority_rank") or 0)
+
+        if normalized_mode == "featured":
+            listing.visibility = LISTING_VISIBILITY_FEATURED
+            listing.is_featured = True
+            listing.is_promoted = True
+            listing.ranking_score = 3000 + base_rank
+        elif normalized_mode == "boosted":
+            listing.visibility = LISTING_VISIBILITY_BOOSTED
+            listing.is_featured = False
+            listing.is_promoted = True
+            listing.ranking_score = 2000 + base_rank
+        else:
+            listing.visibility = LISTING_VISIBILITY_STANDARD
+            listing.is_featured = False
+            listing.is_promoted = False
+            listing.ranking_score = base_rank
+
+        listing.updated_at = datetime.now(timezone.utc)
+        await self._log_moderation_audit(
+            listing_id=listing.id,
+            actor_user_id=actor_user_id,
+            action="admin_promotion_update",
+            from_status=listing.status,
+            to_status=listing.status,
+            notes=moderation_note.strip() if moderation_note else None,
+            metadata={
+                "previous_visibility": previous_visibility,
+                "next_visibility": listing.visibility,
+                "previous_is_featured": str(previous_featured).lower(),
+                "next_is_featured": str(bool(listing.is_featured)).lower(),
+                "previous_is_promoted": str(previous_promoted).lower(),
+                "next_is_promoted": str(bool(listing.is_promoted)).lower(),
+                "previous_ranking_score": str(previous_rank),
+                "next_ranking_score": str(int(listing.ranking_score or 0)),
+            },
+        )
+        await self.db.commit()
+        await self.db.refresh(listing)
+        return {
+            "id": listing.id,
+            "visibility": listing.visibility,
+            "is_featured": bool(listing.is_featured),
+            "is_promoted": bool(listing.is_promoted),
+            "ranking_score": int(listing.ranking_score or 0),
+        }
 
     async def duplicate_listing(self, listing_id: int) -> Listings | None:
         """Create a draft copy of an existing listing."""

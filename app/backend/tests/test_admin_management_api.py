@@ -332,3 +332,48 @@ async def test_admin_subscription_review_requires_payment_or_manual_override(api
     payload = manual_response.json()
     assert payload["subscription_plan"] == "business_priority"
     assert payload["subscription_request_status"] == "approved"
+
+
+@pytest.mark.asyncio
+async def test_admin_business_visibility_can_suspend_restore_and_delete(api_client: AsyncClient, db_session: AsyncSession):
+    now = datetime.now(timezone.utc)
+    db_session.add(User(id="user-1", email="owner@example.com", role="user", created_at=now))
+    business = BusinessProfile(
+        owner_user_id="user-1",
+        slug="biz-visibility",
+        name="Biz Visibility",
+        category="services",
+        city="Madrid",
+        description="desc",
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(business)
+    await db_session.commit()
+
+    suspend_response = await api_client.post(
+        "/api/v1/admin/business/biz-visibility/visibility",
+        json={"action": "suspend", "moderation_note": "Complaint under review"},
+    )
+    assert suspend_response.status_code == 200
+    suspended = suspend_response.json()
+    assert suspended["deleted"] is False
+    assert suspended["is_suspended"] is True
+    assert suspended["suspension_reason"] == "Complaint under review"
+
+    restore_response = await api_client.post(
+        "/api/v1/admin/business/biz-visibility/visibility",
+        json={"action": "restore"},
+    )
+    assert restore_response.status_code == 200
+    restored = restore_response.json()
+    assert restored["is_suspended"] is False
+    assert restored["suspension_reason"] is None
+
+    delete_response = await api_client.post(
+        "/api/v1/admin/business/biz-visibility/visibility",
+        json={"action": "delete"},
+    )
+    assert delete_response.status_code == 200
+    deleted = delete_response.json()
+    assert deleted["deleted"] is True

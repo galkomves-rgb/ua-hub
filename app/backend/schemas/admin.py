@@ -80,6 +80,9 @@ class AdminBusinessProfileItemResponse(BaseModel):
     verification_status: str
     verification_requested_at: datetime | None = None
     verification_notes: str | None = None
+    is_suspended: bool = False
+    suspended_at: datetime | None = None
+    suspension_reason: str | None = None
     subscription_plan: str | None = None
     subscription_request_status: str | None = None
     subscription_requested_plan: str | None = None
@@ -107,6 +110,19 @@ class AdminBusinessSubscriptionReviewRequest(BaseModel):
     plan: str | None = Field(None, pattern="^(business_presence|business_priority|agency_starter|agency_growth|agency_pro)$")
     moderation_note: str | None = None
     manual_override: bool = False
+
+
+class AdminBusinessVisibilityRequest(BaseModel):
+    action: str = Field(..., pattern="^(suspend|restore|delete)$")
+    moderation_note: str | None = None
+
+
+class AdminBusinessVisibilityResponse(BaseModel):
+    slug: str
+    deleted: bool
+    is_suspended: bool
+    suspended_at: datetime | None = None
+    suspension_reason: str | None = None
 
 
 class AdminBusinessRelatedPaymentItemResponse(BaseModel):
@@ -156,6 +172,30 @@ class AdminPagedListingsResponse(BaseModel):
     limit: int
     offset: int
     items: list[ListingSummaryResponse]
+
+
+class AdminListingVisibilityRequest(BaseModel):
+    action: str = Field(..., pattern="^(archive|restore|delete)$")
+    moderation_note: str | None = None
+
+
+class AdminListingVisibilityResponse(BaseModel):
+    id: int
+    deleted: bool
+    status: str | None = None
+
+
+class AdminListingPromotionRequest(BaseModel):
+    mode: str = Field(..., pattern="^(standard|boosted|featured)$")
+    moderation_note: str | None = None
+
+
+class AdminListingPromotionResponse(BaseModel):
+    id: int
+    visibility: str
+    is_featured: bool
+    is_promoted: bool
+    ranking_score: int
 
 
 class AdminReportItemResponse(BaseModel):
