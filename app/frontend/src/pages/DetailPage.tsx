@@ -515,6 +515,14 @@ function BusinessProfilePage() {
   });
 
   const biz = businessQuery.data;
+
+  useEffect(() => {
+    if (!biz?.slug) {
+      return;
+    }
+    trackPublicBusinessEvent(biz.slug, "profile_view");
+  }, [biz?.slug]);
+
   if (!biz && businessQuery.isSuccess) {
     return (
       <Layout>
@@ -571,13 +579,6 @@ function BusinessProfilePage() {
             ? normalizeExternalUrl(businessWebsite)
             : null;
   const shouldOpenContactInNewTab = Boolean(primaryContactHref && /^https?:\/\//i.test(primaryContactHref));
-
-  useEffect(() => {
-    if (!biz.slug) {
-      return;
-    }
-    trackPublicBusinessEvent(biz.slug, "profile_view");
-  }, [biz.slug]);
 
   const handleTrackedBusinessEvent = (eventType: PublicBusinessEventType | null) => {
     if (!biz.slug || !eventType) {
