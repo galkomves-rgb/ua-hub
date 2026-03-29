@@ -105,6 +105,9 @@ export interface BillingBoostSummary {
   status: string;
   starts_at: string;
   ends_at: string | null;
+  baseline_views_count: number;
+  current_views_count: number;
+  gained_views_count: number;
 }
 
 export interface BillingUsageSummary {
@@ -366,7 +369,7 @@ export interface AdminBusinessVerificationReviewPayload {
 
 export interface AdminBusinessSubscriptionReviewPayload {
   decision: "approved" | "rejected";
-  plan?: "basic" | "premium" | "business" | null;
+  plan?: BusinessSubscriptionPlan | null;
   moderation_note?: string | null;
   manual_override?: boolean;
 }
@@ -654,6 +657,14 @@ export interface BusinessProfileResponse {
   active_listings_count: number;
   total_views_count: number;
   saved_by_users_count: number;
+  profile_views_count: number;
+  profile_views_30d: number;
+  contact_clicks_count: number;
+  contact_clicks_7d: number;
+  contact_clicks_30d: number;
+  phone_clicks_count: number;
+  email_clicks_count: number;
+  website_clicks_count: number;
   profile_completeness: number;
   public_preview_url: string | null;
   created_at: string;
@@ -680,8 +691,15 @@ export interface BusinessVerificationPayload {
   message?: string | null;
 }
 
+export type BusinessSubscriptionPlan =
+  | "business_presence"
+  | "business_priority"
+  | "agency_starter"
+  | "agency_growth"
+  | "agency_pro";
+
 export interface BusinessSubscriptionPayload {
-  plan: "basic" | "premium" | "business";
+  plan: BusinessSubscriptionPlan;
 }
 
 async function accountFetch<T>(

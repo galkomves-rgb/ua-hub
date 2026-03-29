@@ -41,6 +41,9 @@ class BillingBoostSummaryResponse(BaseModel):
     status: str
     starts_at: datetime
     ends_at: datetime | None = None
+    baseline_views_count: int = 0
+    current_views_count: int = 0
+    gained_views_count: int = 0
 
 
 class BillingUsageSummaryResponse(BaseModel):

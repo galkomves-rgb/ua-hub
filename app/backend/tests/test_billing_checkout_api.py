@@ -1,7 +1,7 @@
 import sys
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 import pytest_asyncio
@@ -12,13 +12,67 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from core.database import Base
 from dependencies.auth import get_current_user, get_current_user_id
 from dependencies.database import get_db_session
-from models.billing import BillingPayment
+from models.billing import BillingEntitlement, BillingPayment, BillingSubscription
 from models.listings import Listings
 from models.monetization import ListingPromotion
 from models.profiles import BusinessProfile
 from schemas.auth import UserResponse
 
-sys.modules.setdefault("stripe", SimpleNamespace())
+if "stripe" not in sys.modules:
+    stripe_module = ModuleType("stripe")
+
+    class StripeError(Exception):
+        pass
+
+    class AuthenticationError(StripeError):
+        pass
+
+    class APIConnectionError(StripeError):
+        pass
+
+    class APIError(StripeError):
+        pass
+
+    class InvalidRequestError(StripeError):
+        pass
+
+    class CardError(StripeError):
+        pass
+
+    class RateLimitError(StripeError):
+        pass
+
+    class IdempotencyError(StripeError):
+        pass
+
+    class Account:
+        @staticmethod
+        async def retrieve_async():
+            return {"id": "acct_test"}
+
+    class CheckoutSession:
+        @staticmethod
+        async def create_async(**_kwargs):
+            return SimpleNamespace(id="sess_test", url="https://example.com/checkout", client_secret=None)
+
+        @staticmethod
+        async def retrieve_async(_session_id):
+            return SimpleNamespace(status="complete", payment_status="paid", amount_total=999, currency="eur", metadata={})
+
+    stripe_module.api_key = ""
+    stripe_module.error = SimpleNamespace(
+        StripeError=StripeError,
+        AuthenticationError=AuthenticationError,
+        APIConnectionError=APIConnectionError,
+        APIError=APIError,
+        InvalidRequestError=InvalidRequestError,
+        CardError=CardError,
+        RateLimitError=RateLimitError,
+        IdempotencyError=IdempotencyError,
+    )
+    stripe_module.Account = Account
+    stripe_module.checkout = SimpleNamespace(Session=CheckoutSession)
+    sys.modules["stripe"] = stripe_module
 
 import services.billing as billing_module
 from routers.billing import router as billing_router
@@ -125,6 +179,19 @@ async def test_billing_overview_returns_usage_products_and_history_summary(api_c
             metadata_json="{}",
         )
     )
+    db_session.add(
+        BillingSubscription(
+            user_id=TEST_USER_ID,
+            business_profile_id=business.id,
+            plan_code="business_priority",
+            status="active",
+            provider="stripe",
+            billing_cycle="monthly",
+            current_period_start=now,
+            current_period_end=now + timedelta(days=30),
+            next_renewal_at=now + timedelta(days=30),
+        )
+    )
     await db_session.commit()
 
     response = await api_client.get("/api/v1/billing/overview")
@@ -139,6 +206,74 @@ async def test_billing_overview_returns_usage_products_and_history_summary(api_c
     assert any(item["code"] == "business_priority" for item in body["available_products"])
     assert body["business_subscriptions"][0]["slug"] == "biz-one"
     assert body["business_subscriptions"][0]["active_listings_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_billing_overview_returns_boost_roi_metrics(api_client: AsyncClient, db_session: AsyncSession):
+    now = datetime.now(timezone.utc)
+    listing = Listings(
+        user_id=TEST_USER_ID,
+        module="services",
+        category="services",
+        title="Boosted listing",
+        description="desc",
+        price=None,
+        currency="EUR",
+        city="Madrid",
+        owner_type="private_user",
+        owner_id=TEST_USER_ID,
+        pricing_tier="basic",
+        status="published",
+        views_count=42,
+        expiry_date=now + timedelta(days=14),
+        created_at=now,
+        updated_at=now,
+    )
+    db_session.add(listing)
+    await db_session.flush()
+
+    payment = BillingPayment(
+        user_id=TEST_USER_ID,
+        listing_id=listing.id,
+        provider="stripe",
+        product_code="boost",
+        product_type="listing_promotion",
+        target_type="listing",
+        title="Boost",
+        status="paid",
+        entitlement_status="active",
+        amount_total=Decimal("2.99"),
+        currency="eur",
+        checkout_mode="payment",
+        period_start=now,
+        period_end=now + timedelta(days=3),
+        paid_at=now,
+        metadata_json='{"baseline_views_count": 10}',
+    )
+    db_session.add(payment)
+    await db_session.flush()
+
+    db_session.add(
+        BillingEntitlement(
+            user_id=TEST_USER_ID,
+            payment_id=payment.id,
+            listing_id=listing.id,
+            entitlement_type="boost",
+            status="active",
+            starts_at=now,
+            ends_at=now + timedelta(days=3),
+            metadata_json='{"baseline_views_count": 10}',
+        )
+    )
+    await db_session.commit()
+
+    response = await api_client.get("/api/v1/billing/overview")
+
+    assert response.status_code == 200
+    boost = response.json()["active_boosts"][0]
+    assert boost["baseline_views_count"] == 10
+    assert boost["current_views_count"] == 42
+    assert boost["gained_views_count"] == 32
 
 
 @pytest.mark.asyncio
@@ -191,7 +326,7 @@ async def test_billing_checkout_returns_clear_error_when_subscription_price_id_i
     db_session.add(business)
     await db_session.commit()
 
-    monkeypatch.setattr(billing_module.settings, "stripe_secret_key", "sk_test", raising=False)
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test")
 
     response = await api_client.post(
         "/api/v1/billing/checkout",

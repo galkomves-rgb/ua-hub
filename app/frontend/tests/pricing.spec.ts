@@ -25,7 +25,7 @@ test("pricing page renders all three launch segments and individuals pricing log
 
   await expect(page.getByRole("button", { name: "For individuals" })).toBeVisible();
   await expect(page.getByRole("button", { name: "For professionals & business" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "For agencies" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "For teams" })).toBeVisible();
 
   await expect(page.getByRole("heading", { name: "Always free" })).toBeVisible();
   await expect(page.getByText("7 days free", { exact: true })).toBeVisible();
@@ -45,14 +45,14 @@ test("pricing page shows exactly two business plans and three agency plans", asy
   await expect(businessGroup.getByRole("radio", { name: "Business Presence" })).toHaveCount(1);
   await expect(businessGroup.getByRole("radio", { name: "Business Priority" })).toHaveCount(1);
 
-  await page.getByRole("button", { name: "For agencies" }).click();
-  const agencyGroup = page.getByRole("radiogroup", { name: "Plan selection: For agencies" });
-  await expect(agencyGroup.getByRole("radio", { name: "Agency Starter" })).toBeVisible();
-  await expect(agencyGroup.getByRole("radio", { name: "Agency Growth" })).toBeVisible();
-  await expect(agencyGroup.getByRole("radio", { name: "Agency Pro" })).toBeVisible();
-  await expect(agencyGroup.getByRole("radio", { name: "Agency Starter" })).toHaveCount(1);
-  await expect(agencyGroup.getByRole("radio", { name: "Agency Growth" })).toHaveCount(1);
-  await expect(agencyGroup.getByRole("radio", { name: "Agency Pro" })).toHaveCount(1);
+  await page.getByRole("button", { name: "For teams" }).click();
+  const agencyGroup = page.getByRole("radiogroup", { name: "Plan selection: For teams" });
+  await expect(agencyGroup.getByRole("radio", { name: "Team Starter" })).toBeVisible();
+  await expect(agencyGroup.getByRole("radio", { name: "Team Growth" })).toBeVisible();
+  await expect(agencyGroup.getByRole("radio", { name: "Team Pro" })).toBeVisible();
+  await expect(agencyGroup.getByRole("radio", { name: "Team Starter" })).toHaveCount(1);
+  await expect(agencyGroup.getByRole("radio", { name: "Team Growth" })).toHaveCount(1);
+  await expect(agencyGroup.getByRole("radio", { name: "Team Pro" })).toHaveCount(1);
 });
 
 test("paid pricing cards can be selected and primary action follows selected card", async ({ page }) => {

@@ -209,6 +209,39 @@ function PricingCard({
         ))}
       </ul>
 
+      {card.bestForKeys?.length ? (
+        <div className={`mt-5 rounded-2xl border px-4 py-3 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+          <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${isDark ? "text-slate-500" : "text-slate-500"}`}>{t("pricing.card.bestFor")}</p>
+          <div className="mt-3 space-y-2">
+            {card.bestForKeys.map((itemKey) => (
+              <p key={itemKey} className={`text-sm leading-6 ${isDark ? "text-slate-300" : "text-slate-600"}`}>{t(itemKey)}</p>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {card.advantageKeys?.length ? (
+        <div className={`mt-4 rounded-2xl border px-4 py-3 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+          <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${isDark ? "text-slate-500" : "text-slate-500"}`}>{t("pricing.card.advantage")}</p>
+          <div className="mt-3 space-y-2">
+            {card.advantageKeys.map((itemKey) => (
+              <p key={itemKey} className={`text-sm leading-6 ${isDark ? "text-slate-300" : "text-slate-600"}`}>{t(itemKey)}</p>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {card.cabinetKeys?.length ? (
+        <div className={`mt-4 rounded-2xl border px-4 py-3 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+          <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${isDark ? "text-slate-500" : "text-slate-500"}`}>{t("pricing.card.cabinetTools")}</p>
+          <div className="mt-3 space-y-2">
+            {card.cabinetKeys.map((itemKey) => (
+              <p key={itemKey} className={`text-sm leading-6 ${isDark ? "text-slate-300" : "text-slate-600"}`}>{t(itemKey)}</p>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
       {card.helperNoteKey ? (
         <p className={`mt-4 text-xs leading-5 ${isDark ? "text-slate-500" : "text-slate-500"}`}>{t(card.helperNoteKey)}</p>
       ) : null}

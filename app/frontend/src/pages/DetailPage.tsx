@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Textarea } from "@/components/ui/textarea";
 import { createMonetizedListing, fetchMyBusinessProfiles, fetchUserProfile, reportMessagingUser, saveListing, submitListing, updateListing } from "@/lib/account-api";
 import { deriveListingLabels } from "@/lib/label-taxonomy";
-import { fetchPublicBusinessBySlug } from "@/lib/public-businesses";
+import { fetchPublicBusinessBySlug, trackPublicBusinessEvent, type PublicBusinessEventType } from "@/lib/public-businesses";
 import { fetchPublicListing, fetchPublicListings } from "@/lib/public-listings";
 import { getAPIBaseURL } from "@/lib/config";
 import { normalizeStoredPhoneValue } from "@/lib/phone-utils";
@@ -548,6 +548,17 @@ function BusinessProfilePage() {
   const hasGoogleMapsRating = Boolean(googleMapsRating && biz.googleMapsRatingSource);
   const businessWebsite = biz.contacts?.website;
   const isMobileDevice = isLikelyMobileDevice();
+  const primaryContactEventType: PublicBusinessEventType | null = biz.contacts?.phone && isMobileDevice
+    ? "phone_click"
+    : biz.contacts?.email && !isMobileDevice
+      ? "email_click"
+      : biz.contacts?.phone
+        ? "phone_click"
+        : biz.contacts?.email
+          ? "email_click"
+          : businessWebsite
+            ? "website_click"
+            : null;
   const primaryContactHref = biz.contacts?.phone && isMobileDevice
     ? `tel:${biz.contacts.phone}`
     : biz.contacts?.email && !isMobileDevice
@@ -560,6 +571,20 @@ function BusinessProfilePage() {
             ? normalizeExternalUrl(businessWebsite)
             : null;
   const shouldOpenContactInNewTab = Boolean(primaryContactHref && /^https?:\/\//i.test(primaryContactHref));
+
+  useEffect(() => {
+    if (!biz.slug) {
+      return;
+    }
+    trackPublicBusinessEvent(biz.slug, "profile_view");
+  }, [biz.slug]);
+
+  const handleTrackedBusinessEvent = (eventType: PublicBusinessEventType | null) => {
+    if (!biz.slug || !eventType) {
+      return;
+    }
+    trackPublicBusinessEvent(biz.slug, eventType);
+  };
 
   return (
     <Layout>
@@ -607,6 +632,7 @@ function BusinessProfilePage() {
                     href={primaryContactHref}
                     target={shouldOpenContactInNewTab ? "_blank" : undefined}
                     rel={shouldOpenContactInNewTab ? "noreferrer" : undefined}
+                    onClick={() => handleTrackedBusinessEvent(primaryContactEventType)}
                     className={`inline-flex h-10 items-center justify-center px-6 rounded-lg text-sm font-semibold transition-all active:scale-[0.98] ${
                       isDark
                         ? "bg-gradient-to-r from-[#FFD700] to-[#e6c200] text-[#0d1a2e]"
@@ -643,17 +669,17 @@ function BusinessProfilePage() {
                   <MapPin className="w-4 h-4 shrink-0" /> {biz.city}, {t("detail.countrySpain")}
                 </div>
                 {biz.contacts?.phone ? (
-                  <a href={`tel:${biz.contacts.phone}`} className={`flex items-center gap-2 text-sm break-all hover:underline ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                  <a href={`tel:${biz.contacts.phone}`} onClick={() => handleTrackedBusinessEvent("phone_click")} className={`flex items-center gap-2 text-sm break-all hover:underline ${isDark ? "text-gray-300" : "text-gray-600"}`}>
                     <Phone className="w-4 h-4 shrink-0" /> {biz.contacts.phone}
                   </a>
                 ) : null}
                 {biz.contacts?.email ? (
-                  <a href={`mailto:${biz.contacts.email}`} className={`flex items-center gap-2 text-sm break-all hover:underline ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                  <a href={`mailto:${biz.contacts.email}`} onClick={() => handleTrackedBusinessEvent("email_click")} className={`flex items-center gap-2 text-sm break-all hover:underline ${isDark ? "text-gray-300" : "text-gray-600"}`}>
                     <Mail className="w-4 h-4 shrink-0" /> {biz.contacts.email}
                   </a>
                 ) : null}
                 {businessWebsite ? (
-                  <a href={normalizeExternalUrl(businessWebsite)} target="_blank" rel="noreferrer" className={`flex items-center gap-2 text-sm break-all hover:underline ${isDark ? "text-gray-300" : "text-gray-600"}`}>
+                  <a href={normalizeExternalUrl(businessWebsite)} target="_blank" rel="noreferrer" onClick={() => handleTrackedBusinessEvent("website_click")} className={`flex items-center gap-2 text-sm break-all hover:underline ${isDark ? "text-gray-300" : "text-gray-600"}`}>
                     <Globe className="w-4 h-4 shrink-0" /> {businessWebsite}
                   </a>
                 ) : null}

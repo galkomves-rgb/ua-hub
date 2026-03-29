@@ -112,6 +112,14 @@ class BusinessProfileResponse(BusinessProfileBase):
     active_listings_count: int = 0
     total_views_count: int = 0
     saved_by_users_count: int = 0
+    profile_views_count: int = 0
+    profile_views_30d: int = 0
+    contact_clicks_count: int = 0
+    contact_clicks_7d: int = 0
+    contact_clicks_30d: int = 0
+    phone_clicks_count: int = 0
+    email_clicks_count: int = 0
+    website_clicks_count: int = 0
     profile_completeness: int = 0
     public_preview_url: str | None = None
     created_at: datetime
@@ -155,4 +163,8 @@ class BusinessVerificationRequest(BaseModel):
 
 
 class BusinessSubscriptionRequest(BaseModel):
-    plan: str = Field(..., pattern="^(basic|premium|business)$")
+    plan: str = Field(..., pattern="^(business_presence|business_priority|agency_starter|agency_growth|agency_pro)$")
+
+
+class BusinessProfileEventCreate(BaseModel):
+    event_type: str = Field(..., pattern="^(profile_view|phone_click|email_click|website_click)$")

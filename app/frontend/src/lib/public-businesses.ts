@@ -23,6 +23,8 @@ interface PublicBusinessRecord {
   updated_at: string;
 }
 
+export type PublicBusinessEventType = "profile_view" | "phone_click" | "email_click" | "website_click";
+
 function parseJsonObject(rawValue: string | null | undefined): Record<string, string> {
   if (!rawValue) {
     return {};
@@ -115,6 +117,27 @@ async function publicFetch<T>(path: string): Promise<T> {
     throw new Error(detail || `Request failed with status ${response.status}`);
   }
   return response.json() as Promise<T>;
+}
+
+export function trackPublicBusinessEvent(slug: string, eventType: PublicBusinessEventType) {
+  const url = `${getAPIBaseURL()}/api/v1/profiles/business/${encodeURIComponent(slug)}/events`;
+  const payload = JSON.stringify({ event_type: eventType });
+
+  if (typeof navigator !== "undefined" && typeof navigator.sendBeacon === "function") {
+    const blob = new Blob([payload], { type: "application/json" });
+    if (navigator.sendBeacon(url, blob)) {
+      return;
+    }
+  }
+
+  void fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: payload,
+    keepalive: true,
+  }).catch(() => undefined);
 }
 
 export async function fetchPublicBusinesses(filters?: {

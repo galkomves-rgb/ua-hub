@@ -1,11 +1,11 @@
 import re
 import unicodedata
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from core.config import settings
 from models.listings import Listings
-from models.profiles import UserProfile, BusinessProfile
+from models.profiles import UserProfile, BusinessProfile, BusinessProfileEvent
 from models.saved import SavedBusiness
-from sqlalchemy import func, select
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
@@ -57,6 +57,16 @@ class ProfileService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+
+    BUSINESS_PROFILE_VIEW_EVENT = "profile_view"
+    BUSINESS_PHONE_CLICK_EVENT = "phone_click"
+    BUSINESS_EMAIL_CLICK_EVENT = "email_click"
+    BUSINESS_WEBSITE_CLICK_EVENT = "website_click"
+    BUSINESS_CONTACT_CLICK_EVENTS = (
+        BUSINESS_PHONE_CLICK_EVENT,
+        BUSINESS_EMAIL_CLICK_EVENT,
+        BUSINESS_WEBSITE_CLICK_EVENT,
+    )
 
     @staticmethod
     def _calculate_business_profile_completeness(profile: BusinessProfile) -> int:
@@ -118,6 +128,8 @@ class ProfileService:
         saved_by_users_count = await self.db.scalar(
             select(func.count(SavedBusiness.id)).where(SavedBusiness.business_profile_id == profile.id)
         )
+        now = datetime.now(timezone.utc)
+        analytics = await self._get_business_profile_analytics(profile.id, now=now)
         frontend_base = (getattr(settings, "frontend_url", "") or "").rstrip("/")
         preview_url = f"{frontend_base}/business/{profile.slug}" if frontend_base else f"/business/{profile.slug}"
 
@@ -150,6 +162,14 @@ class ProfileService:
             "active_listings_count": int(active_listings_count or 0),
             "total_views_count": int(total_views_count or 0),
             "saved_by_users_count": int(saved_by_users_count or 0),
+            "profile_views_count": analytics["profile_views_count"],
+            "profile_views_30d": analytics["profile_views_30d"],
+            "contact_clicks_count": analytics["contact_clicks_count"],
+            "contact_clicks_7d": analytics["contact_clicks_7d"],
+            "contact_clicks_30d": analytics["contact_clicks_30d"],
+            "phone_clicks_count": analytics["phone_clicks_count"],
+            "email_clicks_count": analytics["email_clicks_count"],
+            "website_clicks_count": analytics["website_clicks_count"],
             "profile_completeness": self._calculate_business_profile_completeness(profile),
             "public_preview_url": preview_url,
             "created_at": profile.created_at,
@@ -318,6 +338,29 @@ class ProfileService:
         )
         return result.scalar_one_or_none()
 
+    async def record_business_profile_event(
+        self,
+        slug: str,
+        event_type: str,
+        actor_user_id: str | None = None,
+        metadata_json: str | None = None,
+    ) -> BusinessProfile | None:
+        profile = await self.get_business_profile(slug)
+        if not profile:
+            return None
+
+        self.db.add(
+            BusinessProfileEvent(
+                business_profile_id=profile.id,
+                event_type=event_type,
+                actor_user_id=actor_user_id,
+                metadata_json=metadata_json,
+                created_at=datetime.now(timezone.utc),
+            )
+        )
+        await self.db.commit()
+        return profile
+
     async def get_business_profiles_by_owner(self, owner_user_id: str) -> list[BusinessProfile]:
         """Get all business profiles owned by a user."""
         result = await self.db.execute(
@@ -465,3 +508,72 @@ class ProfileService:
         query = query.limit(limit).offset(offset)
         result = await self.db.execute(query)
         return result.scalars().all()
+
+    async def _get_business_profile_analytics(self, business_profile_id: int, now: datetime | None = None) -> dict[str, int]:
+        anchor = now or datetime.now(timezone.utc)
+        seven_days_ago = anchor - timedelta(days=7)
+        thirty_days_ago = anchor - timedelta(days=30)
+
+        result = await self.db.execute(
+            select(
+                func.count(BusinessProfileEvent.id),
+                func.sum(case((BusinessProfileEvent.event_type == self.BUSINESS_PROFILE_VIEW_EVENT, 1), else_=0)),
+                func.sum(
+                    case(
+                        (BusinessProfileEvent.event_type.in_(self.BUSINESS_CONTACT_CLICK_EVENTS), 1),
+                        else_=0,
+                    )
+                ),
+                func.sum(case((BusinessProfileEvent.event_type == self.BUSINESS_PHONE_CLICK_EVENT, 1), else_=0)),
+                func.sum(case((BusinessProfileEvent.event_type == self.BUSINESS_EMAIL_CLICK_EVENT, 1), else_=0)),
+                func.sum(case((BusinessProfileEvent.event_type == self.BUSINESS_WEBSITE_CLICK_EVENT, 1), else_=0)),
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                BusinessProfileEvent.event_type.in_(self.BUSINESS_CONTACT_CLICK_EVENTS),
+                                BusinessProfileEvent.created_at >= seven_days_ago,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                BusinessProfileEvent.event_type.in_(self.BUSINESS_CONTACT_CLICK_EVENTS),
+                                BusinessProfileEvent.created_at >= thirty_days_ago,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+                func.sum(
+                    case(
+                        (
+                            and_(
+                                BusinessProfileEvent.event_type == self.BUSINESS_PROFILE_VIEW_EVENT,
+                                BusinessProfileEvent.created_at >= thirty_days_ago,
+                            ),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ),
+            ).where(BusinessProfileEvent.business_profile_id == business_profile_id)
+        )
+        row = result.one()
+        return {
+            "events_count": int(row[0] or 0),
+            "profile_views_count": int(row[1] or 0),
+            "contact_clicks_count": int(row[2] or 0),
+            "phone_clicks_count": int(row[3] or 0),
+            "email_clicks_count": int(row[4] or 0),
+            "website_clicks_count": int(row[5] or 0),
+            "contact_clicks_7d": int(row[6] or 0),
+            "contact_clicks_30d": int(row[7] or 0),
+            "profile_views_30d": int(row[8] or 0),
+        }

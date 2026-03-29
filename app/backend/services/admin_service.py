@@ -10,6 +10,14 @@ from models.listings import Listings
 from models.messages import MessageReport
 from models.profiles import BusinessProfile, UserProfile
 
+BUSINESS_SUBSCRIPTION_PLAN_CODES = {
+    "business_presence",
+    "business_priority",
+    "agency_starter",
+    "agency_growth",
+    "agency_pro",
+}
+
 
 class AdminService:
     def __init__(self, db: AsyncSession):
@@ -338,7 +346,7 @@ class AdminService:
 
         if normalized_decision == "approved":
             next_plan = (requested_plan or profile.subscription_requested_plan or profile.subscription_plan or "").strip().lower()
-            if next_plan not in {"basic", "premium", "business"}:
+            if next_plan not in BUSINESS_SUBSCRIPTION_PLAN_CODES:
                 raise ValueError("Unsupported subscription plan")
             related_payments = await self._list_business_related_payments(profile.id)
             if manual_override and not (moderation_note or "").strip():
@@ -349,7 +357,7 @@ class AdminService:
             profile.subscription_request_status = "approved"
             profile.subscription_requested_plan = None
             profile.subscription_requested_at = None
-            profile.is_premium = next_plan in {"premium", "business"}
+            profile.is_premium = next_plan in {"business_priority", "agency_starter", "agency_growth", "agency_pro"}
         else:
             profile.subscription_request_status = "rejected"
 

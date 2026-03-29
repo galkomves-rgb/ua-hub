@@ -7,6 +7,7 @@ import {
   fetchAdminBusinessProfileDetail,
   fetchAdminBusinessProfiles,
   reviewAdminBusinessSubscription,
+  type BusinessSubscriptionPlan,
   reviewAdminBusinessVerification,
   type AdminBusinessProfileDetail,
   type AdminBusinessProfileItem,
@@ -16,6 +17,13 @@ import { useI18n } from "@/lib/i18n";
 
 const VERIFICATION_FILTERS = ["all", "pending", "verified", "rejected", "unverified"] as const;
 const SUBSCRIPTION_FILTERS = ["all", "pending", "approved", "rejected"] as const;
+const SUBSCRIPTION_PLAN_OPTIONS: BusinessSubscriptionPlan[] = [
+  "business_presence",
+  "business_priority",
+  "agency_starter",
+  "agency_growth",
+  "agency_pro",
+];
 const PAGE_SIZE = 12;
 
 function formatDate(value: string | null, locale: "ua" | "es" | "en") {
@@ -70,6 +78,27 @@ function normalizeExternalUrl(value: string) {
   return `https://${value}`;
 }
 
+function businessPlanLabel(plan: string | null) {
+  if (!plan) {
+    return "-";
+  }
+
+  switch (plan) {
+    case "business_presence":
+      return "Business Presence";
+    case "business_priority":
+      return "Business Priority";
+    case "agency_starter":
+      return "Team Starter";
+    case "agency_growth":
+      return "Team Growth";
+    case "agency_pro":
+      return "Team Pro";
+    default:
+      return plan;
+  }
+}
+
 function hasPaidSubscriptionEvidence(detail: AdminBusinessProfileDetail | undefined, requestedAt: string | null) {
   if (!detail) {
     return false;
@@ -100,11 +129,11 @@ function AdminBusinessCard({
   locale: "ua" | "es" | "en";
   isDark: boolean;
   onVerificationDecision: (slug: string, decision: "approved" | "rejected", moderationNote?: string | null) => void;
-  onSubscriptionDecision: (slug: string, decision: "approved" | "rejected", plan?: "basic" | "premium" | "business", moderationNote?: string | null, manualOverride?: boolean) => void;
+  onSubscriptionDecision: (slug: string, decision: "approved" | "rejected", plan?: BusinessSubscriptionPlan, moderationNote?: string | null, manualOverride?: boolean) => void;
   isMutating: boolean;
 }) {
-  const [selectedPlan, setSelectedPlan] = useState<"basic" | "premium" | "business">(
-    (item.subscription_requested_plan as "basic" | "premium" | "business") || "premium",
+  const [selectedPlan, setSelectedPlan] = useState<BusinessSubscriptionPlan>(
+    (item.subscription_requested_plan as BusinessSubscriptionPlan) || "business_priority",
   );
   const [isExpanded, setIsExpanded] = useState(false);
   const [verificationNote, setVerificationNote] = useState(item.verification_notes || "");
@@ -112,7 +141,7 @@ function AdminBusinessCard({
   const [manualOverride, setManualOverride] = useState(false);
 
   useEffect(() => {
-    setSelectedPlan((item.subscription_requested_plan as "basic" | "premium" | "business") || "premium");
+    setSelectedPlan((item.subscription_requested_plan as BusinessSubscriptionPlan) || "business_priority");
     setVerificationNote(item.verification_notes || "");
     setSubscriptionNote("");
     setManualOverride(false);
@@ -154,9 +183,9 @@ function AdminBusinessCard({
             <p>{locale === "ua" ? "Категорія" : locale === "es" ? "Categoría" : "Category"}: {item.category}</p>
             <p>{locale === "ua" ? "Верифікація" : locale === "es" ? "Verificación" : "Verification"}: {item.verification_status}</p>
             <p>{locale === "ua" ? "Запит верифікації" : locale === "es" ? "Solicitud de verificación" : "Verification requested"}: {formatDate(item.verification_requested_at, locale)}</p>
-            <p>{locale === "ua" ? "Поточний план" : locale === "es" ? "Plan actual" : "Current plan"}: {item.subscription_plan || "-"}</p>
+            <p>{locale === "ua" ? "Поточний план" : locale === "es" ? "Plan actual" : "Current plan"}: {businessPlanLabel(item.subscription_plan)}</p>
             <p>{locale === "ua" ? "Запит підписки" : locale === "es" ? "Solicitud de suscripción" : "Subscription request"}: {item.subscription_request_status || "-"}</p>
-            <p>{locale === "ua" ? "План у запиті" : locale === "es" ? "Plan solicitado" : "Requested plan"}: {item.subscription_requested_plan || "-"}</p>
+            <p>{locale === "ua" ? "План у запиті" : locale === "es" ? "Plan solicitado" : "Requested plan"}: {businessPlanLabel(item.subscription_requested_plan)}</p>
             <p>{locale === "ua" ? "Оновлено" : locale === "es" ? "Actualizado" : "Updated"}: {formatDate(item.updated_at, locale)}</p>
           </div>
 
@@ -210,13 +239,15 @@ function AdminBusinessCard({
             </p>
             <select
               value={selectedPlan}
-              onChange={(event) => setSelectedPlan(event.target.value as "basic" | "premium" | "business")}
+              onChange={(event) => setSelectedPlan(event.target.value as BusinessSubscriptionPlan)}
               disabled={isMutating}
               className={`mt-3 w-full rounded-xl border px-3 py-2 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
             >
-              <option value="basic">basic</option>
-              <option value="premium">premium</option>
-              <option value="business">business</option>
+              {SUBSCRIPTION_PLAN_OPTIONS.map((plan) => (
+                <option key={plan} value={plan}>
+                  {businessPlanLabel(plan)}
+                </option>
+              ))}
             </select>
             <textarea
               value={subscriptionNote}
@@ -544,7 +575,7 @@ export default function AdminBusinessProfilesPage() {
   });
 
   const subscriptionMutation = useMutation({
-    mutationFn: ({ slug, decision, plan, moderationNote, manualOverride }: { slug: string; decision: "approved" | "rejected"; plan?: "basic" | "premium" | "business"; moderationNote?: string | null; manualOverride?: boolean }) =>
+    mutationFn: ({ slug, decision, plan, moderationNote, manualOverride }: { slug: string; decision: "approved" | "rejected"; plan?: BusinessSubscriptionPlan; moderationNote?: string | null; manualOverride?: boolean }) =>
       reviewAdminBusinessSubscription(slug, { decision, plan, moderation_note: moderationNote, manual_override: manualOverride }),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["admin-business-profiles"] });

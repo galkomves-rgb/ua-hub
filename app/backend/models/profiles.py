@@ -1,5 +1,5 @@
 from core.database import Base
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.sql import func
 
 
@@ -59,3 +59,15 @@ class BusinessProfile(Base):
     listing_quota = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+
+class BusinessProfileEvent(Base):
+    __tablename__ = "business_profile_events"
+    __table_args__ = {"extend_existing": True}
+
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True, nullable=False)
+    business_profile_id = Column(Integer, ForeignKey("business_profiles.id", ondelete="CASCADE"), nullable=False, index=True)
+    event_type = Column(String, nullable=False, index=True)
+    actor_user_id = Column(String, nullable=True, index=True)
+    metadata_json = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

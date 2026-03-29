@@ -5,6 +5,7 @@ from dependencies.auth import get_current_user_id
 from dependencies.database import get_db_session
 from schemas.profiles import (
     BusinessProfileCreate,
+    BusinessProfileEventCreate,
     BusinessProfileListResponse,
     BusinessProfileResponse,
     BusinessSubscriptionRequest,
@@ -213,6 +214,20 @@ async def get_business_profile(
         raise HTTPException(status_code=404, detail="Business profile not found")
 
     return await service.serialize_business_profile(profile)
+
+
+@router.post("/business/{slug}/events")
+async def track_business_profile_event(
+    slug: str,
+    payload: BusinessProfileEventCreate,
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Track public business profile interactions for analytics."""
+    service = ProfileService(db)
+    profile = await service.record_business_profile_event(slug, payload.event_type)
+    if not profile:
+        raise HTTPException(status_code=404, detail="Business profile not found")
+    return {"status": "ok"}
 
 
 @router.get("/business", response_model=BusinessProfileListResponse)

@@ -34,9 +34,11 @@ import {
   requestBusinessSubscription,
   requestBusinessVerification,
   updateBusinessProfile,
+  type BusinessSubscriptionPlan,
   type BusinessProfilePayload,
   type BusinessProfileResponse,
 } from "@/lib/account-api";
+import { getBusinessPlanInsight, normalizeBusinessPlanCode } from "@/lib/business-plan-insights";
 import { normalizeStoredPhoneValue } from "@/lib/phone-utils";
 import { uploadImageFile } from "@/lib/media-storage";
 import { MODULES, MODULE_ORDER } from "@/lib/platform";
@@ -69,9 +71,13 @@ type BusinessCategoryOption = {
   moduleLabel: string;
 };
 
-const PLAN_OPTIONS = ["basic", "premium", "business"] as const;
-
-type PlanOption = (typeof PLAN_OPTIONS)[number];
+const PLAN_OPTIONS: BusinessSubscriptionPlan[] = [
+  "business_presence",
+  "business_priority",
+  "agency_starter",
+  "agency_growth",
+  "agency_pro",
+];
 
 function buildBusinessForm(profile: BusinessProfileResponse | null): BusinessFormState {
   const contacts = safeParseRecord(profile?.contacts_json);
@@ -339,7 +345,7 @@ export function AccountBusinessPanel() {
 
   const [form, setForm] = useState<BusinessFormState>(() => buildBusinessForm(null));
   const [verificationNote, setVerificationNote] = useState("");
-  const [targetPlan, setTargetPlan] = useState<PlanOption>("business");
+  const [targetPlan, setTargetPlan] = useState<BusinessSubscriptionPlan>("agency_starter");
   const [isDraggingLogo, setIsDraggingLogo] = useState(false);
   const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [logoUploadError, setLogoUploadError] = useState<string | null>(null);
@@ -372,15 +378,15 @@ export function AccountBusinessPanel() {
     setVerificationNote(activeProfile?.verification_notes || "");
     const requestedPlan = activeProfile?.subscription_requested_plan;
     const currentPlan = activeProfile?.subscription_plan;
-    if (requestedPlan && PLAN_OPTIONS.includes(requestedPlan as PlanOption)) {
-      setTargetPlan(requestedPlan as PlanOption);
+    if (requestedPlan && PLAN_OPTIONS.includes(requestedPlan as BusinessSubscriptionPlan)) {
+      setTargetPlan(requestedPlan as BusinessSubscriptionPlan);
       return;
     }
-    if (currentPlan && PLAN_OPTIONS.includes(currentPlan as PlanOption)) {
-      setTargetPlan(currentPlan as PlanOption);
+    if (currentPlan && PLAN_OPTIONS.includes(currentPlan as BusinessSubscriptionPlan)) {
+      setTargetPlan(currentPlan as BusinessSubscriptionPlan);
       return;
     }
-    setTargetPlan("business");
+    setTargetPlan("agency_starter");
   }, [activeProfile]);
 
   const saveMutation = useMutation({
@@ -483,20 +489,15 @@ export function AccountBusinessPanel() {
   };
 
   const planLabel = (plan: string | null | undefined) => {
-    if (!plan) {
+    const normalizedPlan = normalizeBusinessPlanCode(plan);
+    if (!normalizedPlan) {
       return t("account.business.noPlan");
     }
-    if (plan === "basic") {
-      return t("pricing.basic");
-    }
-    if (plan === "premium") {
-      return t("pricing.premium");
-    }
-    if (plan === "business") {
-      return t("pricing.business");
-    }
-    return plan;
+    return t(`account.billing.plan.${normalizedPlan}`);
   };
+
+  const activePlanInsight = getBusinessPlanInsight(activeProfile?.subscription_plan);
+  const nextPlanInsight = activePlanInsight?.upgradeTo ? getBusinessPlanInsight(activePlanInsight.upgradeTo) : null;
 
   const analyticsCards = activeProfile
     ? [
@@ -505,6 +506,12 @@ export function AccountBusinessPanel() {
           icon: Globe,
           title: t("account.business.activeListings"),
           value: activeProfile.active_listings_count,
+        },
+        {
+          key: "profile-views",
+          icon: Eye,
+          title: t("account.business.profileViews"),
+          value: activeProfile.profile_views_count,
         },
         {
           key: "views",
@@ -517,6 +524,41 @@ export function AccountBusinessPanel() {
           icon: Star,
           title: t("account.business.savedByUsers"),
           value: activeProfile.saved_by_users_count,
+        },
+        {
+          key: "contact-clicks",
+          icon: Globe,
+          title: t("account.business.contactClicks"),
+          value: activeProfile.contact_clicks_count,
+        },
+      ]
+    : [];
+
+  const contactBreakdownCards = activeProfile
+    ? [
+        {
+          key: "phone-clicks",
+          icon: AlertCircle,
+          title: t("account.business.phoneClicks"),
+          value: activeProfile.phone_clicks_count,
+        },
+        {
+          key: "email-clicks",
+          icon: CheckCircle2,
+          title: t("account.business.emailClicks"),
+          value: activeProfile.email_clicks_count,
+        },
+        {
+          key: "website-clicks",
+          icon: ExternalLink,
+          title: t("account.business.websiteClicks"),
+          value: activeProfile.website_clicks_count,
+        },
+        {
+          key: "leads-30d",
+          icon: BarChart3,
+          title: t("account.business.leads30d"),
+          value: activeProfile.contact_clicks_30d,
         },
       ]
     : [];
@@ -783,6 +825,30 @@ export function AccountBusinessPanel() {
                   })}
                 </div>
 
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                  {contactBreakdownCards.map((card) => {
+                    const Icon = card.icon;
+                    return (
+                      <div
+                        key={card.key}
+                        className={`rounded-2xl border p-4 ${
+                          isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Icon className={`h-4 w-4 ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`} />
+                          <p className={`text-sm font-medium ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                            {card.title}
+                          </p>
+                        </div>
+                        <p className={`mt-3 text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                          {card.value}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+
                 <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
                   <div
                     className={`rounded-2xl border p-5 ${
@@ -828,7 +894,7 @@ export function AccountBusinessPanel() {
                     <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                       <select
                         value={targetPlan}
-                        onChange={(event) => setTargetPlan(event.target.value as PlanOption)}
+                        onChange={(event) => setTargetPlan(event.target.value as BusinessSubscriptionPlan)}
                         className={`w-full rounded-2xl border px-4 py-3 text-sm ${
                           isDark ? "border-[#22416b] bg-[#11203a] text-slate-100" : "border-slate-300 bg-white text-slate-900"
                         }`}
@@ -866,6 +932,62 @@ export function AccountBusinessPanel() {
                     ) : null}
                   </div>
                 </div>
+
+                {activePlanInsight ? (
+                  <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+                    <div
+                      className={`rounded-2xl border p-5 ${
+                        isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"
+                      }`}
+                    >
+                      <p className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                        {t("account.business.planAudience")}
+                      </p>
+                      <p className={`mt-2 text-sm leading-6 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+                        {t(activePlanInsight.audienceKey)}
+                      </p>
+                      <div className="mt-4 space-y-2">
+                        {activePlanInsight.benefitKeys.map((key) => (
+                          <div key={key} className={`flex items-start gap-2 text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+                            <CheckCircle2 className={`mt-0.5 h-4 w-4 shrink-0 ${isDark ? "text-emerald-300" : "text-emerald-600"}`} />
+                            <span>{t(key)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div
+                      className={`rounded-2xl border p-5 ${
+                        isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"
+                      }`}
+                    >
+                      <p className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                        {t("account.business.cabinetTools")}
+                      </p>
+                      <div className="mt-4 space-y-2">
+                        {activePlanInsight.cabinetKeys.map((key) => (
+                          <div key={key} className={`flex items-start gap-2 text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+                            <Sparkles className={`mt-0.5 h-4 w-4 shrink-0 ${isDark ? "text-[#FFD700]" : "text-[#0057B8]"}`} />
+                            <span>{t(key)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {nextPlanInsight ? (
+                        <div className={`mt-5 rounded-2xl border p-4 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+                          <p className={`text-xs font-semibold uppercase tracking-[0.14em] ${isDark ? "text-slate-500" : "text-slate-500"}`}>
+                            {t("account.business.nextUpgrade")}
+                          </p>
+                          <p className={`mt-2 text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+                            {t(nextPlanInsight.labelKey)}
+                          </p>
+                          <p className={`mt-2 text-sm leading-6 ${isDark ? "text-slate-300" : "text-slate-600"}`}>
+                            {t(nextPlanInsight.audienceKey)}
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div
                   className={`rounded-2xl border p-5 ${

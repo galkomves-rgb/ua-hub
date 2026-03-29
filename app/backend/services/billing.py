@@ -691,7 +691,7 @@ class BillingService:
             )
 
         boosts_result = await self.db.execute(
-            select(BillingEntitlement, BillingPayment, Listings.title)
+            select(BillingEntitlement, BillingPayment, Listings.title, Listings.views_count)
             .join(BillingPayment, BillingPayment.id == BillingEntitlement.payment_id)
             .join(Listings, Listings.id == BillingEntitlement.listing_id)
             .where(
@@ -701,19 +701,26 @@ class BillingService:
             )
             .order_by(BillingEntitlement.ends_at.asc().nullslast(), BillingEntitlement.created_at.desc())
         )
-        active_boosts = [
-            {
-                "payment_id": payment.id,
-                "listing_id": entitlement.listing_id,
-                "listing_title": listing_title,
-                "product_code": payment.product_code,
-                "entitlement_type": entitlement.entitlement_type,
-                "status": entitlement.status,
-                "starts_at": entitlement.starts_at,
-                "ends_at": entitlement.ends_at,
-            }
-            for entitlement, payment, listing_title in boosts_result.all()
-        ]
+        active_boosts = []
+        for entitlement, payment, listing_title, listing_views_count in boosts_result.all():
+            metadata = self._deserialize_metadata(entitlement.metadata_json)
+            baseline_views_count = int(metadata.get("baseline_views_count") or 0)
+            current_views_count = int(listing_views_count or 0)
+            active_boosts.append(
+                {
+                    "payment_id": payment.id,
+                    "listing_id": entitlement.listing_id,
+                    "listing_title": listing_title,
+                    "product_code": payment.product_code,
+                    "entitlement_type": entitlement.entitlement_type,
+                    "status": entitlement.status,
+                    "starts_at": entitlement.starts_at,
+                    "ends_at": entitlement.ends_at,
+                    "baseline_views_count": baseline_views_count,
+                    "current_views_count": current_views_count,
+                    "gained_views_count": max(current_views_count - baseline_views_count, 0),
+                }
+            )
 
         payment_counts = await self.db.execute(
             select(BillingPayment.status, func.count(BillingPayment.id), func.coalesce(func.sum(BillingPayment.amount_total), 0))
@@ -928,6 +935,11 @@ class BillingService:
                 await monetization_service.recompute_listing_state(listing.id)
 
         elif product["category"] == "listing_promotion":
+            listing = await self.db.get(Listings, payment.listing_id) if payment.listing_id else None
+            promotion_metadata = {
+                **(metadata or {}),
+                "baseline_views_count": int(listing.views_count or 0) if listing else 0,
+            }
             entitlement = BillingEntitlement(
                 user_id=payment.user_id,
                 payment_id=payment.id,
@@ -936,7 +948,7 @@ class BillingService:
                 status="active",
                 starts_at=period_start,
                 ends_at=period_end,
-                metadata_json=self._serialize_metadata(metadata),
+                metadata_json=self._serialize_metadata(promotion_metadata),
             )
             self.db.add(entitlement)
             promotion = ListingPromotion(

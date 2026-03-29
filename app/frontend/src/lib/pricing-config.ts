@@ -25,6 +25,9 @@ export interface PricingCardConfig {
   trialNoteKey?: string;
   helperNoteKey?: string;
   includedKeys: string[];
+  bestForKeys?: string[];
+  advantageKeys?: string[];
+  cabinetKeys?: string[];
   ctaKey: string;
   ctaTarget: PricingCtaTarget;
   recommended?: boolean;
@@ -136,6 +139,18 @@ export const PRICING_SEGMENTS: PricingSegmentConfig[] = [
           "pricing.individuals.first.feature.keepSameListing",
           "pricing.individuals.first.feature.verification",
         ],
+        bestForKeys: [
+          "pricing.individuals.first.bestFor.one",
+          "pricing.individuals.first.bestFor.two",
+        ],
+        advantageKeys: [
+          "pricing.individuals.first.advantage.one",
+          "pricing.individuals.first.advantage.two",
+        ],
+        cabinetKeys: [
+          "pricing.individuals.first.cabinet.one",
+          "pricing.individuals.first.cabinet.two",
+        ],
         ctaKey: "pricing.individuals.first.cta",
         ctaTarget: "create",
         recommended: true,
@@ -158,6 +173,18 @@ export const PRICING_SEGMENTS: PricingSegmentConfig[] = [
           "pricing.individuals.next.feature.noTrialReset",
           "pricing.individuals.next.feature.noLifetimeExtension",
           "pricing.individuals.next.feature.valueCapture",
+        ],
+        bestForKeys: [
+          "pricing.individuals.next.bestFor.one",
+          "pricing.individuals.next.bestFor.two",
+        ],
+        advantageKeys: [
+          "pricing.individuals.next.advantage.one",
+          "pricing.individuals.next.advantage.two",
+        ],
+        cabinetKeys: [
+          "pricing.individuals.next.cabinet.one",
+          "pricing.individuals.next.cabinet.two",
         ],
         ctaKey: "pricing.individuals.next.cta",
         ctaTarget: "create",
@@ -213,6 +240,18 @@ export const PRICING_SEGMENTS: PricingSegmentConfig[] = [
           "pricing.business.presence.feature.contactCta",
           "pricing.business.presence.feature.directoryVisibility",
         ],
+        bestForKeys: [
+          "pricing.business.presence.bestFor.one",
+          "pricing.business.presence.bestFor.two",
+        ],
+        advantageKeys: [
+          "pricing.business.presence.advantage.one",
+          "pricing.business.presence.advantage.two",
+        ],
+        cabinetKeys: [
+          "pricing.business.presence.cabinet.one",
+          "pricing.business.presence.cabinet.two",
+        ],
         ctaKey: "pricing.business.presence.cta",
         ctaTarget: "billing",
         billingKind: "subscription",
@@ -234,6 +273,18 @@ export const PRICING_SEGMENTS: PricingSegmentConfig[] = [
           "pricing.business.priority.feature.priority",
           "pricing.business.priority.feature.highlight",
           "pricing.business.priority.feature.badge",
+        ],
+        bestForKeys: [
+          "pricing.business.priority.bestFor.one",
+          "pricing.business.priority.bestFor.two",
+        ],
+        advantageKeys: [
+          "pricing.business.priority.advantage.one",
+          "pricing.business.priority.advantage.two",
+        ],
+        cabinetKeys: [
+          "pricing.business.priority.cabinet.one",
+          "pricing.business.priority.cabinet.two",
         ],
         ctaKey: "pricing.business.priority.cta",
         ctaTarget: "billing",
@@ -288,6 +339,18 @@ export const PRICING_SEGMENTS: PricingSegmentConfig[] = [
           "pricing.agencies.starter.feature.contactCta",
           "pricing.agencies.starter.feature.visibility",
         ],
+        bestForKeys: [
+          "pricing.agencies.starter.bestFor.one",
+          "pricing.agencies.starter.bestFor.two",
+        ],
+        advantageKeys: [
+          "pricing.agencies.starter.advantage.one",
+          "pricing.agencies.starter.advantage.two",
+        ],
+        cabinetKeys: [
+          "pricing.agencies.starter.cabinet.one",
+          "pricing.agencies.starter.cabinet.two",
+        ],
         ctaKey: "pricing.agencies.starter.cta",
         ctaTarget: "billing",
         billingKind: "subscription",
@@ -309,6 +372,18 @@ export const PRICING_SEGMENTS: PricingSegmentConfig[] = [
           "pricing.agencies.growth.feature.branding",
           "pricing.agencies.growth.feature.recommended",
           "pricing.agencies.growth.feature.strongerVisibility",
+        ],
+        bestForKeys: [
+          "pricing.agencies.growth.bestFor.one",
+          "pricing.agencies.growth.bestFor.two",
+        ],
+        advantageKeys: [
+          "pricing.agencies.growth.advantage.one",
+          "pricing.agencies.growth.advantage.two",
+        ],
+        cabinetKeys: [
+          "pricing.agencies.growth.cabinet.one",
+          "pricing.agencies.growth.cabinet.two",
         ],
         ctaKey: "pricing.agencies.growth.cta",
         ctaTarget: "billing",
@@ -332,6 +407,18 @@ export const PRICING_SEGMENTS: PricingSegmentConfig[] = [
           "pricing.agencies.pro.feature.branding",
           "pricing.agencies.pro.feature.priority",
           "pricing.agencies.pro.feature.strongestVisibility",
+        ],
+        bestForKeys: [
+          "pricing.agencies.pro.bestFor.one",
+          "pricing.agencies.pro.bestFor.two",
+        ],
+        advantageKeys: [
+          "pricing.agencies.pro.advantage.one",
+          "pricing.agencies.pro.advantage.two",
+        ],
+        cabinetKeys: [
+          "pricing.agencies.pro.cabinet.one",
+          "pricing.agencies.pro.cabinet.two",
         ],
         ctaKey: "pricing.agencies.pro.cta",
         ctaTarget: "billing",

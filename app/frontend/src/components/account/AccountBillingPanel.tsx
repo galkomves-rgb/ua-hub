@@ -463,6 +463,8 @@ export function AccountBillingPanel() {
                     <div className={`mt-2 grid gap-2 text-sm ${isDark ? "text-slate-300" : "text-slate-600"}`}>
                       <p>{t("account.billing.boostType")}: {t(getEntitlementLabelKey(item.entitlement_type))}</p>
                       <p>{t("account.billing.expiresAt")}: {formatDate(item.ends_at, locale) || t("account.billing.notAvailable")}</p>
+                      <p>{t("account.billing.viewsDuringBoost")}: +{item.gained_views_count}</p>
+                      <p>{t("account.billing.currentViews")}: {item.current_views_count}</p>
                     </div>
                   </div>
                 ))}

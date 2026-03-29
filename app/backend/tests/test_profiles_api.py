@@ -74,3 +74,48 @@ async def test_create_business_profile_generates_unique_slug_when_missing(api_cl
 
     assert response_two.status_code == 200
     assert response_two.json()["slug"] == "crypto-risk-app-2"
+
+
+@pytest.mark.asyncio
+async def test_business_profile_events_update_public_analytics(api_client: AsyncClient):
+    create_response = await api_client.post(
+        "/api/v1/profiles/business",
+        json={
+            "name": "Crypto Risk App",
+            "category": "services",
+            "city": "Kyiv",
+            "description": "desc",
+            "logo_url": None,
+            "cover_url": None,
+            "contacts_json": '{"phone":"+380971234567","email":"owner@example.com"}',
+            "tags_json": "[]",
+            "rating": "0",
+            "website": "https://example.com",
+            "social_links_json": "[]",
+            "service_areas_json": "[]",
+        },
+    )
+
+    assert create_response.status_code == 200
+    slug = create_response.json()["slug"]
+
+    for event_type in ["profile_view", "profile_view", "phone_click", "website_click"]:
+        event_response = await api_client.post(
+            f"/api/v1/profiles/business/{slug}/events",
+            json={"event_type": event_type},
+        )
+        assert event_response.status_code == 200
+        assert event_response.json() == {"status": "ok"}
+
+    detail_response = await api_client.get(f"/api/v1/profiles/business/{slug}")
+
+    assert detail_response.status_code == 200
+    payload = detail_response.json()
+    assert payload["profile_views_count"] == 2
+    assert payload["profile_views_30d"] == 2
+    assert payload["contact_clicks_count"] == 2
+    assert payload["contact_clicks_7d"] == 2
+    assert payload["contact_clicks_30d"] == 2
+    assert payload["phone_clicks_count"] == 1
+    assert payload["email_clicks_count"] == 0
+    assert payload["website_clicks_count"] == 1

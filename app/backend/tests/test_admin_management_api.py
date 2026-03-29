@@ -247,7 +247,7 @@ async def test_admin_business_detail_includes_full_profile_and_related_payments(
         service_areas_json='["Torrevieja","Alicante"]',
         verification_status="pending",
         subscription_request_status="pending",
-        subscription_requested_plan="premium",
+        subscription_requested_plan="business_priority",
         subscription_requested_at=now,
         created_at=now,
         updated_at=now,
@@ -302,7 +302,7 @@ async def test_admin_subscription_review_requires_payment_or_manual_override(api
             city="Madrid",
             description="desc",
             subscription_request_status="pending",
-            subscription_requested_plan="premium",
+            subscription_requested_plan="business_priority",
             subscription_requested_at=now,
             created_at=now,
             updated_at=now,
@@ -312,7 +312,7 @@ async def test_admin_subscription_review_requires_payment_or_manual_override(api
 
     response = await api_client.post(
         "/api/v1/admin/business/biz-1/subscription-review",
-        json={"decision": "approved", "plan": "premium"},
+        json={"decision": "approved", "plan": "business_priority"},
     )
 
     assert response.status_code == 400
@@ -322,7 +322,7 @@ async def test_admin_subscription_review_requires_payment_or_manual_override(api
         "/api/v1/admin/business/biz-1/subscription-review",
         json={
             "decision": "approved",
-            "plan": "premium",
+            "plan": "business_priority",
             "manual_override": True,
             "moderation_note": "User provided bank transfer confirmation after Stripe outage",
         },
@@ -330,5 +330,5 @@ async def test_admin_subscription_review_requires_payment_or_manual_override(api
 
     assert manual_response.status_code == 200
     payload = manual_response.json()
-    assert payload["subscription_plan"] == "premium"
+    assert payload["subscription_plan"] == "business_priority"
     assert payload["subscription_request_status"] == "approved"

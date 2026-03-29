@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from schemas.listings import ListingSummaryResponse
 
@@ -104,7 +104,7 @@ class AdminBusinessVerificationReviewRequest(BaseModel):
 
 class AdminBusinessSubscriptionReviewRequest(BaseModel):
     decision: str
-    plan: str | None = None
+    plan: str | None = Field(None, pattern="^(business_presence|business_priority|agency_starter|agency_growth|agency_pro)$")
     moderation_note: str | None = None
     manual_override: bool = False
 
