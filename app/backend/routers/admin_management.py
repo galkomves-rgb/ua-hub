@@ -8,12 +8,8 @@ from schemas.admin import (
     AdminBusinessProfileItemResponse,
     AdminBusinessProfilesPageResponse,
     AdminBusinessSubscriptionReviewRequest,
-    AdminBusinessVisibilityRequest,
-    AdminBusinessVisibilityResponse,
     AdminBusinessVerificationReviewRequest,
     AdminBillingPaymentsPageResponse,
-    AdminListingVisibilityRequest,
-    AdminListingVisibilityResponse,
     AdminReportItemResponse,
     AdminReportReviewRequest,
     AdminReportsPageResponse,
@@ -109,7 +105,6 @@ async def get_admin_billing_payments(
 async def get_admin_business_profiles(
     verification_status: str | None = Query(None),
     subscription_request_status: str | None = Query(None),
-    visibility_status: str | None = Query(None),
     q: str | None = Query(None),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -119,7 +114,6 @@ async def get_admin_business_profiles(
     return await AdminService(db).list_business_profiles(
         verification_status=verification_status,
         subscription_request_status=subscription_request_status,
-        visibility_status=visibility_status,
         query_text=q,
         limit=limit,
         offset=offset,
@@ -179,46 +173,4 @@ async def review_admin_business_subscription(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not item:
         raise HTTPException(status_code=404, detail="Business profile not found")
-    return item
-
-
-@router.post("/business/{slug}/visibility", response_model=AdminBusinessVisibilityResponse)
-async def update_admin_business_visibility(
-    slug: str,
-    payload: AdminBusinessVisibilityRequest,
-    admin_user: UserResponse = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db_session),
-):
-    try:
-        item = await AdminService(db).update_business_visibility(
-            slug=slug,
-            action=payload.action,
-            moderation_note=payload.moderation_note,
-            admin_user_id=str(admin_user.id),
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if not item:
-        raise HTTPException(status_code=404, detail="Business profile not found")
-    return item
-
-
-@router.post("/listings/{listing_id}/visibility", response_model=AdminListingVisibilityResponse)
-async def update_admin_listing_visibility(
-    listing_id: int,
-    payload: AdminListingVisibilityRequest,
-    admin_user: UserResponse = Depends(get_admin_user),
-    db: AsyncSession = Depends(get_db_session),
-):
-    try:
-        item = await AdminService(db).update_listing_visibility(
-            listing_id=listing_id,
-            action=payload.action,
-            moderation_note=payload.moderation_note,
-            admin_user_id=str(admin_user.id),
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    if not item:
-        raise HTTPException(status_code=404, detail="Listing not found")
     return item

@@ -150,9 +150,6 @@ class ProfileService:
             "service_areas_json": profile.service_areas_json or "[]",
             "is_verified": bool(profile.is_verified),
             "is_premium": bool(profile.is_premium),
-            "is_suspended": bool(profile.is_suspended),
-            "suspended_at": profile.suspended_at,
-            "suspension_reason": profile.suspension_reason,
             "verification_status": profile.verification_status,
             "verification_requested_at": profile.verification_requested_at,
             "verification_notes": profile.verification_notes,
@@ -341,12 +338,6 @@ class ProfileService:
         )
         return result.scalar_one_or_none()
 
-    async def get_public_business_profile(self, slug: str) -> BusinessProfile | None:
-        profile = await self.get_business_profile(slug)
-        if not profile or profile.is_suspended:
-            return None
-        return profile
-
     async def record_business_profile_event(
         self,
         slug: str,
@@ -354,7 +345,7 @@ class ProfileService:
         actor_user_id: str | None = None,
         metadata_json: str | None = None,
     ) -> BusinessProfile | None:
-        profile = await self.get_public_business_profile(slug)
+        profile = await self.get_business_profile(slug)
         if not profile:
             return None
 
@@ -513,8 +504,6 @@ class ProfileService:
             query = query.where(BusinessProfile.city == city)
         if is_verified is not None:
             query = query.where(BusinessProfile.is_verified == is_verified)
-
-        query = query.where(BusinessProfile.is_suspended.is_(False))
 
         query = query.limit(limit).offset(offset)
         result = await self.db.execute(query)

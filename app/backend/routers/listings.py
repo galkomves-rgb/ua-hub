@@ -182,8 +182,6 @@ async def get_listing(
 
     if not listing:
         raise HTTPException(status_code=404, detail="Listing not found")
-    if not await service.is_listing_publicly_visible(listing):
-        raise HTTPException(status_code=404, detail="Listing not found")
 
     if record_view:
         await service.record_view(listing_id)

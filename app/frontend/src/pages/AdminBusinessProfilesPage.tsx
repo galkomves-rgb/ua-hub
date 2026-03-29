@@ -1,16 +1,13 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, CheckCircle2, ChevronDown, ChevronUp, CreditCard, ExternalLink, Globe, Mail, MapPin, Phone, Search, ShieldAlert, Trash2, XCircle } from "lucide-react";
-import { useSearchParams } from "react-router-dom";
+import { Building2, CheckCircle2, ChevronDown, ChevronUp, CreditCard, ExternalLink, Globe, Mail, MapPin, Phone, Search, ShieldAlert, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import AdminPagination from "@/components/admin/AdminPagination";
 import {
   fetchAdminBusinessProfileDetail,
   fetchAdminBusinessProfiles,
   reviewAdminBusinessSubscription,
-  updateAdminBusinessVisibility,
   type BusinessSubscriptionPlan,
-  type AdminBusinessVisibilityPayload,
   reviewAdminBusinessVerification,
   type AdminBusinessProfileDetail,
   type AdminBusinessProfileItem,
@@ -20,7 +17,6 @@ import { useI18n } from "@/lib/i18n";
 
 const VERIFICATION_FILTERS = ["all", "pending", "verified", "rejected", "unverified"] as const;
 const SUBSCRIPTION_FILTERS = ["all", "pending", "approved", "rejected"] as const;
-const VISIBILITY_FILTERS = ["all", "active", "suspended"] as const;
 const SUBSCRIPTION_PLAN_OPTIONS: BusinessSubscriptionPlan[] = [
   "business_presence",
   "business_priority",
@@ -127,7 +123,6 @@ function AdminBusinessCard({
   isDark,
   onVerificationDecision,
   onSubscriptionDecision,
-  onVisibilityAction,
   isMutating,
 }: {
   item: AdminBusinessProfileItem;
@@ -135,7 +130,6 @@ function AdminBusinessCard({
   isDark: boolean;
   onVerificationDecision: (slug: string, decision: "approved" | "rejected", moderationNote?: string | null) => void;
   onSubscriptionDecision: (slug: string, decision: "approved" | "rejected", plan?: BusinessSubscriptionPlan, moderationNote?: string | null, manualOverride?: boolean) => void;
-  onVisibilityAction: (slug: string, payload: AdminBusinessVisibilityPayload) => void;
   isMutating: boolean;
 }) {
   const [selectedPlan, setSelectedPlan] = useState<BusinessSubscriptionPlan>(
@@ -180,11 +174,6 @@ function AdminBusinessCard({
             <span className={`rounded-full px-3 py-1 font-semibold ${isDark ? "bg-[#173052] text-slate-300" : "bg-white text-slate-600"}`}>
               {item.city}
             </span>
-            {item.is_suspended ? (
-              <span className={`rounded-full px-3 py-1 font-semibold ${isDark ? "bg-red-900/30 text-red-300" : "bg-red-50 text-red-700"}`}>
-                {locale === "ua" ? "Призупинено" : locale === "es" ? "Suspendido" : "Suspended"}
-              </span>
-            ) : null}
           </div>
 
           <h3 className={`text-base font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{item.name}</h3>
@@ -194,8 +183,6 @@ function AdminBusinessCard({
             <p>{locale === "ua" ? "Категорія" : locale === "es" ? "Categoría" : "Category"}: {item.category}</p>
             <p>{locale === "ua" ? "Верифікація" : locale === "es" ? "Verificación" : "Verification"}: {item.verification_status}</p>
             <p>{locale === "ua" ? "Запит верифікації" : locale === "es" ? "Solicitud de verificación" : "Verification requested"}: {formatDate(item.verification_requested_at, locale)}</p>
-            <p>{locale === "ua" ? "Видимість" : locale === "es" ? "Visibilidad" : "Visibility"}: {item.is_suspended ? (locale === "ua" ? "Призупинено" : locale === "es" ? "Suspendido" : "Suspended") : (locale === "ua" ? "Активний" : locale === "es" ? "Activo" : "Active")}</p>
-            <p>{locale === "ua" ? "Причина" : locale === "es" ? "Motivo" : "Reason"}: {item.suspension_reason || "-"}</p>
             <p>{locale === "ua" ? "Поточний план" : locale === "es" ? "Plan actual" : "Current plan"}: {businessPlanLabel(item.subscription_plan)}</p>
             <p>{locale === "ua" ? "Запит підписки" : locale === "es" ? "Solicitud de suscripción" : "Subscription request"}: {item.subscription_request_status || "-"}</p>
             <p>{locale === "ua" ? "План у запиті" : locale === "es" ? "Plan solicitado" : "Requested plan"}: {businessPlanLabel(item.subscription_requested_plan)}</p>
@@ -242,39 +229,6 @@ function AdminBusinessCard({
               >
                 <XCircle className="h-4 w-4" />
                 {locale === "ua" ? "Відхилити" : locale === "es" ? "Rechazar" : "Reject"}
-              </button>
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                disabled={isMutating}
-                onClick={() => onVisibilityAction(item.slug, {
-                  action: item.is_suspended ? "restore" : "suspend",
-                  moderation_note: subscriptionNote.trim() || verificationNote.trim() || item.suspension_reason || "",
-                })}
-                className={`inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ${isMutating ? "cursor-not-allowed opacity-60" : ""} ${item.is_suspended ? (isDark ? "bg-blue-900/30 text-blue-300" : "bg-blue-50 text-blue-700") : (isDark ? "bg-amber-900/30 text-amber-300" : "bg-amber-50 text-amber-700")}`}
-              >
-                <ShieldAlert className="h-4 w-4" />
-                {item.is_suspended
-                  ? (locale === "ua" ? "Відновити показ" : locale === "es" ? "Restaurar visibilidad" : "Restore visibility")
-                  : (locale === "ua" ? "Призупинити показ" : locale === "es" ? "Suspender visibilidad" : "Suspend visibility")}
-              </button>
-              <button
-                type="button"
-                disabled={isMutating}
-                onClick={() => {
-                  if (!window.confirm(locale === "ua" ? `Видалити бізнес-профіль ${item.name}?` : locale === "es" ? `¿Eliminar el perfil ${item.name}?` : `Delete ${item.name} business profile?`)) {
-                    return;
-                  }
-                  onVisibilityAction(item.slug, {
-                    action: "delete",
-                    moderation_note: subscriptionNote.trim() || verificationNote.trim() || item.suspension_reason || "",
-                  });
-                }}
-                className={`inline-flex items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold ${isMutating ? "cursor-not-allowed opacity-60" : ""} ${isDark ? "bg-red-900/30 text-red-300" : "bg-red-50 text-red-700"}`}
-              >
-                <Trash2 className="h-4 w-4" />
-                {locale === "ua" ? "Видалити" : locale === "es" ? "Eliminar" : "Delete"}
               </button>
             </div>
           </div>
@@ -589,39 +543,15 @@ export default function AdminBusinessProfilesPage() {
   const { locale } = useI18n();
   const isDark = theme === "dark";
   const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
 
-  const initialVerification = (searchParams.get("verification_status") as (typeof VERIFICATION_FILTERS)[number] | null) ?? "all";
-  const initialSubscription = (searchParams.get("subscription_request_status") as (typeof SUBSCRIPTION_FILTERS)[number] | null) ?? "all";
-  const initialVisibility = (searchParams.get("visibility_status") as (typeof VISIBILITY_FILTERS)[number] | null) ?? "all";
-  const initialQuery = searchParams.get("q") ?? "";
-
-  const [verificationStatus, setVerificationStatus] = useState<(typeof VERIFICATION_FILTERS)[number]>(
-    VERIFICATION_FILTERS.includes(initialVerification) ? initialVerification : "all",
-  );
-  const [subscriptionStatus, setSubscriptionStatus] = useState<(typeof SUBSCRIPTION_FILTERS)[number]>(
-    SUBSCRIPTION_FILTERS.includes(initialSubscription) ? initialSubscription : "all",
-  );
-  const [visibilityStatus, setVisibilityStatus] = useState<(typeof VISIBILITY_FILTERS)[number]>(
-    VISIBILITY_FILTERS.includes(initialVisibility) ? initialVisibility : "all",
-  );
-  const [searchText, setSearchText] = useState(initialQuery);
+  const [verificationStatus, setVerificationStatus] = useState<(typeof VERIFICATION_FILTERS)[number]>("pending");
+  const [subscriptionStatus, setSubscriptionStatus] = useState<(typeof SUBSCRIPTION_FILTERS)[number]>("pending");
+  const [searchText, setSearchText] = useState("");
   const [offset, setOffset] = useState(0);
 
   useEffect(() => {
     setOffset(0);
-  }, [verificationStatus, subscriptionStatus, visibilityStatus, searchText]);
-
-  useEffect(() => {
-    const params = new URLSearchParams();
-    params.set("verification_status", verificationStatus);
-    params.set("subscription_request_status", subscriptionStatus);
-    params.set("visibility_status", visibilityStatus);
-    if (searchText.trim()) {
-      params.set("q", searchText.trim());
-    }
-    setSearchParams(params, { replace: true });
-  }, [verificationStatus, subscriptionStatus, visibilityStatus, searchText, setSearchParams]);
+  }, [verificationStatus, subscriptionStatus, searchText]);
 
   const profilesQuery = useQuery({
     queryKey: ["admin-business-profiles", verificationStatus, subscriptionStatus, searchText, offset],
@@ -629,7 +559,6 @@ export default function AdminBusinessProfilesPage() {
       fetchAdminBusinessProfiles({
         verification_status: verificationStatus,
         subscription_request_status: subscriptionStatus,
-        visibility_status: visibilityStatus,
         q: searchText.trim() || undefined,
         limit: PAGE_SIZE,
         offset,
@@ -664,29 +593,9 @@ export default function AdminBusinessProfilesPage() {
     },
   });
 
-  const visibilityMutation = useMutation({
-    mutationFn: ({ slug, payload }: { slug: string; payload: AdminBusinessVisibilityPayload }) =>
-      updateAdminBusinessVisibility(slug, payload),
-    onSuccess: async (_response, variables) => {
-      await queryClient.invalidateQueries({ queryKey: ["admin-business-profiles"] });
-      await queryClient.invalidateQueries({ queryKey: ["admin-business-profile-detail"] });
-      await queryClient.invalidateQueries({ queryKey: ["admin-overview"] });
-      toast.success(
-        variables.payload.action === "delete"
-          ? (locale === "ua" ? "Бізнес-профіль видалено" : locale === "es" ? "Perfil eliminado" : "Business profile deleted")
-          : variables.payload.action === "restore"
-            ? (locale === "ua" ? "Показ бізнесу відновлено" : locale === "es" ? "Visibilidad restaurada" : "Business visibility restored")
-            : (locale === "ua" ? "Показ бізнесу призупинено" : locale === "es" ? "Visibilidad suspendida" : "Business visibility suspended"),
-      );
-    },
-    onError: (error) => {
-      toast.error(error instanceof Error ? error.message : "Request failed");
-    },
-  });
-
   const page = profilesQuery.data;
   const items = page?.items ?? [];
-  const isMutating = verificationMutation.isPending || subscriptionMutation.isPending || visibilityMutation.isPending;
+  const isMutating = verificationMutation.isPending || subscriptionMutation.isPending;
 
   return (
     <div className="space-y-5">
@@ -707,7 +616,7 @@ export default function AdminBusinessProfilesPage() {
       </section>
 
       <section className={`rounded-3xl border p-4 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
-        <div className="grid gap-2.5 xl:grid-cols-[minmax(0,1fr)_180px_180px_180px]">
+        <div className="grid gap-2.5 xl:grid-cols-[minmax(0,1fr)_200px_200px]">
           <label className={`flex items-center gap-3 rounded-2xl border px-3 ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-300" : "border-slate-300 bg-white text-slate-700"}`}>
             <Search className="h-4 w-4" />
             <input
@@ -732,15 +641,6 @@ export default function AdminBusinessProfilesPage() {
             className={`rounded-2xl border px-3 py-2.5 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
           >
             {SUBSCRIPTION_FILTERS.map((item) => (
-              <option key={item} value={item}>{item}</option>
-            ))}
-          </select>
-          <select
-            value={visibilityStatus}
-            onChange={(event) => setVisibilityStatus(event.target.value as (typeof VISIBILITY_FILTERS)[number])}
-            className={`rounded-2xl border px-3 py-2.5 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
-          >
-            {VISIBILITY_FILTERS.map((item) => (
               <option key={item} value={item}>{item}</option>
             ))}
           </select>
@@ -779,7 +679,6 @@ export default function AdminBusinessProfilesPage() {
               isDark={isDark}
               onVerificationDecision={(slug, decision, moderationNote) => verificationMutation.mutate({ slug, decision, moderationNote })}
               onSubscriptionDecision={(slug, decision, plan, moderationNote, manualOverride) => subscriptionMutation.mutate({ slug, decision, plan, moderationNote, manualOverride })}
-              onVisibilityAction={(slug, payload) => visibilityMutation.mutate({ slug, payload })}
               isMutating={isMutating}
             />
           ))}

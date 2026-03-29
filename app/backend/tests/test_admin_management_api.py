@@ -14,7 +14,6 @@ from dependencies.auth import get_admin_user
 from dependencies.database import get_db_session
 from models.auth import User
 from models.billing import BillingPayment
-from models.listings import Listings
 from models.messages import MessageReport
 from models.profiles import BusinessProfile, UserProfile
 
@@ -333,98 +332,3 @@ async def test_admin_subscription_review_requires_payment_or_manual_override(api
     payload = manual_response.json()
     assert payload["subscription_plan"] == "business_priority"
     assert payload["subscription_request_status"] == "approved"
-
-
-@pytest.mark.asyncio
-async def test_admin_business_visibility_suspend_restore_delete(api_client: AsyncClient, db_session: AsyncSession):
-    now = datetime.now(timezone.utc)
-    business = BusinessProfile(
-        owner_user_id="user-1",
-        slug="biz-visibility",
-        name="Biz Visibility",
-        category="legal",
-        city="Madrid",
-        description="desc",
-        created_at=now,
-        updated_at=now,
-    )
-    db_session.add(business)
-    await db_session.commit()
-
-    suspend_response = await api_client.post(
-        "/api/v1/admin/business/biz-visibility/visibility",
-        json={"action": "suspend", "moderation_note": "Complaints under review"},
-    )
-    assert suspend_response.status_code == 200
-    assert suspend_response.json()["is_suspended"] is True
-
-    restore_response = await api_client.post(
-        "/api/v1/admin/business/biz-visibility/visibility",
-        json={"action": "restore"},
-    )
-    assert restore_response.status_code == 200
-    assert restore_response.json()["is_suspended"] is False
-
-    delete_response = await api_client.post(
-        "/api/v1/admin/business/biz-visibility/visibility",
-        json={"action": "delete", "moderation_note": "Fraud confirmed"},
-    )
-    assert delete_response.status_code == 200
-    assert delete_response.json()["deleted"] is True
-
-
-@pytest.mark.asyncio
-async def test_admin_listing_visibility_archive_restore_delete(api_client: AsyncClient, db_session: AsyncSession):
-    now = datetime.now(timezone.utc)
-    listing = Listings(
-        user_id="user-1",
-        module="services",
-        category="translation",
-        title="Visible listing",
-        description="Long enough description",
-        price=None,
-        currency="EUR",
-        city="Madrid",
-        region=None,
-        owner_type="private_user",
-        owner_id="user-1",
-        pricing_tier="free",
-        visibility="standard",
-        ranking_score=0,
-        badges="[]",
-        images_json="[]",
-        expiry_date=now,
-        status="published",
-        is_featured=False,
-        is_promoted=False,
-        is_verified=False,
-        moderation_reason=None,
-        meta_json="{}",
-        views_count=0,
-        created_at=now,
-        updated_at=now,
-    )
-    db_session.add(listing)
-    await db_session.commit()
-    await db_session.refresh(listing)
-
-    archive_response = await api_client.post(
-        f"/api/v1/admin/listings/{listing.id}/visibility",
-        json={"action": "archive"},
-    )
-    assert archive_response.status_code == 200
-    assert archive_response.json()["status"] == "archived"
-
-    restore_response = await api_client.post(
-        f"/api/v1/admin/listings/{listing.id}/visibility",
-        json={"action": "restore"},
-    )
-    assert restore_response.status_code == 200
-    assert restore_response.json()["status"] == "published"
-
-    delete_response = await api_client.post(
-        f"/api/v1/admin/listings/{listing.id}/visibility",
-        json={"action": "delete"},
-    )
-    assert delete_response.status_code == 200
-    assert delete_response.json()["deleted"] is True

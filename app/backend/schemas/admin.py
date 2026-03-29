@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from schemas.listings import LISTING_STATUS_PATTERN, ListingSummaryResponse
+from schemas.listings import ListingSummaryResponse
 
 
 class AdminOverviewCountsResponse(BaseModel):
@@ -12,7 +12,6 @@ class AdminOverviewCountsResponse(BaseModel):
     total_listings_count: int
     total_users_count: int
     total_business_profiles_count: int
-    suspended_business_profiles_count: int
     open_reports_count: int
     pending_payments_count: int
     payment_issues_count: int
@@ -81,9 +80,6 @@ class AdminBusinessProfileItemResponse(BaseModel):
     verification_status: str
     verification_requested_at: datetime | None = None
     verification_notes: str | None = None
-    is_suspended: bool = False
-    suspended_at: datetime | None = None
-    suspension_reason: str | None = None
     subscription_plan: str | None = None
     subscription_request_status: str | None = None
     subscription_requested_plan: str | None = None
@@ -111,30 +107,6 @@ class AdminBusinessSubscriptionReviewRequest(BaseModel):
     plan: str | None = Field(None, pattern="^(business_presence|business_priority|agency_starter|agency_growth|agency_pro)$")
     moderation_note: str | None = None
     manual_override: bool = False
-
-
-class AdminBusinessVisibilityRequest(BaseModel):
-    action: str = Field(..., pattern="^(suspend|restore|delete)$")
-    moderation_note: str | None = None
-
-
-class AdminBusinessVisibilityResponse(BaseModel):
-    slug: str
-    deleted: bool = False
-    is_suspended: bool = False
-    suspended_at: datetime | None = None
-    suspension_reason: str | None = None
-
-
-class AdminListingVisibilityRequest(BaseModel):
-    action: str = Field(..., pattern="^(archive|restore|delete)$")
-    moderation_note: str | None = None
-
-
-class AdminListingVisibilityResponse(BaseModel):
-    id: int
-    deleted: bool = False
-    status: str | None = Field(None, pattern=LISTING_STATUS_PATTERN)
 
 
 class AdminBusinessRelatedPaymentItemResponse(BaseModel):
