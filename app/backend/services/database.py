@@ -36,7 +36,10 @@ async def initialize_database():
     try:
         logger.info("🔧 Starting database initialization...")
         await db_manager.init_db()
-        logger.info("🔧 Database connection initialized, now creating tables if tables not exist...")
+        logger.info("🔧 Database connection initialized, checking and repairing existing tables...")
+        await db_manager.check_and_repair_existing_tables()
+        logger.info("🔧 Table structure repair completed")
+        logger.info("🔧 Creating tables if they do not exist...")
         await db_manager.create_tables()
         logger.info("🔧 Table creation completed")
         logger.info("Database initialized successfully")
