@@ -164,9 +164,9 @@ function AdminBusinessCard({
   const canApproveSubscription = pendingSubscription && (paidEvidence || canApproveWithFallback);
 
   return (
-    <article className={`rounded-3xl border p-5 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="space-y-3">
+    <article className={`rounded-3xl border p-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div className="space-y-2.5">
           <div className="flex flex-wrap items-center gap-2 text-xs">
             <span className={`rounded-full px-3 py-1 font-semibold ${isDark ? "bg-[#173052] text-slate-100" : "bg-white text-slate-700"}`}>
               {item.slug}
@@ -176,7 +176,7 @@ function AdminBusinessCard({
             </span>
           </div>
 
-          <h3 className={`text-lg font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{item.name}</h3>
+          <h3 className={`text-base font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{item.name}</h3>
 
           <div className={`grid gap-2 text-sm sm:grid-cols-2 ${isDark ? "text-slate-400" : "text-slate-600"}`}>
             <p>Owner: {item.owner_user_id}</p>
@@ -199,7 +199,7 @@ function AdminBusinessCard({
           </button>
         </div>
 
-        <div className="w-full max-w-sm space-y-4 xl:w-[300px]">
+        <div className="w-full max-w-2xl space-y-3 xl:w-[420px]">
           <div className={`rounded-2xl border p-3 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
             <p className={`text-xs font-semibold uppercase tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
               {locale === "ua" ? "Верифікація" : locale === "es" ? "Verificación" : "Verification"}
@@ -207,7 +207,7 @@ function AdminBusinessCard({
             <textarea
               value={verificationNote}
               onChange={(event) => setVerificationNote(event.target.value)}
-              rows={3}
+              rows={2}
               placeholder={locale === "ua" ? "Нотатка модератора" : locale === "es" ? "Nota de moderación" : "Moderation note"}
               className={`mt-3 w-full rounded-xl border px-3 py-2 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
             />
@@ -237,32 +237,37 @@ function AdminBusinessCard({
             <p className={`text-xs font-semibold uppercase tracking-[0.12em] ${isDark ? "text-slate-400" : "text-slate-500"}`}>
               {locale === "ua" ? "Запит підписки" : locale === "es" ? "Solicitud de suscripción" : "Subscription request"}
             </p>
-            <select
-              value={selectedPlan}
-              onChange={(event) => setSelectedPlan(event.target.value as BusinessSubscriptionPlan)}
-              disabled={isMutating}
-              className={`mt-3 w-full rounded-xl border px-3 py-2 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
-            >
-              {SUBSCRIPTION_PLAN_OPTIONS.map((plan) => (
-                <option key={plan} value={plan}>
-                  {businessPlanLabel(plan)}
-                </option>
-              ))}
-            </select>
+            <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+              <select
+                value={selectedPlan}
+                onChange={(event) => setSelectedPlan(event.target.value as BusinessSubscriptionPlan)}
+                disabled={isMutating}
+                className={`w-full rounded-xl border px-3 py-2 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
+              >
+                {SUBSCRIPTION_PLAN_OPTIONS.map((plan) => (
+                  <option key={plan} value={plan}>
+                    {businessPlanLabel(plan)}
+                  </option>
+                ))}
+              </select>
+              <label className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-xs ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
+                <input
+                  type="checkbox"
+                  checked={manualOverride}
+                  onChange={(event) => setManualOverride(event.target.checked)}
+                  className="h-4 w-4"
+                />
+                <span>{locale === "ua" ? "Manual fallback" : locale === "es" ? "Fallback manual" : "Manual fallback"}</span>
+              </label>
+            </div>
             <textarea
               value={subscriptionNote}
               onChange={(event) => setSubscriptionNote(event.target.value)}
-              rows={3}
+              rows={2}
               placeholder={locale === "ua" ? "Причина рішення / доказ оплати" : locale === "es" ? "Motivo de la decisión / prueba de pago" : "Decision reason / payment proof note"}
               className={`mt-3 w-full rounded-xl border px-3 py-2 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
             />
-            <label className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-3 text-xs ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
-              <input
-                type="checkbox"
-                checked={manualOverride}
-                onChange={(event) => setManualOverride(event.target.checked)}
-                className="mt-0.5"
-              />
+            <div className={`mt-3 rounded-xl border px-3 py-2 text-xs ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
               <span>
                 {locale === "ua"
                   ? "Ручна активація fallback: використовуйте лише якщо система не зафіксувала оплату, але користувач надав доказ."
@@ -270,7 +275,7 @@ function AdminBusinessCard({
                     ? "Activación manual de respaldo: úsala solo si el sistema no registró el pago pero el usuario aportó prueba."
                     : "Manual fallback activation: use only when the system missed the payment but the user provided proof."}
               </span>
-            </label>
+            </div>
             <div className={`mt-3 rounded-xl border px-3 py-2 text-xs ${
               paidEvidence
                 ? isDark ? "border-emerald-900/40 bg-emerald-950/20 text-emerald-300" : "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -305,7 +310,7 @@ function AdminBusinessCard({
       </div>
 
       {isExpanded ? (
-        <div className={`mt-5 rounded-2xl border p-4 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+        <div className={`mt-4 rounded-2xl border p-3.5 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
           {detailQuery.isLoading ? (
             <StateBox
               isDark={isDark}
@@ -323,18 +328,18 @@ function AdminBusinessCard({
           ) : null}
 
           {detail ? (
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div className={`overflow-hidden rounded-2xl border ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
-                <div className={`h-28 w-full ${detail.cover_url ? "" : isDark ? "bg-gradient-to-r from-[#173052] to-[#264d7f]" : "bg-gradient-to-r from-blue-100 to-amber-50"}`}>
+                <div className={`h-24 w-full ${detail.cover_url ? "" : isDark ? "bg-gradient-to-r from-[#173052] to-[#264d7f]" : "bg-gradient-to-r from-blue-100 to-amber-50"}`}>
                   {detail.cover_url ? <img src={detail.cover_url} alt={detail.name} className="h-full w-full object-cover" /> : null}
                 </div>
-                <div className="flex flex-col gap-4 p-4 md:flex-row md:items-start">
-                  <div className={`flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-2xl font-bold ${isDark ? "bg-[#173052] text-slate-100" : "bg-white text-slate-700"}`}>
+                <div className="flex flex-col gap-3 p-3.5 md:flex-row md:items-start">
+                  <div className={`flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl text-xl font-bold ${isDark ? "bg-[#173052] text-slate-100" : "bg-white text-slate-700"}`}>
                     {detail.logo_url ? <img src={detail.logo_url} alt={detail.name} className="h-full w-full object-cover" /> : detail.name.charAt(0)}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h4 className={`text-xl font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{detail.name}</h4>
+                      <h4 className={`text-lg font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{detail.name}</h4>
                       {detail.is_verified ? (
                         <span className={`rounded-full px-3 py-1 text-xs font-semibold ${isDark ? "bg-emerald-900/30 text-emerald-300" : "bg-emerald-50 text-emerald-700"}`}>
                           {locale === "ua" ? "Верифіковано" : locale === "es" ? "Verificado" : "Verified"}
@@ -347,8 +352,8 @@ function AdminBusinessCard({
                       ) : null}
                     </div>
                     <p className={`mt-1 text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>{detail.category} · {detail.city}</p>
-                    <p className={`mt-3 whitespace-pre-wrap text-sm leading-6 ${isDark ? "text-slate-300" : "text-slate-700"}`}>{detail.description}</p>
-                    <div className="mt-4 flex flex-wrap gap-2">
+                    <p className={`mt-2.5 whitespace-pre-wrap text-sm leading-6 ${isDark ? "text-slate-300" : "text-slate-700"}`}>{detail.description}</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
                       {detail.public_preview_url ? (
                         <a
                           href={normalizeExternalUrl(detail.public_preview_url)}
@@ -365,12 +370,12 @@ function AdminBusinessCard({
                 </div>
               </div>
 
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
-                <div className={`rounded-2xl border p-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+              <div className="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+                <div className={`rounded-2xl border p-3.5 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
                   <p className={`text-xs font-semibold uppercase tracking-[0.12em] ${isDark ? "text-slate-500" : "text-slate-500"}`}>
                     {locale === "ua" ? "Дані профілю" : locale === "es" ? "Datos del perfil" : "Profile data"}
                   </p>
-                  <div className={`mt-3 grid gap-2 text-sm ${isDark ? "text-slate-300" : "text-slate-700"}`}>
+                  <div className={`mt-2.5 grid gap-1.5 text-sm ${isDark ? "text-slate-300" : "text-slate-700"}`}>
                     <p>Slug: {detail.slug}</p>
                     <p>Owner ID: {detail.owner_user_id}</p>
                     <p>Owner email: {detail.owner_email || "-"}</p>
@@ -380,7 +385,7 @@ function AdminBusinessCard({
                   </div>
 
                   {tags.length > 0 ? (
-                    <div className="mt-4">
+                    <div className="mt-3.5">
                       <p className={`text-xs font-semibold uppercase tracking-[0.12em] ${isDark ? "text-slate-500" : "text-slate-500"}`}>
                         {locale === "ua" ? "Теги" : locale === "es" ? "Etiquetas" : "Tags"}
                       </p>
@@ -395,7 +400,7 @@ function AdminBusinessCard({
                   ) : null}
 
                   {serviceAreas.length > 0 ? (
-                    <div className="mt-4">
+                    <div className="mt-3.5">
                       <p className={`text-xs font-semibold uppercase tracking-[0.12em] ${isDark ? "text-slate-500" : "text-slate-500"}`}>
                         {locale === "ua" ? "Зони роботи" : locale === "es" ? "Zonas de servicio" : "Service areas"}
                       </p>
@@ -408,12 +413,12 @@ function AdminBusinessCard({
                   ) : null}
                 </div>
 
-                <div className="space-y-4">
-                  <div className={`rounded-2xl border p-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+                <div className="space-y-3">
+                  <div className={`rounded-2xl border p-3.5 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
                     <p className={`text-xs font-semibold uppercase tracking-[0.12em] ${isDark ? "text-slate-500" : "text-slate-500"}`}>
                       {locale === "ua" ? "Контакти" : locale === "es" ? "Contacto" : "Contact"}
                     </p>
-                    <div className="mt-3 space-y-2 text-sm">
+                    <div className="mt-2.5 space-y-2 text-sm">
                       <div className={`flex items-start gap-2 ${isDark ? "text-slate-300" : "text-slate-700"}`}>
                         <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
                         <span>{detail.city}</span>
@@ -454,20 +459,20 @@ function AdminBusinessCard({
                     </div>
                   </div>
 
-                  <div className={`rounded-2xl border p-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+                  <div className={`rounded-2xl border p-3.5 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
                     <div className="flex items-center gap-2">
                       <CreditCard className={`h-4 w-4 ${isDark ? "text-slate-300" : "text-slate-700"}`} />
                       <p className={`text-xs font-semibold uppercase tracking-[0.12em] ${isDark ? "text-slate-500" : "text-slate-500"}`}>
                         {locale === "ua" ? "Платежі за підписку" : locale === "es" ? "Pagos de suscripción" : "Subscription payments"}
                       </p>
                     </div>
-                    <div className="mt-3 space-y-3">
+                    <div className="mt-2.5 space-y-2.5">
                       {detail.related_payments.length === 0 ? (
                         <div className={`rounded-xl border px-3 py-3 text-xs ${isDark ? "border-[#22416b] bg-[#11203a] text-slate-400" : "border-slate-200 bg-white text-slate-600"}`}>
                           {locale === "ua" ? "Пов’язаних платежів не знайдено." : locale === "es" ? "No se encontraron pagos relacionados." : "No related payments were found."}
                         </div>
                       ) : detail.related_payments.map((payment) => (
-                        <div key={payment.id} className={`rounded-xl border p-3 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+                        <div key={payment.id} className={`rounded-xl border p-2.5 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
                           <div className="flex flex-wrap items-center gap-2">
                             <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${isDark ? "bg-[#173052] text-slate-100" : "bg-slate-100 text-slate-700"}`}>#{payment.id}</span>
                             <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
@@ -593,12 +598,12 @@ export default function AdminBusinessProfilesPage() {
   const isMutating = verificationMutation.isPending || subscriptionMutation.isPending;
 
   return (
-    <div className="space-y-6">
-      <section className={`rounded-3xl border p-6 md:p-8 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
-        <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
-          <Building2 className="h-6 w-6" />
+    <div className="space-y-5">
+      <section className={`rounded-3xl border p-5 md:p-6 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+        <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+          <Building2 className="h-5 w-5" />
         </div>
-        <h2 className={`text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+        <h2 className={`text-xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
           {locale === "ua" ? "Бізнес-профілі" : locale === "es" ? "Perfiles de negocio" : "Business profiles"}
         </h2>
         <p className={`mt-2 text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>
@@ -610,21 +615,21 @@ export default function AdminBusinessProfilesPage() {
         </p>
       </section>
 
-      <section className={`rounded-3xl border p-5 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_220px_220px]">
-          <label className={`flex items-center gap-3 rounded-2xl border px-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-300" : "border-slate-300 bg-white text-slate-700"}`}>
+      <section className={`rounded-3xl border p-4 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+        <div className="grid gap-2.5 xl:grid-cols-[minmax(0,1fr)_200px_200px]">
+          <label className={`flex items-center gap-3 rounded-2xl border px-3 ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-300" : "border-slate-300 bg-white text-slate-700"}`}>
             <Search className="h-4 w-4" />
             <input
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
               placeholder={locale === "ua" ? "Пошук за slug, назвою, owner id" : locale === "es" ? "Buscar por slug, nombre, owner id" : "Search by slug, name, owner id"}
-              className="h-12 w-full bg-transparent text-sm outline-none"
+              className="h-10 w-full bg-transparent text-sm outline-none"
             />
           </label>
           <select
             value={verificationStatus}
             onChange={(event) => setVerificationStatus(event.target.value as (typeof VERIFICATION_FILTERS)[number])}
-            className={`rounded-2xl border px-4 py-3 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
+            className={`rounded-2xl border px-3 py-2.5 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
           >
             {VERIFICATION_FILTERS.map((item) => (
               <option key={item} value={item}>{item}</option>
@@ -633,7 +638,7 @@ export default function AdminBusinessProfilesPage() {
           <select
             value={subscriptionStatus}
             onChange={(event) => setSubscriptionStatus(event.target.value as (typeof SUBSCRIPTION_FILTERS)[number])}
-            className={`rounded-2xl border px-4 py-3 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
+            className={`rounded-2xl border px-3 py-2.5 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
           >
             {SUBSCRIPTION_FILTERS.map((item) => (
               <option key={item} value={item}>{item}</option>
@@ -641,7 +646,7 @@ export default function AdminBusinessProfilesPage() {
           </select>
         </div>
 
-        <div className="mt-6 space-y-4">
+        <div className="mt-5 space-y-3">
           {profilesQuery.isLoading ? (
             <StateBox
               isDark={isDark}

@@ -77,12 +77,12 @@ export default function AdminOverviewPage() {
   }, [locale, overviewQuery.data?.counts]);
 
   return (
-    <div className="space-y-6">
-      <section className={`rounded-3xl border p-6 md:p-8 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
-        <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-[#0057B8]">
-          <BarChart3 className="h-6 w-6" />
+    <div className="space-y-5">
+      <section className={`rounded-3xl border p-5 md:p-6 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+        <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-[#0057B8]">
+          <BarChart3 className="h-5 w-5" />
         </div>
-        <h2 className={`text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+        <h2 className={`text-xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
           {locale === "ua" ? "Огляд адмін центру" : locale === "es" ? "Resumen del centro admin" : "Admin overview"}
         </h2>
         <p className={`mt-2 text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>
@@ -107,18 +107,18 @@ export default function AdminOverviewPage() {
       ) : null}
 
       {cards.length > 0 ? (
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {cards.map((card) => {
             const Icon = card.icon;
             const content = (
-              <div className={`rounded-3xl border p-5 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+              <div className={`rounded-3xl border p-4 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>{card.label}</p>
-                    <p className={`mt-3 text-3xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{card.value}</p>
+                    <p className={`mt-2 text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{card.value}</p>
                   </div>
-                  <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${isDark ? "bg-[#1a2d4c] text-[#FFD700]" : "bg-blue-50 text-[#0057B8]"}`}>
-                    <Icon className="h-5 w-5" />
+                  <span className={`flex h-10 w-10 items-center justify-center rounded-2xl ${isDark ? "bg-[#1a2d4c] text-[#FFD700]" : "bg-blue-50 text-[#0057B8]"}`}>
+                    <Icon className="h-4 w-4" />
                   </span>
                 </div>
               </div>
@@ -130,17 +130,17 @@ export default function AdminOverviewPage() {
       ) : null}
 
       {overviewQuery.data ? (
-        <section className="grid gap-6 xl:grid-cols-2">
-          <div className={`rounded-3xl border p-5 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h3 className={`text-lg font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+        <section className="grid gap-5 xl:grid-cols-2">
+          <div className={`rounded-3xl border p-4 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className={`text-base font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
                 {locale === "ua" ? "Черга модерації" : locale === "es" ? "Cola de moderación" : "Moderation queue"}
               </h3>
               <Link to="/admin/listings/moderation" className="text-sm font-semibold text-[#0057B8]">{t("detail.back")}</Link>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {overviewQuery.data.recent_pending_listings.length > 0 ? overviewQuery.data.recent_pending_listings.map((item) => (
-                <Link key={item.id} to="/admin/listings/moderation" className={`block rounded-2xl border px-4 py-3 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+                <Link key={item.id} to="/admin/listings/moderation" className={`block rounded-2xl border px-3 py-2.5 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
                   <p className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{item.title}</p>
                   <p className={`mt-1 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>{t(`mod.${item.module}`)} · {item.category}</p>
                 </Link>
@@ -150,13 +150,13 @@ export default function AdminOverviewPage() {
             </div>
           </div>
 
-          <div className={`rounded-3xl border p-5 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
-            <h3 className={`mb-4 text-lg font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+          <div className={`rounded-3xl border p-4 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+            <h3 className={`mb-3 text-base font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
               {locale === "ua" ? "Нові скарги" : locale === "es" ? "Nuevos reportes" : "New reports"}
             </h3>
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {overviewQuery.data.recent_reports.length > 0 ? overviewQuery.data.recent_reports.map((item) => (
-                <div key={item.id} className={`rounded-2xl border px-4 py-3 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+                <div key={item.id} className={`rounded-2xl border px-3 py-2.5 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
                   <p className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{item.reason}</p>
                   <p className={`mt-1 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>{item.reported_user_id}{item.listing_id ? ` · listing #${item.listing_id}` : ""}</p>
                 </div>
@@ -166,13 +166,13 @@ export default function AdminOverviewPage() {
             </div>
           </div>
 
-          <div className={`rounded-3xl border p-5 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
-            <h3 className={`mb-4 text-lg font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+          <div className={`rounded-3xl border p-4 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+            <h3 className={`mb-3 text-base font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
               {locale === "ua" ? "Платіжні ризики" : locale === "es" ? "Riesgos de pago" : "Payment risks"}
             </h3>
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {overviewQuery.data.recent_payment_issues.length > 0 ? overviewQuery.data.recent_payment_issues.map((item) => (
-                <div key={item.id} className={`rounded-2xl border px-4 py-3 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+                <div key={item.id} className={`rounded-2xl border px-3 py-2.5 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{item.title}</p>
@@ -188,18 +188,18 @@ export default function AdminOverviewPage() {
             </div>
           </div>
 
-          <div className={`rounded-3xl border p-5 xl:col-span-2 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h3 className={`text-lg font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+          <div className={`rounded-3xl border p-4 xl:col-span-2 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <h3 className={`text-base font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
                 {locale === "ua" ? "Запити бізнес-профілів" : locale === "es" ? "Solicitudes de perfiles de negocio" : "Business profile requests"}
               </h3>
               <Link to="/admin/business" className="text-sm font-semibold text-[#0057B8]">
                 {locale === "ua" ? "Відкрити" : locale === "es" ? "Abrir" : "Open"}
               </Link>
             </div>
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {overviewQuery.data.recent_business_requests.length > 0 ? overviewQuery.data.recent_business_requests.map((item) => (
-                <Link key={item.slug} to="/admin/business" className={`block rounded-2xl border px-4 py-3 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+                <Link key={item.slug} to="/admin/business" className={`block rounded-2xl border px-3 py-2.5 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
                   <p className={`text-sm font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{item.name}</p>
                   <p className={`mt-1 text-xs ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                     {item.slug} · {item.city} · verification: {item.verification_status} · subscription: {item.subscription_request_status || "-"}

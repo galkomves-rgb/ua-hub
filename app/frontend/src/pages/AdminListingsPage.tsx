@@ -71,12 +71,12 @@ export default function AdminListingsPage() {
   }), [items, page?.total]);
 
   return (
-    <div className="space-y-6">
-      <section className={`rounded-3xl border p-6 md:p-8 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
-        <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-[#0057B8]">
-          <ClipboardList className="h-6 w-6" />
+    <div className="space-y-5">
+      <section className={`rounded-3xl border p-5 md:p-6 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+        <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-[#0057B8]">
+          <ClipboardList className="h-5 w-5" />
         </div>
-        <h2 className={`text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+        <h2 className={`text-xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
           {locale === "ua" ? "Каталог оголошень" : locale === "es" ? "Catálogo de anuncios" : "Listings catalog"}
         </h2>
         <p className={`mt-2 text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>
@@ -88,26 +88,26 @@ export default function AdminListingsPage() {
         </p>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <StatCard isDark={isDark} label={locale === "ua" ? "Усього у вибірці" : locale === "es" ? "Total filtrado" : "Matched total"} value={stats.total} icon={ClipboardList} />
         <StatCard isDark={isDark} label={locale === "ua" ? "На модерації" : locale === "es" ? "En moderación" : "In moderation"} value={stats.pending} icon={ShieldAlert} />
         <StatCard isDark={isDark} label={locale === "ua" ? "Опубліковані" : locale === "es" ? "Publicados" : "Published"} value={stats.published} icon={Eye} />
         <StatCard isDark={isDark} label={locale === "ua" ? "Промо на сторінці" : locale === "es" ? "Promo en página" : "Promo on page"} value={stats.promoted} icon={Sparkles} />
       </section>
 
-      <section className={`rounded-3xl border p-5 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
-        <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_170px_190px_190px_190px]">
-          <label className={`flex items-center gap-3 rounded-2xl border px-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-300" : "border-slate-300 bg-white text-slate-700"}`}>
+      <section className={`rounded-3xl border p-4 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+        <div className="grid gap-2.5 xl:grid-cols-[minmax(0,1fr)_160px_180px_180px_180px]">
+          <label className={`flex items-center gap-3 rounded-2xl border px-3 ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-300" : "border-slate-300 bg-white text-slate-700"}`}>
             <Search className="h-4 w-4" />
             <input
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
               placeholder={locale === "ua" ? "Пошук по title, id, owner, city" : locale === "es" ? "Buscar por título, id, owner, ciudad" : "Search by title, id, owner, city"}
-              className="h-12 w-full bg-transparent text-sm outline-none"
+              className="h-10 w-full bg-transparent text-sm outline-none"
             />
           </label>
 
-          <select value={status} onChange={(event) => setStatus(event.target.value as (typeof STATUS_OPTIONS)[number])} className={`rounded-2xl border px-4 py-3 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}>
+          <select value={status} onChange={(event) => setStatus(event.target.value as (typeof STATUS_OPTIONS)[number])} className={`rounded-2xl border px-3 py-2.5 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}>
             {STATUS_OPTIONS.map((item) => (
               <option key={item} value={item}>
                 {item === "all" ? (locale === "ua" ? "Усі статуси" : locale === "es" ? "Todos los estados" : "All statuses") : item}
@@ -115,7 +115,7 @@ export default function AdminListingsPage() {
             ))}
           </select>
 
-          <select value={module} onChange={(event) => setModule(event.target.value as (typeof MODULE_OPTIONS)[number])} className={`rounded-2xl border px-4 py-3 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}>
+          <select value={module} onChange={(event) => setModule(event.target.value as (typeof MODULE_OPTIONS)[number])} className={`rounded-2xl border px-3 py-2.5 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}>
             {MODULE_OPTIONS.map((item) => (
               <option key={item} value={item}>
                 {item === "all" ? (locale === "ua" ? "Усі модулі" : locale === "es" ? "Todos los módulos" : "All modules") : t(`mod.${item}`)}
@@ -123,7 +123,7 @@ export default function AdminListingsPage() {
             ))}
           </select>
 
-          <select value={ownerType} onChange={(event) => setOwnerType(event.target.value as (typeof OWNER_OPTIONS)[number])} className={`rounded-2xl border px-4 py-3 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}>
+          <select value={ownerType} onChange={(event) => setOwnerType(event.target.value as (typeof OWNER_OPTIONS)[number])} className={`rounded-2xl border px-3 py-2.5 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}>
             {OWNER_OPTIONS.map((item) => (
               <option key={item} value={item}>
                 {item === "all" ? (locale === "ua" ? "Усі власники" : locale === "es" ? "Todos los propietarios" : "All owners") : item}
@@ -131,7 +131,7 @@ export default function AdminListingsPage() {
             ))}
           </select>
 
-          <select value={sort} onChange={(event) => setSort(event.target.value as "newest" | "oldest" | "views_desc" | "expires_soon")} className={`rounded-2xl border px-4 py-3 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}>
+          <select value={sort} onChange={(event) => setSort(event.target.value as "newest" | "oldest" | "views_desc" | "expires_soon")} className={`rounded-2xl border px-3 py-2.5 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}>
             <option value="newest">{locale === "ua" ? "Оновлені спочатку" : locale === "es" ? "Actualizados primero" : "Updated first"}</option>
             <option value="oldest">{locale === "ua" ? "Найстарші" : locale === "es" ? "Más antiguos" : "Oldest"}</option>
             <option value="views_desc">{locale === "ua" ? "За переглядами" : locale === "es" ? "Por vistas" : "By views"}</option>
@@ -139,7 +139,7 @@ export default function AdminListingsPage() {
           </select>
         </div>
 
-        <div className="mt-6 space-y-3">
+        <div className="mt-5 space-y-2.5">
           {listingsQuery.isLoading ? (
             <div className={`rounded-2xl border p-4 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-300" : "border-slate-200 bg-slate-50 text-slate-600"}`}>
               {locale === "ua" ? "Завантаження каталогу..." : locale === "es" ? "Cargando catálogo..." : "Loading catalog..."}
@@ -172,16 +172,16 @@ export default function AdminListingsPage() {
             const images = parseImages(item.images_json);
             const needsModeration = item.status === "moderation_pending" || item.status === "rejected";
             return (
-              <div key={item.id} className={`rounded-3xl border p-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="space-y-2">
+              <div key={item.id} className={`rounded-3xl border p-3.5 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="space-y-1.5">
                     <div className="flex flex-wrap items-center gap-2 text-xs">
                       <span className={`rounded-full px-3 py-1 font-semibold ${isDark ? "bg-[#173052] text-slate-100" : "bg-white text-slate-700"}`}>#{item.id}</span>
                       <span className={`rounded-full px-3 py-1 font-semibold ${item.status === "published" ? (isDark ? "bg-emerald-900/40 text-emerald-300" : "bg-emerald-50 text-emerald-700") : item.status === "moderation_pending" ? (isDark ? "bg-amber-900/40 text-amber-300" : "bg-amber-50 text-amber-700") : item.status === "rejected" ? (isDark ? "bg-red-900/40 text-red-300" : "bg-red-50 text-red-700") : (isDark ? "bg-slate-800 text-slate-300" : "bg-slate-200 text-slate-700")}`}>{item.status}</span>
                       <span className={`rounded-full px-3 py-1 font-semibold ${isDark ? "bg-[#173052] text-slate-300" : "bg-white text-slate-600"}`}>{t(`mod.${item.module}`)}</span>
                       <span className={`rounded-full px-3 py-1 font-semibold ${isDark ? "bg-[#173052] text-slate-300" : "bg-white text-slate-600"}`}>{item.category}</span>
                     </div>
-                    <h3 className={`text-lg font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{item.title}</h3>
+                    <h3 className={`text-base font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{item.title}</h3>
                     <div className={`flex flex-wrap gap-x-4 gap-y-1 text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>
                       <span>{locale === "ua" ? "Власник" : locale === "es" ? "Propietario" : "Owner"}: {item.owner_type}</span>
                       <span>{locale === "ua" ? "Створено" : locale === "es" ? "Creado" : "Created"}: {formatDate(item.created_at, locale)}</span>
@@ -196,11 +196,11 @@ export default function AdminListingsPage() {
                   </div>
 
                   <div className="flex flex-wrap gap-2 lg:justify-end">
-                    <Link to={`/${item.module}/${item.id}`} className={`inline-flex rounded-2xl px-4 py-2 text-sm font-semibold ${isDark ? "bg-[#173052] text-slate-100" : "bg-white text-slate-700"}`}>
+                    <Link to={`/${item.module}/${item.id}`} className={`inline-flex rounded-2xl px-3 py-2 text-sm font-semibold ${isDark ? "bg-[#173052] text-slate-100" : "bg-white text-slate-700"}`}>
                       {locale === "ua" ? "Public view" : locale === "es" ? "Vista pública" : "Public view"}
                     </Link>
                     {needsModeration ? (
-                      <Link to="/admin/listings/moderation" className={`inline-flex rounded-2xl px-4 py-2 text-sm font-semibold ${isDark ? "bg-[#FFD700] text-slate-900" : "bg-blue-50 text-[#0057B8]"}`}>
+                      <Link to="/admin/listings/moderation" className={`inline-flex rounded-2xl px-3 py-2 text-sm font-semibold ${isDark ? "bg-[#FFD700] text-slate-900" : "bg-blue-50 text-[#0057B8]"}`}>
                         {locale === "ua" ? "Відкрити модерацію" : locale === "es" ? "Abrir moderación" : "Open moderation"}
                       </Link>
                     ) : null}
@@ -238,14 +238,14 @@ function StatCard({
   icon: typeof ClipboardList;
 }) {
   return (
-    <div className={`rounded-3xl border p-5 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+    <div className={`rounded-3xl border p-4 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className={`text-sm ${isDark ? "text-slate-400" : "text-slate-500"}`}>{label}</p>
-          <p className={`mt-3 text-3xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{value}</p>
+          <p className={`mt-2 text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{value}</p>
         </div>
-        <span className={`flex h-11 w-11 items-center justify-center rounded-2xl ${isDark ? "bg-[#1a2d4c] text-[#FFD700]" : "bg-blue-50 text-[#0057B8]"}`}>
-          <Icon className="h-5 w-5" />
+        <span className={`flex h-10 w-10 items-center justify-center rounded-2xl ${isDark ? "bg-[#1a2d4c] text-[#FFD700]" : "bg-blue-50 text-[#0057B8]"}`}>
+          <Icon className="h-4 w-4" />
         </span>
       </div>
     </div>

@@ -61,12 +61,12 @@ export default function AdminBillingPage() {
   const items = page?.items ?? [];
 
   return (
-    <div className="space-y-6">
-      <section className={`rounded-3xl border p-6 md:p-8 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
-        <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
-          <CreditCard className="h-6 w-6" />
+    <div className="space-y-5">
+      <section className={`rounded-3xl border p-5 md:p-6 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+        <div className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
+          <CreditCard className="h-5 w-5" />
         </div>
-        <h2 className={`text-2xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
+        <h2 className={`text-xl font-bold ${isDark ? "text-slate-100" : "text-slate-900"}`}>
           {locale === "ua" ? "Центр платежів" : locale === "es" ? "Centro de pagos" : "Payments center"}
         </h2>
         <p className={`mt-2 text-sm ${isDark ? "text-slate-400" : "text-slate-600"}`}>
@@ -78,21 +78,21 @@ export default function AdminBillingPage() {
         </p>
       </section>
 
-      <section className={`rounded-3xl border p-5 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
-        <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
-          <label className={`flex items-center gap-3 rounded-2xl border px-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-300" : "border-slate-300 bg-white text-slate-700"}`}>
+      <section className={`rounded-3xl border p-4 ${isDark ? "border-[#22416b] bg-[#11203a]" : "border-slate-200 bg-white"}`}>
+        <div className="grid gap-2.5 lg:grid-cols-[minmax(0,1fr)_200px]">
+          <label className={`flex items-center gap-3 rounded-2xl border px-3 ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-300" : "border-slate-300 bg-white text-slate-700"}`}>
             <Search className="h-4 w-4" />
             <input
               value={searchText}
               onChange={(event) => setSearchText(event.target.value)}
               placeholder={locale === "ua" ? "Пошук за title, product code, user, failure" : locale === "es" ? "Buscar por título, producto, usuario o fallo" : "Search by title, product, user, or failure"}
-              className="h-12 w-full bg-transparent text-sm outline-none"
+              className="h-10 w-full bg-transparent text-sm outline-none"
             />
           </label>
           <select
             value={status}
             onChange={(event) => setStatus(event.target.value as (typeof STATUS_OPTIONS)[number])}
-            className={`rounded-2xl border px-4 py-3 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
+            className={`rounded-2xl border px-3 py-2.5 text-sm ${isDark ? "border-[#22416b] bg-[#0d1a2e] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
           >
             {STATUS_OPTIONS.map((item) => (
               <option key={item} value={item}>
@@ -102,7 +102,7 @@ export default function AdminBillingPage() {
           </select>
         </div>
 
-        <div className="mt-6 space-y-4">
+        <div className="mt-5 space-y-3">
           {paymentsQuery.isLoading ? <StateBox isDark={isDark} tone="neutral" text={locale === "ua" ? "Завантаження платежів..." : locale === "es" ? "Cargando pagos..." : "Loading payments..."} /> : null}
           {paymentsQuery.isError ? <StateBox isDark={isDark} tone="danger" text={paymentsQuery.error instanceof Error ? paymentsQuery.error.message : "Failed to load payments"} /> : null}
           {!paymentsQuery.isLoading && !paymentsQuery.isError && items.length === 0 ? <StateBox isDark={isDark} tone="neutral" text={locale === "ua" ? "Платежів за поточними фільтрами не знайдено." : locale === "es" ? "No hay pagos con los filtros actuales." : "No payments found for the current filters."} /> : null}
@@ -114,15 +114,15 @@ export default function AdminBillingPage() {
             const isPending = overrideMutation.isPending && overrideMutation.variables?.paymentId === item.id;
 
             return (
-              <article key={item.id} className={`rounded-3xl border p-4 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
-                <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                  <div className="space-y-3">
+              <article key={item.id} className={`rounded-3xl border p-3.5 ${isDark ? "border-[#22416b] bg-[#0d1a2e]" : "border-slate-200 bg-slate-50"}`}>
+                <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                  <div className="space-y-2">
                     <div className="flex flex-wrap gap-2 text-xs">
                       <span className={`rounded-full px-3 py-1 font-semibold ${isDark ? "bg-[#173052] text-slate-100" : "bg-white text-slate-700"}`}>#{item.id}</span>
                       <span className={`rounded-full px-3 py-1 font-semibold ${isDark ? "bg-[#173052] text-slate-300" : "bg-white text-slate-600"}`}>{item.product_code}</span>
                       <span className={`rounded-full px-3 py-1 font-semibold ${item.status === "paid" ? (isDark ? "bg-emerald-900/40 text-emerald-300" : "bg-emerald-50 text-emerald-700") : item.status === "pending" ? (isDark ? "bg-amber-900/40 text-amber-300" : "bg-amber-50 text-amber-700") : (isDark ? "bg-red-900/40 text-red-300" : "bg-red-50 text-red-700")}`}>{item.status}</span>
                     </div>
-                    <h3 className={`text-lg font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{item.title}</h3>
+                    <h3 className={`text-base font-semibold ${isDark ? "text-slate-100" : "text-slate-900"}`}>{item.title}</h3>
                     <div className={`grid gap-2 text-sm sm:grid-cols-2 ${isDark ? "text-slate-400" : "text-slate-600"}`}>
                       <p>{locale === "ua" ? "User" : locale === "es" ? "Usuario" : "User"}: {item.user_id}</p>
                       <p>{locale === "ua" ? "Target" : locale === "es" ? "Objetivo" : "Target"}: {item.target_label ?? item.target_type}</p>
@@ -134,37 +134,39 @@ export default function AdminBillingPage() {
                     {item.failure_reason ? <p className={`text-sm ${isDark ? "text-amber-300" : "text-amber-700"}`}>{item.failure_reason}</p> : null}
                   </div>
 
-                  <div className="w-full max-w-xl space-y-3 xl:w-[380px]">
-                    <select
-                      value={nextPaymentStatus}
-                      onChange={(event) => setPaymentStatuses((current) => ({ ...current, [item.id]: event.target.value }))}
-                      className={`w-full rounded-2xl border px-4 py-3 text-sm ${isDark ? "border-[#22416b] bg-[#11203a] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
-                    >
-                      {STATUS_OPTIONS.filter((entry) => entry !== "all").map((entry) => (
-                        <option key={entry} value={entry}>{entry}</option>
-                      ))}
-                    </select>
-                    <select
-                      value={nextEntitlementStatus}
-                      onChange={(event) => setEntitlementStatuses((current) => ({ ...current, [item.id]: event.target.value }))}
-                      className={`w-full rounded-2xl border px-4 py-3 text-sm ${isDark ? "border-[#22416b] bg-[#11203a] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
-                    >
-                      {ENTITLEMENT_OPTIONS.map((entry) => (
-                        <option key={entry || "none"} value={entry}>{entry || (locale === "ua" ? "Без entitlement" : locale === "es" ? "Sin entitlement" : "No entitlement")}</option>
-                      ))}
-                    </select>
+                  <div className="w-full max-w-xl space-y-2.5 xl:w-[360px]">
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <select
+                        value={nextPaymentStatus}
+                        onChange={(event) => setPaymentStatuses((current) => ({ ...current, [item.id]: event.target.value }))}
+                        className={`w-full rounded-2xl border px-3 py-2.5 text-sm ${isDark ? "border-[#22416b] bg-[#11203a] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
+                      >
+                        {STATUS_OPTIONS.filter((entry) => entry !== "all").map((entry) => (
+                          <option key={entry} value={entry}>{entry}</option>
+                        ))}
+                      </select>
+                      <select
+                        value={nextEntitlementStatus}
+                        onChange={(event) => setEntitlementStatuses((current) => ({ ...current, [item.id]: event.target.value }))}
+                        className={`w-full rounded-2xl border px-3 py-2.5 text-sm ${isDark ? "border-[#22416b] bg-[#11203a] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
+                      >
+                        {ENTITLEMENT_OPTIONS.map((entry) => (
+                          <option key={entry || "none"} value={entry}>{entry || (locale === "ua" ? "Без entitlement" : locale === "es" ? "Sin entitlement" : "No entitlement")}</option>
+                        ))}
+                      </select>
+                    </div>
                     <textarea
                       value={note}
                       onChange={(event) => setNotes((current) => ({ ...current, [item.id]: event.target.value }))}
-                      rows={3}
+                      rows={2}
                       placeholder={locale === "ua" ? "Причина ручного override" : locale === "es" ? "Motivo del override manual" : "Reason for manual override"}
-                      className={`w-full rounded-2xl border px-4 py-3 text-sm ${isDark ? "border-[#22416b] bg-[#11203a] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
+                      className={`w-full rounded-2xl border px-3 py-2.5 text-sm ${isDark ? "border-[#22416b] bg-[#11203a] text-slate-100" : "border-slate-300 bg-white text-slate-900"}`}
                     />
                     <button
                       type="button"
                       onClick={() => overrideMutation.mutate({ paymentId: item.id, paymentStatus: nextPaymentStatus, entitlementStatus: nextEntitlementStatus, note })}
                       disabled={isPending}
-                      className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold ${isDark ? "bg-[#FFD700] text-slate-900" : "bg-blue-50 text-[#0057B8]"} ${isPending ? "cursor-not-allowed opacity-60" : ""}`}
+                      className={`inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-semibold ${isDark ? "bg-[#FFD700] text-slate-900" : "bg-blue-50 text-[#0057B8]"} ${isPending ? "cursor-not-allowed opacity-60" : ""}`}
                     >
                       <ShieldCheck className="h-4 w-4" />
                       {locale === "ua" ? "Застосувати override" : locale === "es" ? "Aplicar override" : "Apply override"}
