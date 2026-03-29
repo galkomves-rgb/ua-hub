@@ -2,7 +2,6 @@ import logging
 import os
 from typing import Any
 
-from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 logger = logging.getLogger(__name__)
@@ -78,23 +77,6 @@ class Settings(BaseSettings):
     class Config:
         case_sensitive = False
         extra = "ignore"
-
-    @field_validator("debug", mode="before")
-    @classmethod
-    def normalize_debug(cls, value: Any) -> bool:
-        if isinstance(value, bool):
-            return value
-        if value is None:
-            return False
-        if isinstance(value, (int, float)):
-            return bool(value)
-        if isinstance(value, str):
-            normalized = value.strip().lower()
-            if normalized in {"1", "true", "yes", "on", "debug", "dev", "local"}:
-                return True
-            if normalized in {"0", "false", "no", "off", "release", "prod", "production", ""}:
-                return False
-        raise ValueError("debug must be a boolean-compatible value")
 
     def __getattr__(self, name: str) -> Any:
         """
