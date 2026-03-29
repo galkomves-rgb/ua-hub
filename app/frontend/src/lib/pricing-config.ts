@@ -28,6 +28,7 @@ export interface PricingCardConfig {
   bestForKeys?: string[];
   advantageKeys?: string[];
   cabinetKeys?: string[];
+  selectCtaKey?: string;
   ctaKey: string;
   ctaTarget: PricingCtaTarget;
   recommended?: boolean;
@@ -252,6 +253,7 @@ export const PRICING_SEGMENTS: PricingSegmentConfig[] = [
           "pricing.business.presence.cabinet.one",
           "pricing.business.presence.cabinet.two",
         ],
+        selectCtaKey: "pricing.business.presence.selectCta",
         ctaKey: "pricing.business.presence.cta",
         ctaTarget: "billing",
         billingKind: "subscription",
@@ -286,6 +288,7 @@ export const PRICING_SEGMENTS: PricingSegmentConfig[] = [
           "pricing.business.priority.cabinet.one",
           "pricing.business.priority.cabinet.two",
         ],
+        selectCtaKey: "pricing.business.priority.selectCta",
         ctaKey: "pricing.business.priority.cta",
         ctaTarget: "billing",
         recommended: true,
@@ -351,6 +354,7 @@ export const PRICING_SEGMENTS: PricingSegmentConfig[] = [
           "pricing.agencies.starter.cabinet.one",
           "pricing.agencies.starter.cabinet.two",
         ],
+        selectCtaKey: "pricing.agencies.starter.selectCta",
         ctaKey: "pricing.agencies.starter.cta",
         ctaTarget: "billing",
         billingKind: "subscription",
@@ -385,6 +389,7 @@ export const PRICING_SEGMENTS: PricingSegmentConfig[] = [
           "pricing.agencies.growth.cabinet.one",
           "pricing.agencies.growth.cabinet.two",
         ],
+        selectCtaKey: "pricing.agencies.growth.selectCta",
         ctaKey: "pricing.agencies.growth.cta",
         ctaTarget: "billing",
         recommended: true,
@@ -420,6 +425,7 @@ export const PRICING_SEGMENTS: PricingSegmentConfig[] = [
           "pricing.agencies.pro.cabinet.one",
           "pricing.agencies.pro.cabinet.two",
         ],
+        selectCtaKey: "pricing.agencies.pro.selectCta",
         ctaKey: "pricing.agencies.pro.cta",
         ctaTarget: "billing",
         billingKind: "subscription",

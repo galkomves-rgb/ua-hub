@@ -256,10 +256,10 @@ function PricingCard({
           }
           onPrimaryAction();
         }}
-        aria-label={requiresSelection && !selected ? `${t("pricing.card.selectFirst")}: ${t(card.titleKey)}` : t(card.ctaKey)}
+        aria-label={requiresSelection && !selected ? t(card.selectCtaKey || "pricing.card.selectFirst") : t(card.ctaKey)}
         className={`mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold transition-colors ${ctaClass}`}
       >
-        {requiresSelection && !selected ? t("pricing.card.selectFirst") : t(card.ctaKey)}
+        {requiresSelection && !selected ? t(card.selectCtaKey || "pricing.card.selectFirst") : t(card.ctaKey)}
         <ChevronRight className="h-4 w-4" />
       </button>
     </article>
